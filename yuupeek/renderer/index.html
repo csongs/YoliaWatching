@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="character" class="state-idle">
+    <canvas id="char-canvas"></canvas>
+    <div id="char-emoji">👁️</div>
+  </div>
+
+  <div id="hud">
+    <span>👁️ 幽視 <span id="yuushi-val">0</span>%</span>
+    <div id="bar-track"><div id="bar-fill"></div></div>
+    <div id="hud-btns">
+      <button id="run-left-btn"  title="往左跑">←</button>
+      <button id="jump-btn"      title="跳躍">↑</button>
+      <button id="run-right-btn" title="往右跑">→</button>
+      <button id="feed-btn"      title="餵食 (幽視 -15)">🌿</button>
+      <button id="cheer-btn"     title="幽視 → 80%">🔥</button>
+    </div>
+  </div>
+
+<script src="app.js"></script>
+</body>
+</html>

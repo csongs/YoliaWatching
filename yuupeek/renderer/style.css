@@ -1,0 +1,104 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: transparent;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+}
+
+#character {
+  position: fixed;
+  bottom: 60px;
+  right: 40px;
+  width: 128px;
+  height: 139px;
+  pointer-events: all;
+  cursor: grab;
+  user-select: none;
+}
+#character.dragging { cursor: grabbing; }
+
+#char-canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+#char-emoji { display: none; font-size: 80px; line-height: 200px; text-align: center; }
+#character.no-sprite #char-canvas { display: none; }
+#character.no-sprite #char-emoji  { display: block; }
+
+/* ── HUD ─────────────────────────────────────────────────────────────────── */
+#hud {
+  position: fixed;
+  /* right & bottom driven by JS */
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-family: monospace;
+  font-size: 13px;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  transition: opacity 0.2s, transform 0.2s;
+  transform-origin: bottom right;
+}
+
+#hud.collapsed {
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none !important;
+}
+
+#bar-track {
+  margin-top: 4px;
+  width: 120px;
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#bar-fill {
+  height: 100%;
+  width: 0%;
+  background: #74b9ff;
+  border-radius: 3px;
+  transition: width 0.4s, background 0.4s;
+}
+#bar-fill.peek  { background: #fdcb6e; }
+#bar-fill.angry { background: #e17055; }
+
+#hud-btns {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+#hud-btns button {
+  flex: 1;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 15px;
+  padding: 3px 0;
+  cursor: pointer;
+  pointer-events: all;
+  transition: background 0.15s, border-color 0.15s;
+}
+#hud-btns button:hover          { background: rgba(255,255,255,0.25); }
+#hud-btns button:active,
+#hud-btns button.active         { background: rgba(255,255,255,0.4); border-color: rgba(255,255,255,0.7); }
+
+/* ── Character state effects ─────────────────────────────────────────────── */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+#character.state-peek  { animation: bounce 1s ease-in-out infinite; }
+#character.state-angry { filter: drop-shadow(0 0 10px rgba(225,112,85,0.8)); }
+#character.state-cry   { filter: brightness(0.85) saturate(0.6); }

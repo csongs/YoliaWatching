@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>YuuPeek Frame Editor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1117; color: #eee; font-family: monospace; display: flex; height: 100vh; overflow: hidden; }
+
+  /* LEFT: frame list */
+  #sidebar {
+    width: 220px; min-width: 220px;
+    background: #1a1d27;
+    overflow-y: auto;
+    border-right: 1px solid #2e3347;
+    padding: 8px 0;
+  }
+  .state-group { margin-bottom: 2px; }
+  .state-header {
+    padding: 6px 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #666;
+  }
+  .frame-btn {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; padding: 6px 12px;
+    background: none; border: none; color: #bbb;
+    cursor: pointer; font: 12px monospace; text-align: left;
+  }
+  .frame-btn:hover { background: #252838; color: #fff; }
+  .frame-btn.active { background: #2c3050; color: #fff; border-left: 3px solid var(--c); }
+  .frame-thumb { width: 36px; height: 36px; object-fit: cover; image-rendering: pixelated; background: #111; border: 1px solid #333; flex-shrink: 0; }
+
+  /* CENTER: large preview */
+  #preview-area {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #141720;
+    gap: 12px;
+    padding: 20px;
+    position: relative;
+  }
+  #preview-canvas {
+    background: #2a2d3e;
+    image-rendering: pixelated;
+    border: 2px solid #3a3f5c;
+    max-width: 500px; max-height: 500px;
+  }
+  #frame-label { font-size: 13px; color: #888; }
+  #hint { position: absolute; bottom: 12px; font-size: 11px; color: #444; text-align: center; }
+
+  /* RIGHT: controls */
+  #controls {
+    width: 280px; min-width: 280px;
+    background: #1a1d27;
+    border-left: 1px solid #2e3347;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  #controls h3 { font-size: 13px; color: #a0c4ff; border-bottom: 1px solid #2e3347; padding-bottom: 8px; }
+  .ctrl-row { display: flex; flex-direction: column; gap: 4px; }
+  .ctrl-row label { font-size: 11px; color: #888; display: flex; justify-content: space-between; }
+  .ctrl-row label span { color: #ffd700; font-weight: bold; }
+  input[type=range] { width: 100%; accent-color: #a0c4ff; }
+  input[type=number] { width: 80px; background: #252838; border: 1px solid #3a3f5c; color: #fff; padding: 3px 6px; font: 12px monospace; border-radius: 3px; }
+  .ctrl-pair { display: flex; gap: 8px; align-items: center; }
+
+  #output-box {
+    background: #0d1117;
+    border: 1px solid #2e3347;
+    border-radius: 4px;
+    padding: 10px;
+    font-size: 11px;
+    color: #7ec8e3;
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  #copy-btn {
+    padding: 8px 16px; background: #2c4a8a; border: none; color: #fff;
+    border-radius: 4px; cursor: pointer; font: 12px monospace; width: 100%;
+  }
+  #copy-btn:hover { background: #3d5fa8; }
+  #copy-ok { color: #2ecc71; font-size: 11px; display: none; text-align: center; }
+
+  /* Keyboard shortcut indicator */
+  .kbd { background: #252838; border: 1px solid #3a3f5c; border-radius: 3px; padding: 1px 5px; font-size: 10px; color: #aaa; }
+</style>
+</head>
+<body>
+
+<div id="sidebar"></div>
+
+<div id="preview-area">
+  <canvas id="preview-canvas" width="300" height="300"></canvas>
+  <div id="frame-label">選擇一個 frame</div>
+  <div id="hint">
+    方向鍵移動位置 &nbsp;|&nbsp; Shift+方向鍵 調整大小 &nbsp;|&nbsp; 點側欄切換 frame
+  </div>
+</div>
+
+<div id="controls">
+  <h3>Frame 座標</h3>
+
+  <div class="ctrl-row">
+    <label>sx (左起) <span id="v-sx">0</span></label>
+    <div class="ctrl-pair">
+      <input type="range" id="r-sx" min="0" max="1024" step="1">
+      <input type="number" id="n-sx" min="0" max="1024" step="1">
+    </div>
+  </div>
+  <div class="ctrl-row">
+    <label>sy (上起) <span id="v-sy">0</span></label>
+    <div class="ctrl-pair">
+      <input type="range" id="r-sy" min="0" max="1536" step="1">
+      <input type="number" id="n-sy" min="0" max="1536" step="1">
+    </div>
+  </div>
+  <div class="ctrl-row">
+    <label>sw (寬) <span id="v-sw">256</span></label>
+    <div class="ctrl-pair">
+      <input type="range" id="r-sw" min="16" max="1024" step="1">
+      <input type="number" id="n-sw" min="16" max="1024" step="1">
+    </div>
+  </div>
+  <div class="ctrl-row">
+    <label>sh (高) <span id="v-sh">256</span></label>
+    <div class="ctrl-pair">
+      <input type="range" id="r-sh" min="16" max="1536" step="1">
+      <input type="number" id="n-sh" min="16" max="1536" step="1">
+    </div>
+  </div>
+
+  <div style="font-size:11px; color:#555; line-height:1.6;">
+    <span class="kbd">←→↑↓</span> 移動 sx/sy &nbsp;
+    <span class="kbd">Shift</span>+<span class="kbd">←→↑↓</span> 調整 sw/sh
+  </div>
+
+  <h3>匯出 JSON</h3>
+  <div id="output-box"></div>
+  <button id="copy-btn">複製到剪貼簿</button>
+  <div id="copy-ok">✓ 已複製！</div>
+</div>
+
+<script>
+// ─── Frame definitions ────────────────────────────────────────────────────────
+// New sprite sheet: 1024×1536, 4 sections, each section = 4 frames × 256px wide
+// Labels x2/x3/x4 = how many frames the animation loop uses (not total frame count)
+const ANIMATIONS = [
+  { state:'idle',  color:'#4a9eff', frames:[
+    // idie x2 → loop frames 0-1; frames 2-3 also available
+    { sx:  0, sy:120, sw:256, sh:290 },
+    { sx:256, sy:120, sw:256, sh:290 },
+    { sx:512, sy:120, sw:256, sh:290 },
+    { sx:768, sy:120, sw:256, sh:290 },
+  ]},
+  { state:'peek',  color:'#ff9f40', frames:[
+    // peek x3 → loop frames 0-2
+    { sx:  0, sy:555, sw:256, sh:255 },
+    { sx:256, sy:555, sw:256, sh:255 },
+    { sx:512, sy:555, sw:256, sh:255 },
+    { sx:768, sy:555, sw:256, sh:255 },
+  ]},
+  { state:'run',   color:'#2ecc71', frames:[
+    // run x4 → all 4 frames
+    { sx:  0, sy:960, sw:256, sh:225 },
+    { sx:256, sy:960, sw:256, sh:225 },
+    { sx:512, sy:960, sw:256, sh:225 },
+    { sx:768, sy:960, sw:256, sh:225 },
+  ]},
+  { state:'angry', color:'#fd79a8', frames:[
+    // angry x3 → loop frames 0-2
+    { sx:  0, sy:1320, sw:256, sh:210 },
+    { sx:256, sy:1320, sw:256, sh:210 },
+    { sx:512, sy:1320, sw:256, sh:210 },
+    { sx:768, sy:1320, sw:256, sh:210 },
+  ]},
+];
+// ─────────────────────────────────────────────────────────────────────────────
+
+const img = new Image();
+img.src = '../Role.png';
+
+let selected = { animIdx: 0, frameIdx: 0 };
+const canvas = document.getElementById('preview-canvas');
+const ctx = canvas.getContext('2d');
+
+// Thumbnail canvases
+const thumbCtxs = [];
+
+function currentFrame() {
+  return ANIMATIONS[selected.animIdx].frames[selected.frameIdx];
+}
+
+function updatePreview() {
+  const f = currentFrame();
+  const anim = ANIMATIONS[selected.animIdx];
+
+  // Resize canvas to frame aspect ratio (max 500px)
+  const maxDim = 400;
+  const scale = Math.min(maxDim / f.sw, maxDim / f.sh, 2);
+  canvas.width  = Math.round(f.sw * scale);
+  canvas.height = Math.round(f.sh * scale);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, f.sx, f.sy, f.sw, f.sh, 0, 0, canvas.width, canvas.height);
+
+  // Overlay border
+  ctx.strokeStyle = anim.color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, canvas.width-2, canvas.height-2);
+
+  document.getElementById('frame-label').textContent =
+    `${anim.state}[${selected.frameIdx}]  sx:${f.sx} sy:${f.sy} sw:${f.sw} sh:${f.sh}`;
+  document.getElementById('frame-label').style.color = anim.color;
+
+  updateSliders();
+  updateThumbs();
+  updateOutput();
+}
+
+function updateSliders() {
+  const f = currentFrame();
+  ['sx','sy','sw','sh'].forEach(k => {
+    document.getElementById(`r-${k}`).value = f[k];
+    document.getElementById(`n-${k}`).value = f[k];
+    document.getElementById(`v-${k}`).textContent = f[k];
+  });
+}
+
+function updateThumbs() {
+  thumbCtxs.forEach(({ tc, animIdx, frameIdx }) => {
+    const f = ANIMATIONS[animIdx].frames[frameIdx];
+    tc.clearRect(0, 0, 36, 36);
+    tc.imageSmoothingEnabled = false;
+    tc.drawImage(img, f.sx, f.sy, f.sw, f.sh, 0, 0, 36, 36);
+  });
+}
+
+function buildSidebar() {
+  const sb = document.getElementById('sidebar');
+  sb.innerHTML = '';
+  ANIMATIONS.forEach((anim, ai) => {
+    const grp = document.createElement('div');
+    grp.className = 'state-group';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'state-header';
+    hdr.textContent = anim.state;
+    hdr.style.color = anim.color;
+    grp.appendChild(hdr);
+
+    anim.frames.forEach((f, fi) => {
+      const btn = document.createElement('button');
+      btn.className = 'frame-btn' + (ai===0 && fi===0 ? ' active' : '');
+      btn.style.setProperty('--c', anim.color);
+      btn.dataset.ai = ai;
+      btn.dataset.fi = fi;
+
+      const tc = document.createElement('canvas');
+      tc.width = 36; tc.height = 36;
+      tc.className = 'frame-thumb';
+      const tctx = tc.getContext('2d');
+      thumbCtxs.push({ tc: tctx, animIdx: ai, frameIdx: fi });
+
+      const lbl = document.createElement('span');
+      lbl.textContent = `[${fi}]`;
+
+      btn.appendChild(tc);
+      btn.appendChild(lbl);
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.frame-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selected = { animIdx: ai, frameIdx: fi };
+        updatePreview();
+      });
+      grp.appendChild(btn);
+    });
+    sb.appendChild(grp);
+  });
+}
+
+function updateOutput() {
+  const json = JSON.stringify(ANIMATIONS, null, 2);
+  document.getElementById('output-box').textContent =
+    '// src/frames.js\nconst ANIMATIONS = ' + json + ';\nmodule.exports = { ANIMATIONS };';
+}
+
+// Sliders
+['sx','sy','sw','sh'].forEach(k => {
+  const r = document.getElementById(`r-${k}`);
+  const n = document.getElementById(`n-${k}`);
+  function apply(val) {
+    val = parseInt(val);
+    currentFrame()[k] = val;
+    document.getElementById(`v-${k}`).textContent = val;
+    r.value = val; n.value = val;
+    updatePreview();
+  }
+  r.addEventListener('input', () => apply(r.value));
+  n.addEventListener('change', () => apply(n.value));
+});
+
+// Keyboard
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  const f = currentFrame();
+  const step = e.ctrlKey ? 10 : 1;
+  let changed = true;
+  if (!e.shiftKey) {
+    if (e.key==='ArrowRight') f.sx += step;
+    else if (e.key==='ArrowLeft')  f.sx -= step;
+    else if (e.key==='ArrowDown')  f.sy += step;
+    else if (e.key==='ArrowUp')    f.sy -= step;
+    else changed = false;
+  } else {
+    if (e.key==='ArrowRight') f.sw += step;
+    else if (e.key==='ArrowLeft')  f.sw = Math.max(16, f.sw - step);
+    else if (e.key==='ArrowDown')  f.sh += step;
+    else if (e.key==='ArrowUp')    f.sh = Math.max(16, f.sh - step);
+    else changed = false;
+  }
+  if (changed) { e.preventDefault(); updatePreview(); }
+});
+
+// Copy
+document.getElementById('copy-btn').addEventListener('click', () => {
+  const txt = document.getElementById('output-box').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const ok = document.getElementById('copy-ok');
+    ok.style.display = 'block';
+    setTimeout(() => ok.style.display = 'none', 2000);
+  });
+});
+
+img.onload = () => {
+  buildSidebar();
+  updatePreview();
+  updateThumbs();
+};
+img.onerror = () => {
+  document.getElementById('preview-area').innerHTML =
+    '<p style="color:red;padding:20px">❌ 找不到 ../Role.png</p>';
+};
+</script>
+</body>
+</html>

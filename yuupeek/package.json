@@ -1,0 +1,38 @@
+{
+  "name": "yuupeek",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "jest",
+    "build": "electron-builder"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "YuuPeek desktop pet",
+  "devDependencies": {
+    "electron": "^42.0.0",
+    "electron-builder": "^25.1.8",
+    "jest": "^30.3.0"
+  },
+  "build": {
+    "appId": "com.yuupeek.app",
+    "productName": "YuuPeek",
+    "win": {
+      "target": "nsis",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**",
+      "renderer/**",
+      "assets/**"
+    ],
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
+  }
+}
