@@ -8,6 +8,7 @@
     "test": "jest",
     "build": "electron-builder",
     "build:dir": "electron-builder --dir",
+    "prerelease": "node -e \"const v=require('./package.json').version; require('child_process').execSync('git tag v'+v+' && git push origin v'+v, {stdio:'inherit'})\"",
     "release": "electron-builder --publish always"
   },
   "keywords": [],
