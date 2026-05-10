@@ -24,7 +24,7 @@
     "productName": "YoliaWatching",
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.png",
+      "icon": "assets/favicon.ico",
       "requestedExecutionLevel": "asInvoker",
       "sign": null,
       "signingHashAlgorithms": null

@@ -107,7 +107,6 @@ function createPetWindow() {
 }
 
 app.whenReady().then(() => {
-  if (config.modes?.pet) createPetWindow();
 
   // Control panel window
   let panelWin = null;
@@ -133,7 +132,7 @@ app.whenReady().then(() => {
   if (config.modes?.obs) openPanel();
 
   // System tray — always present so there is a way to quit
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets/icon.png'));
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets/favicon.ico'));
   tray = new Tray(icon);
   tray.setToolTip('YoliaWatching 👁️');
   tray.setContextMenu(Menu.buildFromTemplate([
