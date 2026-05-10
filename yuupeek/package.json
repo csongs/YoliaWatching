@@ -7,7 +7,8 @@
     "test-ui": "node test-server.js",
     "test": "jest",
     "build": "electron-builder",
-    "build:dir": "electron-builder --dir"
+    "build:dir": "electron-builder --dir",
+    "release": "electron-builder --publish always"
   },
   "keywords": [],
   "author": "",
@@ -42,6 +43,11 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "csongs",
+      "repo": "YoliaWatching"
     }
   },
   "dependencies": {
