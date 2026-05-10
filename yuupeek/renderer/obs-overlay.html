@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; width: 100vw; height: 100vh; }
+    #character { position: fixed; bottom: 60px; right: 40px; }
+    #char-canvas { display: block; }
+
+    #hud {
+      position: fixed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0,0,0,0.78);
+      border-radius: 16px;
+      padding: 8px 16px 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    #hud > span  { color: #fff; font-size: 14px; font-family: monospace; white-space: nowrap; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold; }
+    #bar-track   { width: 90px; height: 7px; background: rgba(255,255,255,.2); border-radius: 4px; overflow: hidden; }
+    #bar-fill    { height: 100%; width: 0%; background: #4af; border-radius: 3px; transition: width .3s; }
+    #bar-fill.peek  { background: #fa4; }
+    #bar-fill.angry { background: #f44; }
+
+    #speech-bubble {
+      max-width: 200px; word-break: break-all;
+      background: rgba(255,255,255,0.92); color: #222;
+      font-size: 13px; font-family: monospace;
+      border-radius: 10px; padding: 5px 10px;
+      pointer-events: none;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    #speech-bubble.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="speech-bubble"></div>
+    <span>yolia_see <span id="yolia-see-val">0</span>%</span>
+    <div id="bar-track"><div id="bar-fill"></div></div>
+  </div>
+  <div id="character"><canvas id="char-canvas"></canvas></div>
+
+  <script src="/renderer/character.js"></script>
+  <script>
+    const canvas    = document.getElementById('char-canvas');
+    const ctx       = canvas.getContext('2d');
+    const charEl    = document.getElementById('character');
+    const hudEl     = document.getElementById('hud');
+    const valEl     = document.getElementById('yolia-see-val');
+    const barFill   = document.getElementById('bar-fill');
+    const speechEl  = document.getElementById('speech-bubble');
+
+    canvas.style.cursor = 'grab';
+
+    let dragging = false;
+
+    const char = createCharacter({
+      canvas, ctx, charEl, valEl, barFill, speechEl,
+      assetBase: '/assets/sprites/frames',
+      onUpdateHud({ posRight, posBottom, jumpOffset, canvasW, canvasH }) {
+        const hudW = hudEl.offsetWidth || 100;
+        hudEl.style.right  = (posRight + canvasW / 2 - hudW / 2) + 'px';
+        hudEl.style.bottom = (posBottom + jumpOffset + canvasH + 8) + 'px';
+      },
+      getIsDragging: () => dragging,
+    });
+
+    // ── Config (scale + wave variants) ────────────────────────────────────────
+    const SCALES = [1, 1.5, 2, 2.5, 3, 3.5, 4];
+    fetch('/obs-config')
+      .then(r => r.json())
+      .then(({ scale }) => {
+        const s = SCALES.includes(scale) ? scale : 1;
+        char.setScale(s);
+      })
+      .catch(() => {});
+
+    fetch('/commands.json')
+      .then(r => r.json())
+      .then(({ greetingAnimations }) => {
+        if (greetingAnimations?.length) char.setWaveVariants(greetingAnimations);
+      })
+      .catch(() => {});
+
+    // ── Drag ──────────────────────────────────────────────────────────────────
+    let dragStartX, dragStartY, dragStartRight, dragStartBottom;
+
+    canvas.addEventListener('mousedown', (e) => {
+      dragging        = true;
+      dragStartX      = e.clientX;
+      dragStartY      = e.clientY;
+      ({ posRight: dragStartRight, posBottom: dragStartBottom } = char.getPos());
+      canvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      char.setPos(
+        dragStartRight  - (e.clientX - dragStartX),
+        Math.max(0, dragStartBottom - (e.clientY - dragStartY)),
+      );
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      canvas.style.cursor = 'grab';
+      const { posRight } = char.getPos();
+      char.setDragOffset(posRight - char.getNaturalRight());
+      char.setTargetRight(posRight);
+    });
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    const WS_PORT = location.port || 3000;
+    const ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}`);
+    ws.onmessage = (e) => char.applyUpdate(JSON.parse(e.data));
+    ws.onclose   = () => setTimeout(() => location.reload(), 3000);
+
+    char.scheduleWander();
+  </script>
+</body>
+</html>

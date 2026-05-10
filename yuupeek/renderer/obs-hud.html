@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; width: 100vw; height: 100vh; }
+
+    #hud {
+      position: fixed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      background: rgba(0,0,0,0.55);
+      border-radius: 16px;
+      padding: 6px 14px 8px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    #hud > span  { color: #fff; font-size: 12px; font-family: monospace; white-space: nowrap; }
+    #bar-track   { width: 80px; height: 6px; background: rgba(255,255,255,.2); border-radius: 3px; overflow: hidden; }
+    #bar-fill    { height: 100%; width: 0%; background: #4af; border-radius: 3px; transition: width .3s; }
+    #bar-fill.peek  { background: #fa4; }
+    #bar-fill.angry { background: #f44; }
+
+    #hud-btns { display: flex; gap: 5px; margin-top: 2px; }
+    #hud-btns button {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+    #hud-btns button:hover { background: rgba(255,255,255,0.3); }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <span>幽視 <span id="yuushi-val">0</span>%</span>
+    <div id="bar-track"><div id="bar-fill"></div></div>
+    <div id="hud-btns">
+      <button id="feed-btn"  title="餵食 (-15)">🌿</button>
+      <button id="cheer-btn" title="幽視 → 80%">🔥</button>
+      <button id="cry-btn"   title="哭哭">😢</button>
+    </div>
+  </div>
+
+  <script>
+    const DISPLAY_W   = 128;
+    const DISPLAY_H   = 139;
+    const POSBOT      = 60;
+    const REST_RIGHT  = 40;
+    const PEEK_RIGHT  = 240;
+    const ANGRY_RIGHT = 380;
+
+    const hudEl   = document.getElementById('hud');
+    const valEl   = document.getElementById('yuushi-val');
+    const barFill = document.getElementById('bar-fill');
+
+    let posRight    = REST_RIGHT;
+    let targetRight = REST_RIGHT;
+
+    function setTargetForState(state) {
+      if (state === 'cheer')                       targetRight = ANGRY_RIGHT;
+      else if (state === 'peek')                   targetRight = PEEK_RIGHT;
+      else if (state === 'cry' || state === 'eat') { /* stay */ }
+      else                                         targetRight = REST_RIGHT;
+    }
+
+    // Follow character head — same interpolation as obs-overlay.html
+    setInterval(() => {
+      const diff = targetRight - posRight;
+      if (Math.abs(diff) > 0.5) posRight += diff * 0.04;
+
+      const hudW = hudEl.offsetWidth || 100;
+      // Center HUD over character: character center from right = posRight + DISPLAY_W/2
+      hudEl.style.right  = (posRight + DISPLAY_W / 2 - hudW / 2) + 'px';
+      hudEl.style.bottom = (POSBOT + DISPLAY_H + 8) + 'px';
+    }, 30);
+
+    function applyUpdate({ value, state }) {
+      valEl.textContent   = value;
+      barFill.style.width = value + '%';
+      barFill.className   = value >= 80 ? 'angry' : value >= 40 ? 'peek' : '';
+      setTargetForState(state);
+    }
+
+    const WS_PORT = location.port || 3000;
+    const ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}`);
+    ws.onmessage = (e) => applyUpdate(JSON.parse(e.data));
+    ws.onclose   = () => setTimeout(() => location.reload(), 3000);
+
+    document.getElementById('feed-btn').addEventListener('click',
+      () => ws.send(JSON.stringify({ cmd: 'feed' })));
+    document.getElementById('cheer-btn').addEventListener('click',
+      () => ws.send(JSON.stringify({ cmd: 'setYuushi', value: 80 })));
+    document.getElementById('cry-btn').addEventListener('click',
+      () => ws.send(JSON.stringify({ cmd: 'punish' })));
+  </script>
+</body>
+</html>

@@ -1,27 +1,33 @@
 {
-  "name": "yuupeek",
+  "name": "yoliawatching",
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "chcp 65001 && electron .",
+    "test-ui": "node test-server.js",
     "test": "jest",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "build:dir": "electron-builder --dir"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "YuuPeek desktop pet",
+  "description": "YoliaWatching desktop pet",
   "devDependencies": {
     "electron": "^42.0.0",
     "electron-builder": "^25.1.8",
-    "jest": "^30.3.0"
+    "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.4.1"
   },
   "build": {
-    "appId": "com.yuupeek.app",
-    "productName": "YuuPeek",
+    "appId": "com.yoliawatching.app",
+    "productName": "YoliaWatching",
     "win": {
       "target": "nsis",
-      "requestedExecutionLevel": "asInvoker"
+      "icon": "assets/icon.png",
+      "requestedExecutionLevel": "asInvoker",
+      "sign": null,
+      "signingHashAlgorithms": null
     },
     "files": [
       "main.js",
@@ -30,9 +36,18 @@
       "renderer/**",
       "assets/**"
     ],
+    "extraFiles": [
+      { "from": "config.json", "to": "config.json" }
+    ],
     "nsis": {
       "oneClick": true,
       "perMachine": false
     }
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "googleapis": "^171.4.0",
+    "tmi.js": "^1.8.5",
+    "ws": "^8.20.0"
   }
 }

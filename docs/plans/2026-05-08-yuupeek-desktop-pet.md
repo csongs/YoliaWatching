@@ -1,10 +1,10 @@
-# YuuPeek Desktop Pet — Implementation Plan
+﻿# YuuPeek Desktop Pet ??Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build an Electron transparent overlay desktop pet (阿幽) that detects esports/stream windows by title, grows a 幽視值 meter, and lets the player click her away.
+**Goal:** Build an Electron transparent overlay desktop pet (?踹厭) that detects esports/stream windows by title, grows a 撟質???meter, and lets the player click her away.
 
-**Architecture:** Electron main process polls all visible window titles via PowerShell every 2 seconds; if a stream keyword matches, it raises 幽視 over IPC; the renderer drives a CSS character state machine (idle → peek → focus) based on the value; clicking the character sends a "punish" event back, dropping 幽視 and triggering cry animation.
+**Architecture:** Electron main process polls all visible window titles via PowerShell every 2 seconds; if a stream keyword matches, it raises 撟質? over IPC; the renderer drives a CSS character state machine (idle ??peek ??focus) based on the value; clicking the character sends a "punish" event back, dropping 撟質? and triggering cry animation.
 
 **Tech Stack:** Electron 30+, Node.js child_process (PowerShell for window scan), HTML/CSS animations in renderer, Jest for unit tests on pure-logic modules (detector, state machine).
 
@@ -14,19 +14,19 @@
 
 ```
 yuupeek/
-├── package.json
-├── main.js              # Electron entry, BrowserWindow, IPC orchestration
-├── preload.js           # Secure contextBridge for renderer ↔ main
-├── src/
-│   ├── detector.js      # Window title scanner (pure Node, testable)
-│   ├── stateMachine.js  # Ayuu state transitions (pure JS, testable)
-│   └── config.js        # Keyword list, thresholds
-├── renderer/
-│   ├── index.html
-│   ├── style.css        # Character + HUD CSS
-│   └── app.js           # Renderer logic
-└── assets/
-    └── sprites/         # Drop PNG frames here later (placeholders until art arrives)
+??? package.json
+??? main.js              # Electron entry, BrowserWindow, IPC orchestration
+??? preload.js           # Secure contextBridge for renderer ??main
+??? src/
+??  ??? detector.js      # Window title scanner (pure Node, testable)
+??  ??? stateMachine.js  # Ayuu state transitions (pure JS, testable)
+??  ??? config.js        # Keyword list, thresholds
+??? renderer/
+??  ??? index.html
+??  ??? style.css        # Character + HUD CSS
+??  ??? app.js           # Renderer logic
+??? assets/
+    ??? sprites/         # Drop PNG frames here later (placeholders until art arrives)
 ```
 
 ---
@@ -48,7 +48,7 @@ npm install --save-dev electron jest
 
 **Step 2: Set package.json scripts**
 
-Edit `package.json` — replace `"scripts"` block:
+Edit `package.json` ??replace `"scripts"` block:
 
 ```json
 "scripts": {
@@ -155,8 +155,8 @@ contextBridge.exposeInMainWorld('yuuApi', {
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="character" class="state-idle">👁️</div>
-  <div id="hud">幽視 <span id="yuushi-val">0</span>%</div>
+  <div id="character" class="state-idle">??儭?/div>
+  <div id="hud">撟質? <span id="yuushi-val">0</span>%</div>
   <script src="app.js"></script>
 </body>
 </html>
@@ -228,7 +228,7 @@ window.yuuApi.onYuushiUpdate((val) => {
 npm start
 ```
 
-Expected: Full-screen transparent overlay. 👁️ emoji sits in bottom-right. HUD shows "幽視 0%". Other app windows are still clickable.
+Expected: Full-screen transparent overlay. ??儭?emoji sits in bottom-right. HUD shows "撟質? 0%". Other app windows are still clickable.
 
 **Step 7: Commit**
 
@@ -263,7 +263,7 @@ const STREAM_KEYWORDS = [
 ];
 
 const THRESHOLDS = {
-  PEEK:  40,   // 幽視 % where Ayuu starts peeking
+  PEEK:  40,   // 撟質? % where Ayuu starts peeking
   FOCUS: 80,   // % where she enters full Focus Mode
 };
 
@@ -293,13 +293,13 @@ test('is case-insensitive', () => {
 });
 ```
 
-**Step 3: Run test — verify it fails**
+**Step 3: Run test ??verify it fails**
 
 ```bash
 npm test
 ```
 
-Expected: FAIL — "Cannot find module '../detector'"
+Expected: FAIL ??"Cannot find module '../detector'"
 
 **Step 4: Write detector.js**
 
@@ -331,7 +331,7 @@ function matchesStream(titles) {
 module.exports = { getAllWindowTitles, matchesStream };
 ```
 
-**Step 5: Run test — verify it passes**
+**Step 5: Run test ??verify it passes**
 
 ```bash
 npm test
@@ -402,21 +402,21 @@ test('yuushi never exceeds 100 or goes below 0', () => {
 });
 ```
 
-**Step 2: Run test — verify fails**
+**Step 2: Run test ??verify fails**
 
 ```bash
 npm test
 ```
 
-Expected: FAIL — "Cannot find module '../stateMachine'"
+Expected: FAIL ??"Cannot find module '../stateMachine'"
 
 **Step 3: Write stateMachine.js**
 
 ```js
 const { THRESHOLDS } = require('./config');
 
-const TICK_RISE = 5;   // 幽視 gained per tick when stream detected
-const TICK_FALL = 2;   // 幽視 lost per tick when no stream
+const TICK_RISE = 5;   // 撟質? gained per tick when stream detected
+const TICK_FALL = 2;   // 撟質? lost per tick when no stream
 const PUNISH_DROP = 20;
 const PUNISH_DURATION_MS = 2000;
 
@@ -455,7 +455,7 @@ function createStateMachine() {
 module.exports = { createStateMachine };
 ```
 
-**Step 4: Run tests — verify pass**
+**Step 4: Run tests ??verify pass**
 
 ```bash
 npm test
@@ -472,7 +472,7 @@ git commit -m "feat: yuushi state machine with peek/focus/punish transitions"
 
 ---
 
-### Task 5: Wire Main Process — Detector + State Machine Loop
+### Task 5: Wire Main Process ??Detector + State Machine Loop
 
 **Files:**
 - Modify: `yuupeek/main.js`
@@ -513,7 +513,7 @@ app.whenReady().then(() => {
   win.loadFile('renderer/index.html');
   win.setVisibleOnAllWorkspaces(true);
 
-  // Detection loop — every 2 seconds
+  // Detection loop ??every 2 seconds
   setInterval(async () => {
     const titles = await getAllWindowTitles();
     const detected = matchesStream(titles);
@@ -547,10 +547,10 @@ const char = document.getElementById('character');
 const valEl = document.getElementById('yuushi-val');
 
 const STATE_EMOJI = {
-  idle:     '👁️',
-  peek:     '👀',
-  focus:    '🔴',
-  punished: '😭',
+  idle:     '??儭?,
+  peek:     '??',
+  focus:    '?',
+  punished: '?',
 };
 
 char.addEventListener('click', () => {
@@ -559,7 +559,7 @@ char.addEventListener('click', () => {
 
 window.yuuApi.onYuushiUpdate(({ value, state }) => {
   valEl.textContent = value;
-  char.textContent  = STATE_EMOJI[state] ?? '👁️';
+  char.textContent  = STATE_EMOJI[state] ?? '??儭?;
   char.className    = `state-${state}`;
 });
 ```
@@ -572,7 +572,7 @@ npm start
 
 Open YouTube in browser.
 
-Expected: Within ~6 seconds, HUD % climbs, character emoji changes to 👀 then 🔴. Clicking character → 😭, % drops.
+Expected: Within ~6 seconds, HUD % climbs, character emoji changes to ?? then ?. Clicking character ???, % drops.
 
 **Step 5: Commit**
 
@@ -590,7 +590,7 @@ git commit -m "feat: wire detection loop and punish IPC into main process"
 - Modify: `yuupeek/src/detector.js`
 - Modify: `yuupeek/main.js`
 
-**Goal:** Detect "Baron" / "Elder" / "Dragon" keywords → emit special `baron-event` IPC so renderer can show a dramatic animation.
+**Goal:** Detect "Baron" / "Elder" / "Dragon" keywords ??emit special `baron-event` IPC so renderer can show a dramatic animation.
 
 **Step 1: Add BARON_KEYWORDS to config.js**
 
@@ -637,7 +637,7 @@ onBaronEvent: (cb) => ipcRenderer.on('baron-event', cb),
 
 ```js
 window.yuuApi.onBaronEvent(() => {
-  char.textContent = '👁️👁️👁️';
+  char.textContent = '??儭????儭?;
   char.style.fontSize = '80px';
   setTimeout(() => { char.style.fontSize = ''; }, 3000);
 });
@@ -692,7 +692,7 @@ const icon = nativeImage.createEmpty(); // replace with real icon later
 const tray = new Tray(icon);
 tray.setToolTip('YuuPeek');
 tray.setContextMenu(Menu.buildFromTemplate([
-  { label: '👁️ YuuPeek', enabled: false },
+  { label: '??儭?YuuPeek', enabled: false },
   { type: 'separator' },
   { label: 'Quit', click: () => app.quit() },
 ]));
@@ -704,7 +704,7 @@ tray.setContextMenu(Menu.buildFromTemplate([
 npm start
 ```
 
-Expected: System tray icon appears. Right-click → Quit closes the app.
+Expected: System tray icon appears. Right-click ??Quit closes the app.
 
 **Step 3: Commit**
 
@@ -770,8 +770,9 @@ When sprite assets are ready, drop PNGs into `assets/sprites/`. Update `renderer
 
 ## What's Out of Scope (for now)
 
-- Drag interaction (拖曳) — add after MVP validated
-- 餵食 (feed) system — needs item inventory
-- Sound effects — add `<audio>` tags in renderer, trigger on state change
+- Drag interaction (?) ??add after MVP validated
+- 擗菟? (feed) system ??needs item inventory
+- Sound effects ??add `<audio>` tags in renderer, trigger on state change
 - Multi-monitor support
 - macOS (needs different window-title API)
+

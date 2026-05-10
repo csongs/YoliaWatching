@@ -94,6 +94,23 @@ body {
 #hud-btns button:active,
 #hud-btns button.active         { background: rgba(255,255,255,0.4); border-color: rgba(255,255,255,0.7); }
 
+/* ── Speech bubble ───────────────────────────────────────────────────────── */
+#speech-bubble {
+  max-width: 180px;
+  word-break: break-all;
+  background: rgba(255,255,255,0.92);
+  color: #222;
+  font-size: 12px;
+  font-family: monospace;
+  border-radius: 8px;
+  padding: 4px 9px;
+  margin-bottom: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#speech-bubble.show { opacity: 1; }
+
 /* ── Character state effects ─────────────────────────────────────────────── */
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
@@ -101,4 +118,3 @@ body {
 }
 #character.state-peek  { animation: bounce 1s ease-in-out infinite; }
 #character.state-angry { filter: drop-shadow(0 0 10px rgba(225,112,85,0.8)); }
-#character.state-cry   { filter: brightness(0.85) saturate(0.6); }

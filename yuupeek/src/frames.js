@@ -12,7 +12,7 @@ const FRAMES = {
   angry:   row(5, 8),   // failed — frustrated/upset
   cry:     row(5, 8),   // failed — sad (pending dedicated state)
   eat:     row(3, 4),   // waving — placeholder until eat is generated
-  shocked: row(4, 5),   // jumping — sudden reaction
+  jump: row(4, 5),
 };
 
 if (typeof module !== 'undefined') module.exports = { FRAMES };

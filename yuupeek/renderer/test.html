@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>YoliaWatching 開發測試台</title>
+  <style>
+    :root {
+      --bg:      #111;
+      --panel:   #1e1e1e;
+      --border:  #2e2e2e;
+      --text:    #bbb;
+      --accent:  #4af;
+      --green:   #4c4;
+      --red:     #f44;
+      --code-bg: #0a0a0a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: monospace; font-size: 13px; line-height: 1.6; }
+
+    /* leave right side clear for fixed character */
+    #app { padding: 18px; padding-right: 420px; }
+
+    h1 { color: #fff; font-size: 17px; margin-bottom: 16px; }
+    h2 { color: var(--accent); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; margin: 14px 0 8px; }
+
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+
+    /* ── Commands table ──────────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; }
+    th { color: #555; font-weight: normal; text-align: left; padding: 3px 10px; border-bottom: 1px solid var(--border); }
+    td { padding: 4px 10px; }
+    tr[onclick] { cursor: pointer; }
+    tr[onclick]:hover td { background: #1a2a1a; }
+    tr[onclick]:active td { background: #0f1f0f; }
+    .tag { display: inline-block; padding: 1px 7px; border-radius: 3px; background: #2a2a2a; border: 1px solid #444; font-size: 11px; }
+    .pos { color: var(--green); }
+    .neg { color: var(--red); }
+    .nil { color: #444; }
+
+    /* ── Code blocks ─────────────────────────────────────────────────────── */
+    pre {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px;
+      padding: 10px 12px; font-size: 12px; color: #9f9; white-space: pre; overflow-x: auto;
+      line-height: 1.55;
+    }
+    code { color: #9f9; }
+
+    /* ── Two-column guide ────────────────────────────────────────────────── */
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    /* ── Chat simulator ──────────────────────────────────────────────────── */
+    #chat-log {
+      height: 180px; overflow-y: auto;
+      border: 1px solid var(--border); border-radius: 5px;
+      padding: 8px; background: #0c0c0c;
+      display: flex; flex-direction: column; gap: 2px;
+      margin-bottom: 8px;
+    }
+    .msg { padding: 2px 7px; border-radius: 3px; }
+    .m-chat { color: #666; }
+    .m-cmd  { color: var(--green); background: #0f1f0f; }
+    .m-info { color: var(--accent); }
+
+    #chat-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    #yuushi-slider { flex: 1; min-width: 80px; accent-color: var(--accent); }
+    #slider-label  { min-width: 36px; color: #fff; }
+
+    #chat-row { display: flex; gap: 8px; margin-top: 8px; }
+    #chat-input {
+      flex: 1; background: #0c0c0c; border: 1px solid var(--border);
+      border-radius: 4px; color: #fff; padding: 6px 10px;
+      font-family: monospace; font-size: 13px;
+    }
+    #chat-input:focus { outline: none; border-color: var(--accent); }
+
+    button {
+      background: #222; border: 1px solid var(--border); color: var(--text);
+      padding: 5px 12px; border-radius: 4px; cursor: pointer;
+      font-family: monospace; font-size: 12px; white-space: nowrap;
+    }
+    button:hover { background: #2e2e2e; }
+    .btn-accent { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Fixed character (same as OBS overlay) ───────────────────────────── */
+    #character { position: fixed; bottom: 60px; right: 40px; cursor: grab; }
+    #char-canvas { display: block; }
+
+    #hud {
+      position: fixed;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      background: rgba(0,0,0,0.82); border-radius: 14px; padding: 7px 14px 9px;
+      border: 1px solid rgba(255,255,255,0.1);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    }
+    #hud > span { color: #fff; font-size: 13px; font-family: monospace; font-weight: bold; white-space: nowrap; }
+    #bar-track { width: 80px; height: 6px; background: rgba(255,255,255,.18); border-radius: 3px; overflow: hidden; }
+    #bar-fill  { height: 100%; width: 0%; background: #4af; border-radius: 3px; transition: width .3s; }
+    #bar-fill.peek  { background: #fa4; }
+    #bar-fill.angry { background: #f44; }
+
+    #speech-bubble {
+      max-width: 160px; word-break: break-all;
+      background: rgba(255,255,255,0.92); color: #222;
+      font-size: 12px; border-radius: 8px; padding: 4px 9px;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    #speech-bubble.show { opacity: 1; }
+
+    p.note { color: #555; margin-top: 6px; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <h1>YoliaWatching 開發測試台</h1>
+
+  <!-- ── 目前指令（動態載入）──────────────────────────────────────────── -->
+  <div class="panel">
+    <h2>目前指令 <span style="color:#444;text-transform:none;font-size:10px;letter-spacing:0">— commands.json（頁面重整自動更新）</span></h2>
+    <table>
+      <thead><tr><th>指令</th><th>動畫狀態</th><th>幽視值變化</th></tr></thead>
+      <tbody id="cmd-tbody"><tr><td colspan="3" class="nil" style="padding:6px 10px">載入中…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- ── 聊天模擬器 ───────────────────────────────────────────────────── -->
+  <div class="panel">
+    <h2>聊天模擬器</h2>
+    <div id="chat-controls">
+      <span>幽視</span>
+      <input id="yuushi-slider" type="range" min="0" max="100" value="0">
+      <span id="slider-label">0%</span>
+      <button class="btn-accent" onclick="randomCmd()">隨機指令</button>
+      <button onclick="resetState()">重設</button>
+    </div>
+    <div id="chat-log"></div>
+    <div id="chat-row">
+      <input id="chat-input" placeholder="輸入聊天訊息或指令，例如 !跳…" autofocus>
+      <button onclick="sendMsg()">送出</button>
+    </div>
+  </div>
+
+  <!-- ── 新增指令 / 新增動畫 ──────────────────────────────────────────── -->
+  <div class="panel cols">
+    <div>
+      <h2>新增指令</h2>
+      <p class="note" style="margin-bottom:6px">編輯 <code>commands.json</code>，加一行：</p>
+      <pre>// 觸發動畫（播完自動回原狀）：
+"!指令": { "state": "動畫名", "yuushi": 0 }
+
+// 同時改幽視值：
+"!指令": { "state": "cheer", "yuushi": 10 }
+
+// 只改幽視值（不換動畫）：
+"!指令": { "yuushi": -5 }</pre>
+      <p class="note">重新整理此頁即可看到新指令。</p>
+    </div>
+    <div>
+      <h2>新增角色動畫</h2>
+      <p class="note" style="margin-bottom:6px">1. 放入圖片（PNG，從 00 開始）：</p>
+      <pre>assets/sprites/frames/
+  └── 動作名稱/
+        ├── 00.png
+        ├── 01.png
+        └── 02.png</pre>
+      <p class="note" style="margin:6px 0">2. 在 <code>renderer/character.js</code> 的 <code>ANIMATIONS</code> 加一行：</p>
+      <pre>動作名稱: {
+  srcs: frames('動作名稱', 3), // 張數
+  loop: true,   // false=播完回原狀
+  ms: 150,      // 每幀毫秒（可省略）
+},</pre>
+      <p class="note">3. 在 <code>commands.json</code> 新增對應指令即完成。</p>
+    </div>
+  </div>
+
+  <!-- ── 可用狀態一覽 ─────────────────────────────────────────────────── -->
+  <div class="panel">
+    <h2>可用動畫狀態</h2>
+    <table>
+      <thead><tr><th>狀態名</th><th>說明</th><th>loop</th><th>角色位置</th></tr></thead>
+      <tbody>
+        <tr><td>idle</td><td>閒置（幽視 &lt; 40）</td><td>✓</td><td>右側邊緣</td></tr>
+        <tr><td>peek</td><td>偷看（幽視 ≥ 40）</td><td>✓</td><td>右側</td></tr>
+        <tr><td>cheer</td><td>歡呼（幽視 ≥ 80）</td><td>✓</td><td>更靠左</td></tr>
+        <tr><td>cry</td><td>哭哭</td><td>✓</td><td>原地不動</td></tr>
+        <tr><td>eat</td><td>吃東西，播完回原狀</td><td>✗</td><td>原地不動</td></tr>
+        <tr><td>jump</td><td>跳躍，播完回原狀</td><td>✗</td><td>原地＋垂直位移</td></tr>
+        <tr><td>run_left</td><td>往左跑（移動時自動觸發）</td><td>✓</td><td>移動中</td></tr>
+        <tr><td>run_right</td><td>往右跑（移動時自動觸發）</td><td>✓</td><td>移動中</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /#app -->
+
+<!-- Character (fixed, same as OBS overlay) -->
+<div id="hud">
+  <div id="speech-bubble"></div>
+  <span>yolia_see <span id="yolia-see-val">0</span>%</span>
+  <div id="bar-track"><div id="bar-fill"></div></div>
+</div>
+<div id="character"><canvas id="char-canvas"></canvas></div>
+
+<script src="/renderer/character.js"></script>
+<script>
+  // ── Character ──────────────────────────────────────────────────────────────
+  const canvas   = document.getElementById('char-canvas');
+  const ctx      = canvas.getContext('2d');
+  const charEl   = document.getElementById('character');
+  const hudEl    = document.getElementById('hud');
+  const valEl    = document.getElementById('yolia-see-val');
+  const barFill  = document.getElementById('bar-fill');
+  const speechEl = document.getElementById('speech-bubble');
+
+  const char = createCharacter({
+    canvas, ctx, charEl, valEl, barFill, speechEl,
+    assetBase: '/assets/sprites/frames',
+    onUpdateHud({ posRight, posBottom, jumpOffset, canvasW, canvasH }) {
+      const hudW = hudEl.offsetWidth || 100;
+      hudEl.style.right  = (posRight + canvasW / 2 - hudW / 2) + 'px';
+      hudEl.style.bottom = (posBottom + jumpOffset + canvasH + 8) + 'px';
+    },
+  });
+  char.scheduleWander();
+
+  // ── Simple state machine (client-side) ─────────────────────────────────────
+  let yolia_see  = 0;
+  let commands   = {};
+  let yoliaStates = [
+    { min: 80, state: 'cheer' },
+    { min: 40, state: 'peek'  },
+    { min: 0,  state: 'idle'  },
+  ];
+
+  function computeState() {
+    const sorted = [...yoliaStates].sort((a, b) => b.min - a.min);
+    for (const s of sorted) {
+      if (yolia_see >= s.min) return s.state;
+    }
+    return 'idle';
+  }
+
+  function applyYoliaSee(v) {
+    yolia_see = Math.max(0, Math.min(100, v));
+    slider.value = yolia_see;
+    sliderLabel.textContent = yolia_see + '%';
+  }
+
+  function syncChar() {
+    char.applyUpdate({ value: yolia_see, state: computeState() });
+  }
+
+  // ── Slider ─────────────────────────────────────────────────────────────────
+  const slider      = document.getElementById('yuushi-slider');
+  const sliderLabel = document.getElementById('slider-label');
+
+  slider.addEventListener('input', () => {
+    applyYoliaSee(parseInt(slider.value));
+    syncChar();
+  });
+
+  function resetState() {
+    applyYoliaSee(0);
+    syncChar();
+    addLog('重設 yolia_see → 0%', 'info');
+  }
+
+  // ── commands.json loader ───────────────────────────────────────────────────
+  async function loadCommands() {
+    try {
+      const r    = await fetch('/commands.json');
+      const data = await r.json();
+      commands   = data.commands    ?? data;
+      if (data.yoliaStates?.length)        yoliaStates = data.yoliaStates;
+      if (data.greetingAnimations?.length) char.setWaveVariants(data.greetingAnimations);
+      renderTable();
+    } catch {
+      document.getElementById('cmd-tbody').innerHTML =
+        '<tr><td colspan="3" class="neg" style="padding:6px 10px">' +
+        '無法載入 commands.json — 請透過 OBS server 開啟（http://localhost:3000/renderer/test.html）</td></tr>';
+    }
+  }
+
+  function renderTable() {
+    const rows = Object.entries(commands).map(([cmd, cfg]) => {
+      const y = cfg.yolia_see ?? 0;
+      const yStr = y > 0 ? `<span class="pos">+${y}</span>`
+                 : y < 0 ? `<span class="neg">${y}</span>`
+                 : '<span class="nil">—</span>';
+      const sStr = cfg.state
+        ? `<span class="tag">${cfg.state}</span>`
+        : '<span class="nil">（僅改值）</span>';
+      const escaped = cmd.replace(/'/g, "\\'");
+      return `<tr onclick="processMessage('${escaped}')"><td><strong>${cmd}</strong></td><td>${sStr}</td><td>${yStr}</td></tr>`;
+    });
+    document.getElementById('cmd-tbody').innerHTML =
+      rows.length ? rows.join('') : '<tr><td colspan="3" class="nil">（無指令）</td></tr>';
+  }
+
+  // ── Chat simulator ─────────────────────────────────────────────────────────
+  const chatLog = document.getElementById('chat-log');
+
+  function addLog(text, type = 'chat') {
+    const el = document.createElement('div');
+    el.className = `msg m-${type}`;
+    el.textContent = text;
+    chatLog.appendChild(el);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  function processMessage(raw) {
+    raw = raw.trim();
+    if (!raw) return;
+
+    const word = raw.split(' ')[0];
+    const cmd  = commands[word];
+
+    if (!cmd) {
+      // Non-command: simulate +1 yolia_see like real chat
+      applyYoliaSee(yolia_see + 1);
+      syncChar();
+      addLog(`viewer: ${raw}`, 'chat');
+      return;
+    }
+
+    if (cmd.yolia_see != null) applyYoliaSee(yolia_see + cmd.yolia_see);
+
+    const speech = `viewer: ${word}`;
+    if (cmd.state) {
+      addLog(`⚡ ${word}  →  state: ${cmd.state}  yolia_see: ${yolia_see}%`, 'cmd');
+      char.applyUpdate({ value: yolia_see, state: cmd.state, animOnly: true, speech });
+    } else {
+      const s = computeState();
+      addLog(`⚡ ${word}  →  yolia_see: ${yolia_see}%  state: ${s}`, 'cmd');
+      char.applyUpdate({ value: yolia_see, state: s, speech });
+    }
+  }
+
+  function sendMsg() {
+    const input = document.getElementById('chat-input');
+    processMessage(input.value);
+    input.value = '';
+    input.focus();
+  }
+
+  function randomCmd() {
+    const keys = Object.keys(commands);
+    if (!keys.length) { addLog('尚未載入指令', 'info'); return; }
+    const pick = keys[Math.floor(Math.random() * keys.length)];
+    addLog(`隨機：${pick}`, 'info');
+    processMessage(pick);
+  }
+
+  document.getElementById('chat-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendMsg();
+  });
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  loadCommands();
+  addLog('測試台就緒。輸入指令測試，或拖動幽視滑桿觀察狀態。', 'info');
+</script>
+</body>
+</html>

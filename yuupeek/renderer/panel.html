@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>YoliaWatching 控制面板</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; font-size: 14px; }
+
+    .tabs { display: flex; background: #1a1d27; border-bottom: 1px solid #2d3748; }
+    .tab { padding: 14px 28px; cursor: pointer; color: #94a3b8; transition: all 0.15s; user-select: none; }
+    .tab:hover { color: #e2e8f0; background: #252836; }
+    .tab.active { color: #f472b6; border-bottom: 2px solid #f472b6; background: #1e2130; }
+
+    .panel { display: none; padding: 28px; max-width: 760px; }
+    .panel.active { display: block; }
+
+    .card { background: #1a1d27; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .card h3 { font-size: 15px; margin-bottom: 12px; color: #cbd5e1; display: flex; align-items: center; gap: 10px; }
+
+    .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .badge.ok     { background: #14532d; color: #4ade80; }
+    .badge.warn   { background: #451a03; color: #fb923c; }
+    .badge.off    { background: #1e1e2e; color: #64748b; border: 1px solid #334155; }
+
+    .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: #94a3b8; }
+    .row strong { color: #cbd5e1; }
+    a { color: #60a5fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .guide-section { margin-bottom: 28px; }
+    .guide-section h3 { font-size: 15px; color: #f472b6; margin-bottom: 12px; }
+    ol, ul { padding-left: 20px; }
+    li { line-height: 2; color: #94a3b8; }
+    li strong { color: #cbd5e1; }
+    code { background: #252836; color: #93c5fd; padding: 1px 6px; border-radius: 4px; font-family: 'Consolas', monospace; font-size: 13px; }
+    .note { margin-top: 8px; padding: 8px 12px; background: #2d2005; border-left: 3px solid #fbbf24; border-radius: 4px; color: #fde68a; font-size: 13px; }
+
+    .form-group { margin-bottom: 16px; }
+    label { display: block; margin-bottom: 6px; color: #94a3b8; font-size: 13px; }
+    .input-row { display: flex; gap: 8px; }
+    input[type=text], input[type=password] {
+      flex: 1; padding: 9px 12px; background: #0d111a; border: 1px solid #334155;
+      border-radius: 6px; color: #e2e8f0; font-family: 'Consolas', monospace; font-size: 13px;
+    }
+    input:focus { outline: none; border-color: #60a5fa; }
+
+    .btn { padding: 9px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #f472b6; color: #0f1117; }
+    .btn-secondary { background: #252836; color: #cbd5e1; border: 1px solid #334155; }
+    .btn-small { padding: 6px 12px; font-size: 12px; }
+
+    .divider { border: none; border-top: 1px solid #2d3748; margin: 20px 0; }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+      background: #14532d; color: #4ade80; border-radius: 8px; font-size: 13px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: none; z-index: 999;
+    }
+    .toast.error { background: #450a0a; color: #f87171; }
+  </style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('guide')">安裝說明</div>
+  <div class="tab" onclick="showTab('status')">模組狀態</div>
+  <div class="tab" onclick="showTab('settings')">設定</div>
+</div>
+
+<!-- ── 安裝說明 ── -->
+<div id="guide" class="panel active">
+
+  <div class="guide-section">
+    <h3>Twitch OAuth Token</h3>
+    <ol>
+      <li>前往 <a href="https://twitchtokengenerator.com" target="_blank">twitchtokengenerator.com</a></li>
+      <li>選擇 <strong>Bot Chat Token</strong></li>
+      <li>授權後複製 <strong>ACCESS TOKEN</strong></li>
+      <li>在「設定」頁將 token 填入 <code>TWITCH_OAUTH</code>，格式為 <code>oauth:你的token</code></li>
+    </ol>
+    <div class="note">
+      測試方式（不需要真的開播）：OBS Stream Key 最後加上 <code>?bandwidthtest=true</code>，或勾選「啟用頻寬測試模式」
+    </div>
+  </div>
+
+  <div class="guide-section">
+    <h3>YouTube Data API</h3>
+    <ol>
+      <li>前往 <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a></li>
+      <li>建立專案 → 啟用 <strong>YouTube Data API v3</strong></li>
+      <li>建立憑證 → <strong>API 金鑰</strong></li>
+      <li>在「設定」頁填入 <code>YOUTUBE_API_KEY</code></li>
+    </ol>
+    <div class="note">每日 10,000 quota 限制，直播中約 500–2,000 quota／小時</div>
+  </div>
+
+  <div class="guide-section">
+    <h3>OBS Browser Source 設定 <a href="https://obsproject.com/kb/browser-source" target="_blank" style="font-size:12px;font-weight:400">官方說明文件 ↗</a></h3>
+    <ol>
+      <li>OBS 左下「來源（Sources）」→ 點 <strong>+</strong> → <strong>瀏覽器（Browser）</strong></li>
+      <li>填入設定：
+        <ul style="margin-top:4px">
+          <li>URL：<code>http://localhost:3000</code></li>
+          <li>寬度（Width）：<code>1920</code>　高度（Height）：<code>1080</code></li>
+        </ul>
+      </li>
+      <li>往下找到 <strong>Custom CSS</strong> 欄位，貼入以下內容（<span style="color:#fb923c">必填，否則背景會是白色</span>）：
+        <pre style="background:#0d111a;border:1px solid #334155;border-radius:6px;padding:10px 14px;margin-top:6px;font-family:'Consolas',monospace;font-size:12px;color:#93c5fd;line-height:1.6;overflow-x:auto">body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }</pre>
+      </li>
+      <li>點 <strong>OK</strong> 完成，角色即出現在畫面上</li>
+      <li>右鍵 Source → <strong>Interact</strong> 可操作 HUD 按鈕、拖曳角色位置</li>
+    </ol>
+    <div class="note" style="margin-top:12px">
+      <strong>角色大小</strong>：在 <code>config.json</code> 的 <code>obs.scale</code> 調整（預設 2，範圍 1–4）。也可以直接在 OBS 中縮放 Source（右鍵 → <strong>Transform → Edit Transform</strong>）。
+    </div>
+    <div class="note" style="margin-top:8px;background:#1a2d1a;border-color:#4ade80;color:#bbf7d0">
+      <strong>Custom CSS 說明</strong>：OBS Browser Source 預設背景是白色。貼上這段 CSS 後，<code>rgba(0,0,0,0)</code> 讓背景完全透明，角色才能正確疊在畫面上。若角色周圍出現白框，請確認此欄位有正確填入。
+    </div>
+  </div>
+
+  <div class="guide-section">
+    <h3>config.json 設定</h3>
+    <ul>
+      <li><strong>modes</strong>：pet（桌面寵物）/ obs（OBS 伺服器）/ test（啟動時開啟測試頁）</li>
+      <li><strong>twitch.channel</strong>：你的 Twitch 頻道 ID</li>
+      <li><strong>youtube.channel</strong>：你的 YouTube 頻道 handle，例如 <code>@altheayolia</code></li>
+      <li><strong>commands</strong>：聊天室指令，可自訂 state 和 yolia_see 增減</li>
+      <li><strong>greetings</strong>：觸發揮手動畫的關鍵詞列表</li>
+    </ul>
+    <div class="note">修改 config.json 後需重新啟動程式才會生效</div>
+  </div>
+
+</div>
+
+<!-- ── 模組狀態 ── -->
+<div id="status" class="panel">
+  <div id="status-cards"><p style="color:#64748b">載入中…</p></div>
+</div>
+
+<!-- ── 設定 ── -->
+<div id="settings" class="panel">
+  <div class="card">
+    <h3>環境變數 <span style="font-size:12px;color:#64748b;font-weight:400">（儲存於 .env，不進版本庫）</span></h3>
+    <div class="form-group">
+      <label>TWITCH_OAUTH</label>
+      <div class="input-row">
+        <input type="password" id="tw-oauth" placeholder="oauth:xxxxxxxxxxxxxxxxxxxxxxxx">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>YOUTUBE_API_KEY</label>
+      <div class="input-row">
+        <input type="password" id="yt-key" placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXX">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" onclick="saveEnv()">儲存</button>
+      <button class="btn btn-secondary" onclick="togglePasswords()">顯示／隱藏</button>
+    </div>
+    <p style="margin-top:12px;color:#64748b;font-size:12px">儲存後重新啟動程式生效</p>
+  </div>
+
+  <div class="card">
+    <h3>設定檔</h3>
+    <p style="color:#94a3b8;margin-bottom:14px">以文字編輯器開啟 config.json 修改頻道、模式、指令等設定</p>
+    <button class="btn btn-secondary" onclick="openConfig()">開啟 config.json</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  const TAB_IDS = ['guide', 'status', 'settings'];
+
+  function showTab(id) {
+    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_IDS[i] === id));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === id));
+    if (id === 'status') refreshStatus();
+    if (id === 'settings') loadEnv();
+  }
+
+  // ── Status tab ─────────────────────────────────────────────────────────────
+  function badge(cls, label) {
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
+
+  function moduleBadge(enabled, active, activeLabel, inactiveLabel) {
+    if (!enabled) return badge('off', '停用');
+    return active ? badge('ok', activeLabel) : badge('warn', inactiveLabel);
+  }
+
+  function refreshStatus() {
+    fetch('/panel/api/status')
+      .then(r => r.json())
+      .then(s => {
+        const port = s.obs?.port ?? 3000;
+        document.getElementById('status-cards').innerHTML = `
+          <div class="card">
+            <h3>Twitch ${moduleBadge(s.twitch?.enabled, s.twitch?.connected, '已連線', '未連線')}</h3>
+            <div class="row">頻道：<strong>${s.twitch?.channel || '未設定'}</strong></div>
+          </div>
+
+          <div class="card">
+            <h3>YouTube ${moduleBadge(s.youtube?.enabled, s.youtube?.live, '直播中', '等待直播')}</h3>
+            <div class="row">頻道：<strong>${s.youtube?.channel || '未設定'}</strong></div>
+          </div>
+
+          <div class="card">
+            <h3>OBS Server ${s.obs?.enabled ? badge('ok', '運行中') : badge('off', '停用')}</h3>
+            ${s.obs?.enabled ? `
+              <div class="row">OBS Overlay：<a href="http://localhost:${port}" target="_blank">http://localhost:${port}</a></div>
+              <div class="row">HUD：<a href="http://localhost:${port}/hud" target="_blank">http://localhost:${port}/hud</a></div>
+              <div class="row" style="margin-top:12px">
+                <button class="btn btn-secondary btn-small" onclick="window.open('http://localhost:${port}/renderer/test.html')">開啟測試頁面</button>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="card">
+            <h3>桌面寵物 ${s.pet?.visible ? badge('ok', '運行中') : badge('off', '已關閉')}</h3>
+            <div class="row" style="margin-top:12px">
+              <button class="btn btn-secondary btn-small" onclick="togglePet()">
+                ${s.pet?.visible ? '關閉寵物' : '開啟寵物'}
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .catch(() => {
+        document.getElementById('status-cards').innerHTML = '<p style="color:#f87171">無法取得狀態</p>';
+      });
+  }
+
+  setInterval(() => {
+    if (document.getElementById('status').classList.contains('active')) refreshStatus();
+  }, 3000);
+
+  // ── Settings tab ───────────────────────────────────────────────────────────
+  function loadEnv() {
+    fetch('/panel/api/env')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('tw-oauth').value = data.TWITCH_OAUTH ?? '';
+        document.getElementById('yt-key').value   = data.YOUTUBE_API_KEY ?? '';
+      });
+  }
+
+  function saveEnv() {
+    fetch('/panel/api/env', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        TWITCH_OAUTH:    document.getElementById('tw-oauth').value,
+        YOUTUBE_API_KEY: document.getElementById('yt-key').value,
+      }),
+    })
+      .then(r => r.json())
+      .then(() => showToast('已儲存'))
+      .catch(() => showToast('儲存失敗', true));
+  }
+
+  function openConfig() {
+    fetch('/panel/api/open-config', { method: 'POST' });
+  }
+
+  function togglePet() {
+    fetch('/panel/api/pet-toggle', { method: 'POST' }).then(() => setTimeout(refreshStatus, 300));
+  }
+
+  let passwordsVisible = false;
+  function togglePasswords() {
+    passwordsVisible = !passwordsVisible;
+    const t = passwordsVisible ? 'text' : 'password';
+    document.getElementById('tw-oauth').type = t;
+    document.getElementById('yt-key').type   = t;
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  function showToast(msg, isError = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast' + (isError ? ' error' : '');
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 3000);
+  }
+</script>
+</body>
+</html>

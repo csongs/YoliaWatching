@@ -1,0 +1,38 @@
+{
+  "modes": {
+    "pet": true,
+    "obs": true,
+    "test": true
+  },
+  "yoliaStates": [
+    { "min": 80, "state": "cheer" },
+    { "min": 40, "state": "peek"  },
+    { "min": 0,  "state": "idle"  }
+  ],
+  "obs": {
+    "port": 3000,
+    "scale": 2
+  },
+  "twitch": {
+    "enabled": true,
+    "channel": "altheayolia"
+  },
+  "youtube": {
+    "enabled": false,
+    "channel": "@altheayolia"
+  },
+  "greetings": ["安安", "午安", "早安", "晚安"],
+  "greetingResponse": "{user} 安安~",
+  "greetingAnimations": [
+    { "frames": [0,1,2,3,2,1,0], "ms": 200, "weight": 80 },
+    { "frames": [4,5,6,7,6,5,4], "ms": 200, "weight": 20 }
+  ],
+  "commands": {
+    "!加油":  { "state": "cheer",     "yolia_see": 10  },
+    "!哭":    { "state": "cry",       "yolia_see": -15 },
+    "!香菜":  { "state": "eat",       "yolia_see": 0   },
+    "!跳":    { "state": "jump",      "yolia_see": 0   },
+    "!右":    { "state": "run_right", "yolia_see": 0   },
+    "!左":    { "state": "run_left",  "yolia_see": 0   }
+  }
+}

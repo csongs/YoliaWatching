@@ -1,11 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('yuuApi', {
-  onUpdate:    (cb) => ipcRenderer.on('yuushi-update', (_e, data) => cb(data)),
+  onUpdate:    (cb) => ipcRenderer.on('yolia-update', (_e, data) => cb(data)),
   onBaron:     (cb) => ipcRenderer.on('baron-event', (_e) => cb()),
   punish:      ()   => ipcRenderer.send('punish'),
   setClickThrough: (on) => ipcRenderer.send('set-click-through', on),
   feed:            ()   => ipcRenderer.send('feed'),
-  setYuushi:       (v)  => ipcRenderer.send('set-yuushi', v),
+  setYoliaSee:     (v)  => ipcRenderer.send('set-yolia-see', v),
   quit:            ()   => ipcRenderer.send('quit'),
+  getConfig:       ()   => ipcRenderer.invoke('get-config'),
 });
