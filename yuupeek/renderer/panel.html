@@ -142,6 +142,34 @@
 <!-- ── 設定 ── -->
 <div id="settings" class="panel">
   <div class="card">
+    <h3>Twitch 設定</h3>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="tw-enabled"> 啟用 Twitch 聊天監聽
+      </label>
+    </div>
+    <div class="form-group">
+      <label>頻道名稱</label>
+      <input type="text" id="tw-channel" placeholder="altheayolia">
+    </div>
+    <button class="btn btn-primary" onclick="savePlatformConfig('twitch')">儲存 Twitch</button>
+  </div>
+
+  <div class="card">
+    <h3>YouTube 設定</h3>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="yt-enabled"> 啟用 YouTube 聊天監聽
+      </label>
+    </div>
+    <div class="form-group">
+      <label>頻道 Handle</label>
+      <input type="text" id="yt-channel" placeholder="@altheayolia">
+    </div>
+    <button class="btn btn-primary" onclick="savePlatformConfig('youtube')">儲存 YouTube</button>
+  </div>
+
+  <div class="card">
     <h3>環境變數 <span style="font-size:12px;color:#64748b;font-weight:400">（儲存於 .env，不進版本庫）</span></h3>
     <div class="form-group">
       <label>TWITCH_OAUTH</label>
@@ -179,7 +207,7 @@
     document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_IDS[i] === id));
     document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === id));
     if (id === 'status') refreshStatus();
-    if (id === 'settings') loadEnv();
+    if (id === 'settings') { loadEnv(); loadConfig(); }
   }
 
   // ── Status tab ─────────────────────────────────────────────────────────────
@@ -259,6 +287,40 @@
     })
       .then(r => r.json())
       .then(() => showToast('已儲存'))
+      .catch(() => showToast('儲存失敗', true));
+  }
+
+  function loadConfig() {
+    fetch('/panel/api/config')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('tw-enabled').checked = data.twitch?.enabled  ?? false;
+        document.getElementById('tw-channel').value   = data.twitch?.channel  ?? '';
+        document.getElementById('yt-enabled').checked = data.youtube?.enabled ?? false;
+        document.getElementById('yt-channel').value   = data.youtube?.channel ?? '';
+      });
+  }
+
+  function savePlatformConfig(platform) {
+    const body = {};
+    if (platform === 'twitch') {
+      body.twitch = {
+        enabled: document.getElementById('tw-enabled').checked,
+        channel: document.getElementById('tw-channel').value.trim(),
+      };
+    } else {
+      body.youtube = {
+        enabled: document.getElementById('yt-enabled').checked,
+        channel: document.getElementById('yt-channel').value.trim(),
+      };
+    }
+    fetch('/panel/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(r => r.json())
+      .then(() => showToast('已套用'))
       .catch(() => showToast('儲存失敗', true));
   }
 

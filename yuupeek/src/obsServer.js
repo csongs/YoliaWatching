@@ -86,6 +86,21 @@ function createObsServer(config, rootDir) {
       return;
     }
 
+    if (req.url === '/panel/api/config' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(panelHandlers?.getConfig?.() ?? {}));
+      return;
+    }
+
+    if (req.url === '/panel/api/config' && req.method === 'POST') {
+      readBody(req).then(body => {
+        panelHandlers?.saveConfig?.(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
     if (req.url === '/panel/api/open-config' && req.method === 'POST') {
       panelHandlers?.openConfigFile?.();
       res.writeHead(200, { 'Content-Type': 'application/json' });

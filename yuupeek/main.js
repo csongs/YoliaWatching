@@ -53,6 +53,35 @@ if (config.modes?.obs) {
         visible: !!(win && !win.isDestroyed() && win.isVisible()),
       },
     }),
+    getConfig: () => ({
+      twitch:  { enabled: config.twitch?.enabled  ?? false, channel: config.twitch?.channel  ?? '' },
+      youtube: { enabled: config.youtube?.enabled ?? false, channel: config.youtube?.channel ?? '' },
+    }),
+    saveConfig: (patch) => {
+      const cfgPath = path.join(appDir, 'config.json');
+      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      if (patch.twitch) {
+        raw.twitch = raw.twitch ?? {};
+        config.twitch = config.twitch ?? {};
+        if (patch.twitch.enabled  !== undefined) { raw.twitch.enabled  = patch.twitch.enabled;  config.twitch.enabled  = patch.twitch.enabled; }
+        if (patch.twitch.channel  !== undefined) { raw.twitch.channel  = patch.twitch.channel;  config.twitch.channel  = patch.twitch.channel; }
+      }
+      if (patch.youtube) {
+        raw.youtube = raw.youtube ?? {};
+        config.youtube = config.youtube ?? {};
+        if (patch.youtube.enabled !== undefined) { raw.youtube.enabled = patch.youtube.enabled; config.youtube.enabled = patch.youtube.enabled; }
+        if (patch.youtube.channel !== undefined) { raw.youtube.channel = patch.youtube.channel; config.youtube.channel = patch.youtube.channel; }
+      }
+      fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
+      // Hot-reload chat listener with updated config
+      chatListener?.stop();
+      if (config.twitch?.enabled || config.youtube?.enabled) {
+        chatListener = createChatListener(config, commands, sm, broadcastState);
+        chatListener.start();
+      } else {
+        chatListener = null;
+      }
+    },
     openConfigFile: () => shell.openPath(path.join(appDir, 'config.json')),
     togglePet: () => {
       if (!win || win.isDestroyed()) {
