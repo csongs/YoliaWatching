@@ -150,7 +150,7 @@ app.whenReady().then(() => {
       if (quitting) return;
       e.preventDefault();
       const { response } = await dialog.showMessageBox(panelWin, {
-        type: 'question',
+        type: 'none',
         buttons: ['確定離開', '取消'],
         defaultId: 1,
         message: '確定要關閉 YoliaWatching 嗎？',
