@@ -110,6 +110,17 @@ if (config.modes?.obs) {
         chatListener = null;
       }
     },
+    saveEnv: ({ TWITCH_OAUTH, YOUTUBE_API_KEY } = {}) => {
+      if (TWITCH_OAUTH    !== undefined) process.env.TWITCH_OAUTH    = TWITCH_OAUTH;
+      if (YOUTUBE_API_KEY !== undefined) process.env.YOUTUBE_API_KEY = YOUTUBE_API_KEY;
+      chatListener?.stop();
+      if (config.twitch?.enabled || config.youtube?.enabled) {
+        chatListener = createChatListener(config, commands, sm, broadcastState);
+        chatListener.start();
+      } else {
+        chatListener = null;
+      }
+    },
     getVersion: () => app.getVersion(),
     userDataDir,
     openUrl: (url) => shell.openExternal(url),

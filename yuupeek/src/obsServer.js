@@ -90,6 +90,7 @@ function createObsServer(config, rootDir) {
         if (TWITCH_OAUTH    !== undefined) existing.TWITCH_OAUTH    = TWITCH_OAUTH;
         if (YOUTUBE_API_KEY !== undefined) existing.YOUTUBE_API_KEY = YOUTUBE_API_KEY;
         fs.writeFileSync(envPath, formatEnvFile(existing), 'utf8');
+        panelHandlers?.saveEnv?.({ TWITCH_OAUTH, YOUTUBE_API_KEY });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       }).catch(() => { res.writeHead(500); res.end(); });
