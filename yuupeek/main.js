@@ -7,6 +7,17 @@ const appDir = app.isPackaged ? path.dirname(process.execPath) : __dirname;
 // In dev mode fall back to appDir so behaviour is unchanged.
 const userDataDir = app.isPackaged ? app.getPath('userData') : appDir;
 
+function deepMerge(defaults, overrides) {
+  const result = { ...defaults };
+  for (const key of Object.keys(overrides)) {
+    const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+    result[key] = (isObj(overrides[key]) && isObj(defaults[key]))
+      ? deepMerge(defaults[key], overrides[key])
+      : overrides[key];
+  }
+  return result;
+}
+
 if (app.isPackaged) {
   fs.mkdirSync(userDataDir, { recursive: true });
   const userCfg = path.join(userDataDir, 'config.json');
@@ -22,7 +33,12 @@ const { createStateMachine } = require('./src/stateMachine');
 const { createChatListener }  = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
 
-const config = JSON.parse(fs.readFileSync(path.join(userDataDir, 'config.json'), 'utf8'));
+const defaultConfig = JSON.parse(fs.readFileSync(path.join(appDir, 'config.json'), 'utf8'));
+const userConfig    = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(userDataDir, 'config.json'), 'utf8')); }
+  catch { return {}; }
+})();
+const config = deepMerge(defaultConfig, userConfig);
 const commands = config.commands ?? {};
 
 let win;
