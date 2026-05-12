@@ -137,6 +137,19 @@ function createObsServer(config, rootDir) {
       return;
     }
 
+    if (req.url === '/panel/api/paths' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ userDataDir: panelHandlers?.userDataDir ?? '' }));
+      return;
+    }
+
+    if (req.url === '/panel/api/open-userdata' && req.method === 'POST') {
+      panelHandlers?.openUserDataDir?.();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
     if (req.url === '/panel/api/open-url' && req.method === 'POST') {
       readBody(req).then(body => {
         if (body.url) panelHandlers?.openUrl?.(body.url);

@@ -111,7 +111,9 @@ if (config.modes?.obs) {
       }
     },
     getVersion: () => app.getVersion(),
+    userDataDir,
     openUrl: (url) => shell.openExternal(url),
+    openUserDataDir: () => shell.openPath(userDataDir),
     openConfigFile: () => shell.openPath(path.join(userDataDir, 'config.json')),
     togglePet: () => {
       if (!win || win.isDestroyed()) {
