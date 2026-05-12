@@ -146,10 +146,13 @@ function createChatListener(config, commands, sm, broadcast) {
         ...(pageToken ? { pageToken } : {}),
       });
 
-      for (const item of chatRes.data.items ?? []) {
-        const text     = item.snippet?.displayMessage ?? '';
-        const username = item.authorDetails?.displayName ?? '';
-        applyCommand(sm, commands, broadcast, text, 'YouTube', username, greetRe, greetResponse);
+      // Skip backlog on first connect (no pageToken); only process new messages
+      if (pageToken) {
+        for (const item of chatRes.data.items ?? []) {
+          const text     = item.snippet?.displayMessage ?? '';
+          const username = item.authorDetails?.displayName ?? '';
+          applyCommand(sm, commands, broadcast, text, 'YouTube', username, greetRe, greetResponse);
+        }
       }
 
       const delayMs = chatRes.data.pollingIntervalMillis ?? 5000;
