@@ -232,11 +232,19 @@
   // ── Tab switching ──────────────────────────────────────────────────────────
   const TAB_IDS = ['guide', 'status', 'settings'];
 
+  let hasAutoCheckedUpdate = false;
+
   function showTab(id) {
     document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_IDS[i] === id));
     document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === id));
     if (id === 'status') refreshStatus();
-    if (id === 'settings') { loadEnv(); loadConfig(); loadVersion(); loadPaths(); }
+    if (id === 'settings') {
+      loadEnv();
+      loadConfig();
+      loadVersion();
+      loadPaths();
+      if (!hasAutoCheckedUpdate) { hasAutoCheckedUpdate = true; checkUpdate(); }
+    }
   }
 
   // ── Status tab ─────────────────────────────────────────────────────────────
