@@ -163,18 +163,23 @@ function createChatListener(config, commands, sm, broadcast) {
     }
   }
 
+  let stopped = false;
+
   return {
     start() {
+      stopped = false;
       startTwitch();
       let ytPageToken = null;
       const scheduleYt = async () => {
+        if (stopped) return;
         const { pageToken, delayMs } = await fetchYouTubeMessages(ytPageToken);
         ytPageToken = pageToken;
-        youtubeInterval = setTimeout(scheduleYt, delayMs ?? SEARCH_INTERVAL_MS);
+        if (!stopped) youtubeInterval = setTimeout(scheduleYt, delayMs ?? SEARCH_INTERVAL_MS);
       };
       youtubeInterval = setTimeout(scheduleYt, 0);
     },
     stop() {
+      stopped = true;
       twitchClient?.disconnect();
       if (youtubeInterval) clearTimeout(youtubeInterval);
     },
