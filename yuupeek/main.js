@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, shell, dialog } = require('electron');
+
+app.commandLine.appendSwitch('disable-gpu-disk-cache');
 const path = require('path');
 const fs   = require('fs');
 
@@ -185,7 +187,7 @@ app.whenReady().then(() => {
   function openPanel() {
     if (panelWin && !panelWin.isDestroyed()) { panelWin.focus(); return; }
     const port = config.obs?.port ?? 3000;
-    panelWin = new BrowserWindow({ width: 860, height: 660, title: 'YoliaWatching 控制面板' });
+    panelWin = new BrowserWindow({ width: 860, height: 660, title: 'YoliaWatching 控制面板', webPreferences: { partition: 'in-memory-panel' } });
     panelWin.loadURL(`http://localhost:${port}/panel`);
     panelWin.setMenu(null);
     let quitting = false;
@@ -255,3 +257,4 @@ ipcMain.handle('get-config', () => ({
 }));
 
 app.on('window-all-closed', () => {});
+

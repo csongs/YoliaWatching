@@ -57,7 +57,7 @@ function createObsServer(config, rootDir) {
     if (req.url === '/panel' || req.url === '/panel/') {
       fs.readFile(path.join(root, 'renderer', 'panel.html'), (err, data) => {
         if (err) { res.writeHead(404); res.end('Not found'); return; }
-        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
         res.end(data);
       });
       return;
