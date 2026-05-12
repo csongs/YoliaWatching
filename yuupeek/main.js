@@ -3,14 +3,26 @@ const path = require('path');
 const fs   = require('fs');
 
 const appDir = app.isPackaged ? path.dirname(process.execPath) : __dirname;
-require('dotenv').config({ path: path.join(appDir, '.env') });
+// User data (config.json, .env) lives in %APPDATA%\YoliaWatching so NSIS updates never overwrite it.
+// In dev mode fall back to appDir so behaviour is unchanged.
+const userDataDir = app.isPackaged ? app.getPath('userData') : appDir;
+
+if (app.isPackaged) {
+  fs.mkdirSync(userDataDir, { recursive: true });
+  const userCfg = path.join(userDataDir, 'config.json');
+  if (!fs.existsSync(userCfg)) {
+    fs.copyFileSync(path.join(appDir, 'config.json'), userCfg);
+  }
+}
+
+require('dotenv').config({ path: path.join(userDataDir, '.env') });
 
 const { getAllWindowTitles, matchesStream, matchesBaron } = require('./src/detector');
 const { createStateMachine } = require('./src/stateMachine');
 const { createChatListener }  = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
 
-const config = JSON.parse(fs.readFileSync(path.join(appDir, 'config.json'), 'utf8'));
+const config = JSON.parse(fs.readFileSync(path.join(userDataDir, 'config.json'), 'utf8'));
 const commands = config.commands ?? {};
 
 let win;
@@ -32,7 +44,7 @@ let obsServer = null;
 if (config.modes?.obs) {
   obsServer = createObsServer(config, __dirname);
   obsServer.setPanelHandlers({
-    appDir,
+    appDir: userDataDir,
     getStatus: () => ({
       twitch: {
         enabled:   config.twitch?.enabled ?? false,
@@ -58,7 +70,7 @@ if (config.modes?.obs) {
       youtube: { enabled: config.youtube?.enabled ?? false, channel: config.youtube?.channel ?? '' },
     }),
     saveConfig: (patch) => {
-      const cfgPath = path.join(appDir, 'config.json');
+      const cfgPath = path.join(userDataDir, 'config.json');
       const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
       if (patch.twitch) {
         raw.twitch = raw.twitch ?? {};
@@ -84,7 +96,7 @@ if (config.modes?.obs) {
     },
     getVersion: () => app.getVersion(),
     openUrl: (url) => shell.openExternal(url),
-    openConfigFile: () => shell.openPath(path.join(appDir, 'config.json')),
+    openConfigFile: () => shell.openPath(path.join(userDataDir, 'config.json')),
     togglePet: () => {
       if (!win || win.isDestroyed()) {
         createPetWindow();
