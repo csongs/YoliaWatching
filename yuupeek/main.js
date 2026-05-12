@@ -82,6 +82,8 @@ if (config.modes?.obs) {
         chatListener = null;
       }
     },
+    getVersion: () => app.getVersion(),
+    openUrl: (url) => shell.openExternal(url),
     openConfigFile: () => shell.openPath(path.join(appDir, 'config.json')),
     togglePet: () => {
       if (!win || win.isDestroyed()) {

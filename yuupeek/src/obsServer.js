@@ -32,6 +32,16 @@ function formatEnvFile(data) {
   return Object.entries(data).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
 }
 
+function isNewer(tag, current) {
+  const a = tag.replace(/^v/, '').split('.').map(Number);
+  const b = current.replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) > (b[i] || 0)) return true;
+    if ((a[i] || 0) < (b[i] || 0)) return false;
+  }
+  return false;
+}
+
 function createObsServer(config, rootDir) {
   const obsConfig = config.obs ?? config;
   const root = rootDir ?? path.join(__dirname, '..');
@@ -95,6 +105,41 @@ function createObsServer(config, rootDir) {
     if (req.url === '/panel/api/config' && req.method === 'POST') {
       readBody(req).then(body => {
         panelHandlers?.saveConfig?.(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
+    if (req.url === '/panel/api/version' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ current: panelHandlers?.getVersion?.() ?? '0.0.0' }));
+      return;
+    }
+
+    if (req.url === '/panel/api/check-update' && req.method === 'GET') {
+      const current = panelHandlers?.getVersion?.() ?? '0.0.0';
+      fetch('https://api.github.com/repos/csongs/YoliaWatching/releases/latest', {
+        headers: { 'User-Agent': 'YoliaWatching' },
+      })
+        .then(r => r.json())
+        .then(data => {
+          const tag = data.tag_name ?? '';
+          const latest = tag.replace(/^v/, '');
+          const hasUpdate = !!latest && isNewer(tag, current);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ current, latest, hasUpdate, url: data.html_url ?? '' }));
+        })
+        .catch(e => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ current, error: e.message }));
+        });
+      return;
+    }
+
+    if (req.url === '/panel/api/open-url' && req.method === 'POST') {
+      readBody(req).then(body => {
+        if (body.url) panelHandlers?.openUrl?.(body.url);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       }).catch(() => { res.writeHead(500); res.end(); });

@@ -191,6 +191,16 @@
   </div>
 
   <div class="card">
+    <h3>版本資訊</h3>
+    <div class="row">目前版本：<strong id="current-version">—</strong></div>
+    <div id="update-result" style="margin-top:10px;min-height:20px"></div>
+    <div style="margin-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-secondary" id="check-update-btn" onclick="checkUpdate()">檢查更新</button>
+      <a style="color:#60a5fa;font-size:13px;cursor:pointer" onclick="openExternal('https://github.com/csongs/YoliaWatching/releases')">GitHub 下載頁 ↗</a>
+    </div>
+  </div>
+
+  <div class="card">
     <h3>設定檔</h3>
     <p style="color:#94a3b8;margin-bottom:14px">以文字編輯器開啟 config.json 修改頻道、模式、指令等設定</p>
     <button class="btn btn-secondary" onclick="openConfig()">開啟 config.json</button>
@@ -207,7 +217,7 @@
     document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_IDS[i] === id));
     document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === id));
     if (id === 'status') refreshStatus();
-    if (id === 'settings') { loadEnv(); loadConfig(); }
+    if (id === 'settings') { loadEnv(); loadConfig(); loadVersion(); }
   }
 
   // ── Status tab ─────────────────────────────────────────────────────────────
@@ -322,6 +332,40 @@
       .then(r => r.json())
       .then(() => showToast('已套用'))
       .catch(() => showToast('儲存失敗', true));
+  }
+
+  function loadVersion() {
+    fetch('/panel/api/version')
+      .then(r => r.json())
+      .then(d => { document.getElementById('current-version').textContent = 'v' + d.current; });
+  }
+
+  function checkUpdate() {
+    const el  = document.getElementById('update-result');
+    const btn = document.getElementById('check-update-btn');
+    el.innerHTML = '<span style="color:#64748b">檢查中…</span>';
+    btn.disabled = true;
+    fetch('/panel/api/check-update')
+      .then(r => r.json())
+      .then(d => {
+        btn.disabled = false;
+        if (d.error) { el.innerHTML = '<span style="color:#f87171">檢查失敗，請確認網路連線</span>'; return; }
+        if (d.hasUpdate) {
+          el.innerHTML = `<span style="color:#fb923c">有新版本 <strong>v${d.latest}</strong>！</span>
+            <button class="btn btn-primary btn-small" style="margin-left:8px" onclick="openExternal('${d.url}')">前往下載 ↗</button>`;
+        } else {
+          el.innerHTML = `<span style="color:#4ade80">已是最新版本 (v${d.latest})</span>`;
+        }
+      })
+      .catch(() => { btn.disabled = false; el.innerHTML = '<span style="color:#f87171">網路錯誤</span>'; });
+  }
+
+  function openExternal(url) {
+    fetch('/panel/api/open-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
   }
 
   function openConfig() {
