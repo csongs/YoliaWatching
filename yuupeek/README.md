@@ -100,6 +100,8 @@ live_12345678_xxxxxxxxxxxx?bandwidthtest=true
 4. 填入 `YOUTUBE_API_KEY`
 
 > YouTube API 每日有 10,000 quota 限制。本程式在直播中約用 500–2,000 quota/小時，離線時每 30 秒查詢一次直播狀態。
+>
+> 若遇到配額錯誤，請前往 Google Cloud Console，選擇專案後前往「IAM 與管理 → 配額與系統限制」，或從「API 和服務 → 儀表板」找到 YouTube Data API v3，檢查每日使用量與配額狀態。
 
 ---
 

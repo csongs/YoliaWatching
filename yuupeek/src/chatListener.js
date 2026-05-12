@@ -57,6 +57,20 @@ function createChatListener(config, commands, sm, broadcast) {
 
   let twitchClient = null;
   let youtubeInterval = null;
+  let youtubePaused = false;
+  let youtubeErrorMessage = null;
+
+  function getYouTubeErrorReason(error) {
+    return error?.errors?.[0]?.reason
+      || error?.response?.data?.error?.errors?.[0]?.reason
+      || '';
+  }
+
+  function isYouTubeQuotaError(error) {
+    const reason = getYouTubeErrorReason(error);
+    const message = (error?.message ?? '').toLowerCase();
+    return reason === 'quotaExceeded' || message.includes('quota');
+  }
 
   function startTwitch() {
     if (!config.twitch?.enabled || !config.twitch?.channel) return;
@@ -106,6 +120,7 @@ function createChatListener(config, commands, sm, broadcast) {
 
   async function fetchYouTubeMessages(pageToken) {
     if (!config.youtube?.enabled || !config.youtube?.channel) return { pageToken, delayMs: SEARCH_INTERVAL_MS };
+    if (youtubePaused) return { pageToken, stop: true };
     if (!process.env.YOUTUBE_API_KEY) {
       console.error('[YouTube] YOUTUBE_API_KEY not set');
       return { pageToken, delayMs: SEARCH_INTERVAL_MS };
@@ -158,6 +173,12 @@ function createChatListener(config, commands, sm, broadcast) {
       const delayMs = chatRes.data.pollingIntervalMillis ?? 5000;
       return { pageToken: chatRes.data.nextPageToken ?? null, delayMs };
     } catch (e) {
+      if (isYouTubeQuotaError(e)) {
+        youtubePaused = true;
+        youtubeErrorMessage = '已超過 YouTube API 配額，YouTube 聊天監聽已停止。';
+        console.error('[YouTube] quota exceeded, stop polling:', e.message);
+        return { pageToken, stop: true };
+      }
       console.error('YouTube chat error:', e.message);
       return { pageToken, delayMs: 5000 };
     }
@@ -186,7 +207,7 @@ function createChatListener(config, commands, sm, broadcast) {
     getStatus() {
       return {
         twitch: { connected: twitchClient?.readyState?.() === 'OPEN' },
-        youtube: { live: liveVideoId !== null },
+        youtube: { live: liveVideoId !== null, error: youtubeErrorMessage },
       };
     },
   };

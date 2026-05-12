@@ -72,6 +72,7 @@ if (config.modes?.obs) {
       youtube: {
         enabled: config.youtube?.enabled ?? false,
         live:    chatListener?.getStatus?.().youtube.live ?? false,
+        error:   chatListener?.getStatus?.().youtube.error ?? null,
         channel: config.youtube?.channel ?? '',
       },
       obs: {
