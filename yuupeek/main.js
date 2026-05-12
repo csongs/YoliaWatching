@@ -19,7 +19,7 @@ const sm = createStateMachine(config);
 
 function broadcastState(payload) {
   const data = payload ?? { value: sm.yolia_see, state: sm.state };
-  if (win) win.webContents.send('yolia-update', data);
+  if (win && !win.isDestroyed()) win.webContents.send('yolia-update', data);
   if (obsServer) {
     if (!data.animOnly) obsServer.setWelcomeData(data);
     obsServer.broadcast(data);
