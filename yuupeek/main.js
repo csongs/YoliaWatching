@@ -30,7 +30,6 @@ if (app.isPackaged) {
 
 require('dotenv').config({ path: path.join(userDataDir, '.env') });
 
-const { getAllWindowTitles, matchesStream, matchesBaron } = require('./src/detector');
 const { createStateMachine } = require('./src/stateMachine');
 const { createChatListener }  = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
@@ -53,7 +52,6 @@ const userConfig    = (() => {
   catch { return {}; }
 })();
 const config = deepMerge(defaultConfig, userConfig);
-const commands = config.commands ?? {};
 
 let win;
 let tray;
@@ -101,11 +99,8 @@ if (config.modes?.obs) {
       youtube: { enabled: config.youtube?.enabled ?? false, channel: config.youtube?.channel ?? '' },
     }),
     getPetConfig: () => ({
-      yoliaStates:        config.yoliaStates        ?? [],
-      greetings:          config.greetings          ?? [],
-      greetingResponse:   config.greetingResponse   ?? '',
+      interactions:       config.interactions       ?? [],
       greetingAnimations: config.greetingAnimations ?? [],
-      commands:           config.commands           ?? {},
       scale:              config.obs?.scale         ?? 2,
     }),
     savePetConfig: (patch) => {
@@ -113,34 +108,19 @@ if (config.modes?.obs) {
       const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
       let chatNeedsRestart = false;
 
-      if (patch.yoliaStates !== undefined) {
-        raw.yoliaStates = patch.yoliaStates;
-        config.yoliaStates = patch.yoliaStates;
-        sm.updateStates(patch.yoliaStates);
+      if (patch.interactions !== undefined) {
+        raw.interactions = patch.interactions;
+        config.interactions = patch.interactions;
+        const thresholds = patch.interactions.filter(i => i.trigger === 'threshold');
+        sm.updateStates(thresholds);
         sm.state = sm.computeState();
         broadcastState();
-      }
-      if (patch.greetings !== undefined) {
-        raw.greetings = patch.greetings;
-        config.greetings = patch.greetings;
-        chatNeedsRestart = true;
-      }
-      if (patch.greetingResponse !== undefined) {
-        raw.greetingResponse = patch.greetingResponse;
-        config.greetingResponse = patch.greetingResponse;
         chatNeedsRestart = true;
       }
       if (patch.greetingAnimations !== undefined) {
         raw.greetingAnimations = patch.greetingAnimations;
         config.greetingAnimations = patch.greetingAnimations;
         obsServer?.broadcast({ setWaveVariants: patch.greetingAnimations });
-      }
-      if (patch.commands !== undefined) {
-        raw.commands = patch.commands;
-        config.commands = patch.commands;
-        Object.keys(commands).forEach(k => delete commands[k]);
-        Object.assign(commands, patch.commands);
-        chatNeedsRestart = true;
       }
       if (patch.scale !== undefined) {
         raw.obs = raw.obs ?? {};
@@ -155,7 +135,7 @@ if (config.modes?.obs) {
       if (chatNeedsRestart) {
         chatListener?.stop();
         if (config.twitch?.enabled || config.youtube?.enabled) {
-          chatListener = createChatListener(config, commands, sm, broadcastState);
+          chatListener = createChatListener(config, sm, broadcastState);
           chatListener.start();
         } else {
           chatListener = null;
@@ -183,7 +163,7 @@ if (config.modes?.obs) {
       // Hot-reload chat listener with updated config
       chatListener?.stop();
       if (config.twitch?.enabled || config.youtube?.enabled) {
-        chatListener = createChatListener(config, commands, sm, broadcastState);
+        chatListener = createChatListener(config, sm, broadcastState);
         chatListener.start();
       } else {
         chatListener = null;
@@ -194,7 +174,7 @@ if (config.modes?.obs) {
       if (YOUTUBE_API_KEY !== undefined) process.env.YOUTUBE_API_KEY = YOUTUBE_API_KEY;
       chatListener?.stop();
       if (config.twitch?.enabled || config.youtube?.enabled) {
-        chatListener = createChatListener(config, commands, sm, broadcastState);
+        chatListener = createChatListener(config, sm, broadcastState);
         chatListener.start();
       } else {
         chatListener = null;
@@ -259,9 +239,10 @@ if (config.modes?.obs) {
 // ── Chat listener ─────────────────────────────────────────────────────────────
 let chatListener = null;
 if (config.twitch?.enabled || config.youtube?.enabled) {
-  chatListener = createChatListener(config, commands, sm, broadcastState);
+  chatListener = createChatListener(config, sm, broadcastState);
   chatListener.start();
 }
+
 
 // ── Electron overlay ──────────────────────────────────────────────────────────
 function createPetWindow() {
@@ -314,13 +295,6 @@ app.whenReady().then(() => {
     { label: '結束', click: () => app.quit() },
   ]));
 
-  // Baron detection loop every 2s
-  setInterval(async () => {
-    const titles = await getAllWindowTitles();
-    if (matchesStream(titles) && matchesBaron(titles)) {
-      if (win) win.webContents.send('baron-event');
-    }
-  }, 2000);
 });
 
 ipcMain.on('punish', () => {

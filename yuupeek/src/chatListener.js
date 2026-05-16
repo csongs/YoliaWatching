@@ -1,63 +1,79 @@
 const tmi = require('tmi.js');
 const { google } = require('googleapis');
 
-
-const DEFAULT_GREETINGS = ['安安', '午安', '早安', '晚安'];
-
-function buildGreetRe(greetings) {
-  if (!greetings?.length) return null;
-  const escaped = greetings.map(g => g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  return new RegExp(escaped.join('|'));
+function buildHandlers(interactions) {
+  const kwInteractions = interactions.filter(i => i.trigger === 'keyword');
+  const commandMap = {};
+  for (const i of interactions.filter(i => i.trigger === 'command')) {
+    if (i.match) commandMap[i.match] = i;
+  }
+  let keywordRe = null;
+  if (kwInteractions.length) {
+    const allWords = kwInteractions.flatMap(i => Array.isArray(i.match) ? i.match : [i.match]);
+    const escaped  = allWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    keywordRe = new RegExp(escaped.join('|'));
+  }
+  return { kwInteractions, commandMap, keywordRe };
 }
 
-function applyCommand(sm, commands, broadcast, text, source = 'Chat', username = '', greetRe = null, greetResponse = '{user} {word}') {
-  const trimmed = text.trim();
-  const word = trimmed.split(' ')[0];
-  const cmd = commands[word];
+function createChatListener(config, sm, broadcast) {
+  const { kwInteractions, commandMap, keywordRe } = buildHandlers(config.interactions ?? []);
 
-  if (!cmd) {
-    // Non-command chat message: +1 yolia_see
+  function processMessage(text, username, source) {
+    const trimmed = text.trim();
+    const word    = trimmed.split(' ')[0];
+    const cmd     = commandMap[word];
+
+    if (cmd) {
+      // Cost gate
+      if (cmd.cost !== undefined && sm.yolia_see < cmd.cost) {
+        const diff   = Math.ceil(cmd.cost - sm.yolia_see);
+        const speech = username
+          ? `${username} 幽視值不足，還差 ${diff}！`
+          : `幽視值不足，還差 ${diff}！`;
+        broadcast({ value: sm.yolia_see, state: sm.state, speech });
+        return;
+      }
+      if (cmd.cost      !== undefined) sm.yolia_see = Math.max(0, sm.yolia_see - cmd.cost);
+      if (cmd.yolia_see !== undefined) sm.yolia_see = Math.max(0, Math.min(100, sm.yolia_see + cmd.yolia_see));
+      sm.state = sm.computeState();
+
+      const speech = cmd.response
+        ? cmd.response.replace('{user}', username)
+        : username ? `${username}: ${word}` : word;
+
+      console.log(`[${source}] ${word} → yolia_see:${sm.yolia_see} anim:${cmd.animation ?? sm.state}`);
+      broadcast({ value: sm.yolia_see, state: cmd.animation ?? sm.state, animOnly: !!cmd.animation, speech });
+      if (cmd.animation) {
+        setTimeout(() => { sm.state = sm.computeState(); broadcast({ value: sm.yolia_see, state: sm.state }); }, 3000);
+      }
+      return;
+    }
+
+    // Non-command: +1 yolia_see
     sm.yolia_see = Math.min(100, sm.yolia_see + 1);
-    sm.state = sm.computeState();
-    const matched = greetRe ? (trimmed.match(greetRe)?.[0] ?? null) : null;
+    sm.state     = sm.computeState();
+
+    const matched = keywordRe ? trimmed.match(keywordRe)?.[0] : null;
     if (matched) {
-      const speech = username
-        ? greetResponse.replace('{user}', username).replace('{word}', matched)
-        : matched;
-      broadcast({ value: sm.yolia_see, state: 'wave', animOnly: true, speech });
+      const kw = kwInteractions.find(i => (Array.isArray(i.match) ? i.match : [i.match]).includes(matched));
+      if (kw?.yolia_see) {
+        sm.yolia_see = Math.max(0, Math.min(100, sm.yolia_see + kw.yolia_see));
+        sm.state = sm.computeState();
+      }
+      const speech = (kw?.response ?? '')
+        .replace('{user}', username)
+        .replace('{word}', matched)
+        || (username ? `${username} ${matched}` : matched);
+      broadcast({ value: sm.yolia_see, state: kw?.animation ?? 'wave', animOnly: true, speech });
     } else {
       broadcast({ value: sm.yolia_see, state: sm.state });
     }
-    return;
   }
 
-  if (cmd.yolia_see !== undefined) {
-    sm.yolia_see = Math.max(0, Math.min(100, sm.yolia_see + cmd.yolia_see));
-  }
-
-  const speech = username ? `${username}: ${word}` : word;
-
-  if (cmd.state) {
-    sm.state = cmd.state;
-    console.log(`[${source}] ${word} -> yolia_see: ${sm.yolia_see} state: ${sm.state}`);
-    broadcast({ value: sm.yolia_see, state: sm.state, animOnly: true, speech });
-    sm.state = sm.computeState();
-    return;
-  } else {
-    sm.state = sm.computeState();
-  }
-
-  console.log(`[${source}] ${word} -> yolia_see: ${sm.yolia_see} state: ${sm.state}`);
-  broadcast({ value: sm.yolia_see, state: sm.state, speech });
-}
-
-function createChatListener(config, commands, sm, broadcast) {
-  const greetRe       = buildGreetRe(config.greetings ?? DEFAULT_GREETINGS);
-  const greetResponse = config.greetingResponse ?? '{user} {word}';
-
-  let twitchClient = null;
-  let youtubeInterval = null;
-  let youtubePaused = false;
+  let twitchClient     = null;
+  let youtubeInterval  = null;
+  let youtubePaused    = false;
   let youtubeErrorMessage = null;
 
   function getYouTubeErrorReason(error) {
@@ -67,7 +83,7 @@ function createChatListener(config, commands, sm, broadcast) {
   }
 
   function isYouTubeQuotaError(error) {
-    const reason = getYouTubeErrorReason(error);
+    const reason  = getYouTubeErrorReason(error);
     const message = (error?.message ?? '').toLowerCase();
     return reason === 'quotaExceeded' || message.includes('quota');
   }
@@ -75,15 +91,12 @@ function createChatListener(config, commands, sm, broadcast) {
   function startTwitch() {
     if (!config.twitch?.enabled || !config.twitch?.channel) return;
     twitchClient = new tmi.Client({
-      identity: {
-        username: config.twitch.channel,
-        password: process.env.TWITCH_OAUTH,
-      },
+      identity: { username: config.twitch.channel, password: process.env.TWITCH_OAUTH },
       channels: [config.twitch.channel],
     });
     twitchClient.on('message', (_channel, tags, message) => {
       const username = tags['display-name'] || tags.username || '';
-      applyCommand(sm, commands, broadcast, message, 'Twitch', username, greetRe, greetResponse);
+      processMessage(message, username, 'Twitch');
     });
     twitchClient.connect()
       .then(() => console.log(`[Twitch] connected to #${config.twitch.channel}`))
@@ -133,7 +146,7 @@ function createChatListener(config, commands, sm, broadcast) {
         const now = Date.now();
         if (now - lastSearchAt < SEARCH_INTERVAL_MS) return { pageToken: null, delayMs: SEARCH_INTERVAL_MS - (now - lastSearchAt) };
         lastSearchAt = now;
-        liveVideoId = await resolveLiveVideoId(youtube);
+        liveVideoId  = await resolveLiveVideoId(youtube);
         if (!liveVideoId) {
           if (!notLiveLogged) { console.log('[YouTube] no live stream found, will retry in 30s…'); notLiveLogged = true; }
           return { pageToken: null, delayMs: SEARCH_INTERVAL_MS };
@@ -141,16 +154,11 @@ function createChatListener(config, commands, sm, broadcast) {
         notLiveLogged = false;
       }
 
-      const videoRes = await youtube.videos.list({
-        part: ['liveStreamingDetails'],
-        id: [liveVideoId],
-      });
-      const chatId = videoRes.data.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
+      const videoRes = await youtube.videos.list({ part: ['liveStreamingDetails'], id: [liveVideoId] });
+      const chatId   = videoRes.data.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
       if (!chatId) {
         console.log('[YouTube] live stream ended, watching for next stream…');
-        liveVideoId = null;
-        notLiveLogged = false;
-        lastSearchAt = 0;
+        liveVideoId = null; notLiveLogged = false; lastSearchAt = 0;
         return { pageToken: null, delayMs: SEARCH_INTERVAL_MS };
       }
       if (!pageToken) console.log(`[YouTube] connected to live chat ${chatId}`);
@@ -161,20 +169,18 @@ function createChatListener(config, commands, sm, broadcast) {
         ...(pageToken ? { pageToken } : {}),
       });
 
-      // Skip backlog on first connect (no pageToken); only process new messages
       if (pageToken) {
         for (const item of chatRes.data.items ?? []) {
           const text     = item.snippet?.displayMessage ?? '';
           const username = item.authorDetails?.displayName ?? '';
-          applyCommand(sm, commands, broadcast, text, 'YouTube', username, greetRe, greetResponse);
+          processMessage(text, username, 'YouTube');
         }
       }
 
-      const delayMs = chatRes.data.pollingIntervalMillis ?? 5000;
-      return { pageToken: chatRes.data.nextPageToken ?? null, delayMs };
+      return { pageToken: chatRes.data.nextPageToken ?? null, delayMs: chatRes.data.pollingIntervalMillis ?? 5000 };
     } catch (e) {
       if (isYouTubeQuotaError(e)) {
-        youtubePaused = true;
+        youtubePaused       = true;
         youtubeErrorMessage = '已超過 YouTube API 配額，YouTube 聊天監聽已停止。';
         console.error('[YouTube] quota exceeded, stop polling:', e.message);
         return { pageToken, stop: true };
@@ -206,11 +212,11 @@ function createChatListener(config, commands, sm, broadcast) {
     },
     getStatus() {
       return {
-        twitch: { connected: twitchClient?.readyState?.() === 'OPEN' },
+        twitch:  { connected: twitchClient?.readyState?.() === 'OPEN' },
         youtube: { live: liveVideoId !== null, error: youtubeErrorMessage },
       };
     },
   };
 }
 
-module.exports = { applyCommand, createChatListener, buildGreetRe };
+module.exports = { createChatListener };

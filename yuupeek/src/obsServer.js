@@ -236,8 +236,6 @@ function createObsServer(config, rootDir) {
       const animData = panelHandlers?.getAnimations?.() ?? {};
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        commands:           config.commands           ?? {},
-        yoliaStates:        config.yoliaStates        ?? [],
         greetingAnimations: config.greetingAnimations ?? [],
         animations:         animData.animations       ?? animData,
       }));

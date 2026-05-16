@@ -189,37 +189,11 @@
   </div>
 
   <div class="card">
-    <h3>幽視狀態對應</h3>
-    <p style="color:#64748b;font-size:12px;margin-bottom:12px">幽視值 ≥ 門檻時套用對應狀態。若只設一筆且門檻為 0，則無論幽視值如何都維持同一狀態。</p>
-    <div id="states-list"></div>
-    <button class="btn btn-secondary btn-small" style="margin-top:10px" onclick="addStateRow();debouncedPetSave()">+ 新增狀態</button>
+    <h3>互動設定</h3>
+    <p style="color:#64748b;font-size:12px;margin-bottom:14px">設定所有觸發條件與對應動作。<code style="font-size:11px">門檻</code> 讓觀眾需要累積幽視值才能兌換指令，不足時角色會說明。</p>
+    <div id="interactions-list"></div>
+    <button class="btn btn-secondary btn-small" style="margin-top:12px" onclick="addInteractionRow();debouncedPetSave()">+ 新增互動</button>
   </div>
-
-  <div class="card">
-    <h3>招呼關鍵詞</h3>
-    <label>輸入後按角色會揮手，多個關鍵詞以逗號分隔</label>
-    <input type="text" id="pet-greetings" placeholder="安安, 午安, 早安, 晚安" style="width:100%;margin-top:6px" oninput="debouncedPetSave()">
-  </div>
-
-  <div class="card">
-    <h3>招呼回應訊息</h3>
-    <label><code style="font-size:12px">{user}</code> 會被替換成聊天者名稱</label>
-    <input type="text" id="pet-greeting-response" placeholder="{user} 安安~" style="width:100%;margin-top:6px" oninput="debouncedPetSave()">
-  </div>
-
-  <div class="card">
-    <h3>聊天室指令</h3>
-    <p style="color:#64748b;font-size:12px;margin-bottom:10px">聊天者輸入指令時觸發對應狀態，幽視增減可為負數。</p>
-    <div style="display:grid;grid-template-columns:110px 1fr 80px 60px;gap:6px;margin-bottom:4px;padding:0 2px">
-      <span style="color:#64748b;font-size:11px">指令</span>
-      <span style="color:#64748b;font-size:11px">狀態</span>
-      <span style="color:#64748b;font-size:11px">幽視增減</span>
-      <span></span>
-    </div>
-    <div id="commands-list"></div>
-    <button class="btn btn-secondary btn-small" style="margin-top:10px" onclick="addCommandRow();debouncedPetSave()">+ 新增指令</button>
-  </div>
-
 
 </div>
 
@@ -809,8 +783,9 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function stateSelect(selected) {
-    return `<select>${STATE_OPTIONS.map(s => `<option value="${s}"${s === selected ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+  function stateSelect(selected, opts) {
+    const list = opts ?? STATE_OPTIONS;
+    return `<select>${list.map(s => `<option value="${s}"${s === selected ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
   }
 
   function loadPetConfig() {
@@ -818,34 +793,118 @@
       .then(r => r.json())
       .then(data => {
         document.getElementById('pet-scale').value = String(data.scale ?? 2);
-
-        const statesList = document.getElementById('states-list');
-        statesList.innerHTML = '';
-        (data.yoliaStates ?? []).forEach(s => addStateRow(s.min, s.state));
-
-        document.getElementById('pet-greetings').value = (data.greetings ?? []).join(', ');
-        document.getElementById('pet-greeting-response').value = data.greetingResponse ?? '';
-
-        const cmdList = document.getElementById('commands-list');
-        cmdList.innerHTML = '';
-        Object.entries(data.commands ?? {}).forEach(([cmd, cfg]) => addCommandRow(cmd, cfg.state, cfg.yolia_see));
+        const list = document.getElementById('interactions-list');
+        list.innerHTML = '';
+        (data.interactions ?? []).forEach(i => addInteractionRow(i));
       })
       .catch(() => showToast('載入設定失敗', true));
   }
 
-  function addStateRow(min = 0, state = 'idle') {
+  function addInteractionRow(interaction = {}) {
+    const trigger   = interaction.trigger ?? 'threshold';
+    const ANIM_OPTS = [...STATE_OPTIONS, 'wave'];
     const row = document.createElement('div');
-    row.className = 'dyn-row state-row';
+    row.className = 'interaction-row';
+    row.style.cssText = 'background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:12px;margin-bottom:10px';
+
+    function buildFields(t, src) {
+      if (t === 'threshold') {
+        return `
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+            幽視值 ≥ <input type="number" class="int-min" min="0" max="100" value="${esc(src.min ?? 0)}" style="width:60px">
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+            對應狀態 ${stateSelect(src.state ?? 'idle')}
+          </label>`;
+      }
+      if (t === 'keyword') {
+        const matchRaw = Array.isArray(src.match) ? src.match.join(',') : (src.match ?? '');
+        return `
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1;min-width:150px">
+            關鍵詞（逗號） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="安安,早安" style="flex:1">
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+            動畫 ${stateSelect(src.animation ?? 'wave', ANIM_OPTS)}
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+            幽視值± <input type="number" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1;min-width:150px">
+            回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user} 安安~" style="flex:1">
+          </label>`;
+      }
+      // command
+      const costVal = src.cost != null ? src.cost : '';
+      return `
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+          指令 <input type="text" class="int-match" value="${esc(src.match ?? '')}" placeholder="!加油" style="width:80px">
+        </label>
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+          動畫 ${stateSelect(src.animation ?? 'idle', ANIM_OPTS)}
+        </label>
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+          幽視值± <input type="number" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
+        </label>
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+          消耗門檻 <input type="number" class="int-cost" value="${esc(costVal)}" placeholder="—" style="width:60px">
+        </label>
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1;min-width:150px">
+          回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user}: !加油" style="flex:1">
+        </label>`;
+    }
+
     row.innerHTML = `
-      <span class="row-label">幽視值 ≥</span>
-      <input type="number" min="0" max="100" value="${esc(min)}" style="width:64px">
-      ${stateSelect(state)}
-      <button class="btn btn-secondary btn-small">刪除</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <select class="int-trigger">
+          <option value="threshold"${trigger === 'threshold' ? ' selected' : ''}>門檻</option>
+          <option value="keyword"${trigger === 'keyword' ? ' selected' : ''}>關鍵詞</option>
+          <option value="command"${trigger === 'command' ? ' selected' : ''}>指令</option>
+        </select>
+        <button class="btn btn-secondary btn-small int-delete" style="margin-left:auto">刪除</button>
+      </div>
+      <div class="int-fields" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">${buildFields(trigger, interaction)}</div>
     `;
-    row.querySelector('input[type=number]').addEventListener('input', debouncedPetSave);
-    row.querySelector('select').addEventListener('change', debouncedPetSave);
-    row.querySelector('button').addEventListener('click', () => { row.remove(); debouncedPetSave(); });
-    document.getElementById('states-list').appendChild(row);
+
+    function wireFields() {
+      row.querySelector('.int-fields').querySelectorAll('input,select').forEach(el => el.addEventListener('input', debouncedPetSave));
+    }
+
+    row.querySelector('.int-trigger').addEventListener('change', () => {
+      const t = row.querySelector('.int-trigger').value;
+      row.querySelector('.int-fields').innerHTML = buildFields(t, {});
+      wireFields();
+      debouncedPetSave();
+    });
+    row.querySelector('.int-delete').addEventListener('click', () => { row.remove(); debouncedPetSave(); });
+    wireFields();
+
+    document.getElementById('interactions-list').appendChild(row);
+  }
+
+  function readInteractionRow(row) {
+    const trigger = row.querySelector('.int-trigger').value;
+    if (trigger === 'threshold') {
+      return {
+        trigger: 'threshold',
+        min:   parseInt(row.querySelector('.int-min')?.value)    || 0,
+        state: row.querySelector('.int-fields select')?.value   ?? 'idle',
+      };
+    }
+    const costRaw = row.querySelector('.int-cost')?.value;
+    const obj = {
+      trigger,
+      animation: row.querySelector('.int-fields select')?.value ?? (trigger === 'keyword' ? 'wave' : 'idle'),
+      yolia_see: parseFloat(row.querySelector('.int-yolia')?.value) || 0,
+      response:  row.querySelector('.int-response')?.value ?? '',
+    };
+    if (trigger === 'keyword') {
+      const parts = (row.querySelector('.int-match')?.value ?? '').split(',').map(s => s.trim()).filter(Boolean);
+      obj.match = parts.length === 1 ? parts[0] : parts;
+    } else {
+      obj.match = row.querySelector('.int-match')?.value?.trim() ?? '';
+    }
+    if (costRaw !== undefined && costRaw !== '') obj.cost = parseFloat(costRaw) || 0;
+    return obj;
   }
 
   function addWaveVariantRow(variant = null, container = null, suppressInit = false) {
@@ -951,53 +1010,12 @@
     if (container) container.appendChild(row);
   }
 
-  function addCommandRow(cmd = '', state = 'idle', yolia_see = 0) {
-    const row = document.createElement('div');
-    row.className = 'dyn-row cmd-row';
-    row.style.display = 'grid';
-    row.style.gridTemplateColumns = '110px 1fr 80px 60px';
-    row.style.gap = '6px';
-    row.innerHTML = `
-      <input type="text" placeholder="!指令" value="${esc(cmd)}" style="width:100%">
-      ${stateSelect(state)}
-      <input type="number" value="${esc(yolia_see)}" style="width:100%" placeholder="0">
-      <button class="btn btn-secondary btn-small">刪除</button>
-    `;
-    row.querySelector('input[type=text]').addEventListener('input', debouncedPetSave);
-    row.querySelector('select').addEventListener('change', debouncedPetSave);
-    row.querySelector('input[type=number]').addEventListener('input', debouncedPetSave);
-    row.querySelector('button').addEventListener('click', () => { row.remove(); debouncedPetSave(); });
-    document.getElementById('commands-list').appendChild(row);
-  }
-
   function savePetConfig() {
-    const yoliaStates = [...document.querySelectorAll('.state-row')].map(row => ({
-      min:   parseInt(row.querySelector('input[type=number]').value) || 0,
-      state: row.querySelector('select').value,
-    })).sort((a, b) => b.min - a.min);
-
-    const greetings = document.getElementById('pet-greetings').value
-      .split(',').map(s => s.trim()).filter(Boolean);
-
-    const commands = {};
-    document.querySelectorAll('.cmd-row').forEach(row => {
-      const cmdInput = row.querySelector('input[type=text]');
-      const numInput = row.querySelector('input[type=number]');
-      const sel      = row.querySelector('select');
-      const key      = cmdInput.value.trim();
-      if (key) commands[key] = { state: sel.value, yolia_see: parseInt(numInput.value) || 0 };
-    });
-
+    const interactions = [...document.querySelectorAll('.interaction-row')].map(readInteractionRow);
     fetch('/panel/api/pet-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        yoliaStates,
-        greetings,
-        greetingResponse: document.getElementById('pet-greeting-response').value,
-        commands,
-        scale: parseFloat(document.getElementById('pet-scale').value),
-      }),
+      body: JSON.stringify({ interactions, scale: parseFloat(document.getElementById('pet-scale').value) }),
     })
       .then(r => r.json())
       .then(() => showToast('已套用'))

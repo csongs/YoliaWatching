@@ -7,9 +7,16 @@ const DEFAULT_STATES = [
   { min: 0,  state: 'idle'  },
 ];
 
+function thresholdsFromConfig(config) {
+  if (config.interactions) {
+    const t = config.interactions.filter(i => i.trigger === 'threshold');
+    if (t.length) return [...t].sort((a, b) => b.min - a.min);
+  }
+  return [...(config.yoliaStates ?? DEFAULT_STATES)].sort((a, b) => b.min - a.min);
+}
+
 function createStateMachine(config = {}) {
-  const states = [...(config.yoliaStates ?? DEFAULT_STATES)]
-    .sort((a, b) => b.min - a.min);
+  const states = thresholdsFromConfig(config);
 
   return {
     yolia_see: 0,
@@ -29,8 +36,8 @@ function createStateMachine(config = {}) {
       return 'idle';
     },
 
-    updateStates(newArr) {
-      states.splice(0, states.length, ...[...newArr].sort((a, b) => b.min - a.min));
+    updateStates(newStates) {
+      states.splice(0, states.length, ...[...newStates].sort((a, b) => b.min - a.min));
     },
   };
 }
