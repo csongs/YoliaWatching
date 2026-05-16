@@ -5,7 +5,8 @@ function buildHandlers(interactions) {
   const kwInteractions = interactions.filter(i => i.trigger === 'keyword');
   const commandMap = {};
   for (const i of interactions.filter(i => i.trigger === 'command')) {
-    if (i.match) commandMap[i.match] = i;
+    const keys = Array.isArray(i.match) ? i.match : (i.match ? [i.match] : []);
+    for (const k of keys) commandMap[k] = i;
   }
   let keywordRe = null;
   if (kwInteractions.length) {

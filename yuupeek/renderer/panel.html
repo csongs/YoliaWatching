@@ -12,7 +12,7 @@
     .tab:hover { color: #e2e8f0; background: #252836; }
     .tab.active { color: #f472b6; border-bottom: 2px solid #f472b6; background: #1e2130; }
 
-    .panel { display: none; padding: 28px; max-width: 760px; }
+    .panel { display: none; padding: 28px; max-width: 820px; }
     .panel.active { display: block; }
 
     .card { background: #1a1d27; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
@@ -834,10 +834,11 @@
           </label>`;
       }
       // command
-      const costVal = src.cost != null ? src.cost : '';
+      const costVal  = src.cost != null ? src.cost : '';
+      const matchRaw = Array.isArray(src.match) ? src.match.join(',') : (src.match ?? '');
       return `
-        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-          指令 <input type="text" class="int-match" value="${esc(src.match ?? '')}" placeholder="!加油" style="width:80px">
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1;min-width:150px">
+          指令（逗號） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="!加油,！加油" style="flex:1">
         </label>
         <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
           動畫 ${stateSelect(src.animation ?? 'idle', ANIM_OPTS)}
@@ -897,12 +898,8 @@
       yolia_see: parseFloat(row.querySelector('.int-yolia')?.value) || 0,
       response:  row.querySelector('.int-response')?.value ?? '',
     };
-    if (trigger === 'keyword') {
-      const parts = (row.querySelector('.int-match')?.value ?? '').split(',').map(s => s.trim()).filter(Boolean);
-      obj.match = parts.length === 1 ? parts[0] : parts;
-    } else {
-      obj.match = row.querySelector('.int-match')?.value?.trim() ?? '';
-    }
+    const parts = (row.querySelector('.int-match')?.value ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    obj.match = parts.length === 1 ? parts[0] : parts;
     if (costRaw !== undefined && costRaw !== '') obj.cost = parseFloat(costRaw) || 0;
     return obj;
   }
