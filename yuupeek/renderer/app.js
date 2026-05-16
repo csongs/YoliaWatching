@@ -22,7 +22,9 @@ const char = createCharacter({
 
 yuuApi.getConfig().then(cfg => {
   if (cfg?.greetingAnimations?.length) char.setWaveVariants(cfg.greetingAnimations);
+  if (cfg?.animations) char.setAnimations(cfg.animations);
 });
+yuuApi.onAnimationsUpdate(cfg => char.setAnimations(cfg));
 
 // ── Drag ──────────────────────────────────────────────────────────────────────
 charEl.addEventListener('mousedown', (e) => {

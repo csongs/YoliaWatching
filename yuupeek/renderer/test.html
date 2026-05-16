@@ -273,6 +273,7 @@
       commands   = data.commands    ?? data;
       if (data.yoliaStates?.length)        yoliaStates = data.yoliaStates;
       if (data.greetingAnimations?.length) char.setWaveVariants(data.greetingAnimations);
+      if (data.animations && Object.keys(data.animations).length) char.setAnimations(data.animations);
       renderTable();
     } catch {
       document.getElementById('cmd-tbody').innerHTML =
@@ -354,6 +355,19 @@
   document.getElementById('chat-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') sendMsg();
   });
+
+  // ── WebSocket (hot-reload from panel settings) ────────────────────────────
+  (function connectWS() {
+    const ws = new WebSocket(`ws://${location.hostname}:${location.port || 3000}`);
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.reloadCommands)               { loadCommands(); return; }
+      if (data.setWaveVariants !== undefined) { char.setWaveVariants(data.setWaveVariants); return; }
+      if (data.setScale !== undefined)        { char.setScale(data.setScale); return; }
+      if (data.setAnimations !== undefined)   { char.setAnimations(data.setAnimations); return; }
+    };
+    ws.onclose = () => setTimeout(connectWS, 3000);
+  })();
 
   // ── Init ───────────────────────────────────────────────────────────────────
   loadCommands();

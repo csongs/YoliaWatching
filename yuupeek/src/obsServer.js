@@ -174,6 +174,56 @@ function createObsServer(config, rootDir) {
       return;
     }
 
+    if (req.url === '/panel/api/sprite-frames' && req.method === 'GET') {
+      const spritesDir = path.join(root, 'assets', 'sprites', 'frames');
+      const result = {};
+      try {
+        const folders = fs.readdirSync(spritesDir).filter(f =>
+          fs.statSync(path.join(spritesDir, f)).isDirectory()
+        );
+        for (const folder of folders) {
+          const indices = fs.readdirSync(path.join(spritesDir, folder))
+            .filter(f => /^\d+\.png$/i.test(f))
+            .map(f => parseInt(f, 10))
+            .sort((a, b) => a - b);
+          if (indices.length) result[folder] = indices;
+        }
+      } catch {}
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (req.url === '/panel/api/animations' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(panelHandlers?.getAnimations?.() ?? {}));
+      return;
+    }
+
+    if (req.url === '/panel/api/animations' && req.method === 'POST') {
+      readBody(req).then(body => {
+        panelHandlers?.saveAnimations?.(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
+    if (req.url === '/panel/api/pet-config' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(panelHandlers?.getPetConfig?.() ?? {}));
+      return;
+    }
+
+    if (req.url === '/panel/api/pet-config' && req.method === 'POST') {
+      readBody(req).then(body => {
+        panelHandlers?.savePetConfig?.(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
     // ── Existing routes ─────────────────────────────────────────────────────────
 
     if (req.url === '/obs-config') {
@@ -183,11 +233,13 @@ function createObsServer(config, rootDir) {
     }
 
     if (req.url === '/commands.json') {
+      const animData = panelHandlers?.getAnimations?.() ?? {};
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         commands:           config.commands           ?? {},
         yoliaStates:        config.yoliaStates        ?? [],
         greetingAnimations: config.greetingAnimations ?? [],
+        animations:         animData.animations       ?? animData,
       }));
       return;
     }

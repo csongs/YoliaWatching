@@ -35,6 +35,18 @@ const { createStateMachine } = require('./src/stateMachine');
 const { createChatListener }  = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
 
+const DEFAULT_ANIMATIONS = {
+  idle:      { folder: 'idle',          frames: [0,2,4,5,4,2,0,0,1,0], ms: 150,  loop: false },
+  peek:      { folder: 'review',        frames: [2,2,2,2,4,2,2,2,3,3,3], ms: 250, loop: false },
+  cheer:     { folder: 'cheer',         frames: [0,2,3,5,0,5], ms: 150,  loop: false },
+  cry:       { folder: 'cry',           frames: [0,7,7,7,0,1,1,1,0,0], ms: 150,  loop: false },
+  eat:       { folder: 'cilantro',      frames: [0,1,2,3,4,5,6,7,7], ms: 250,  loop: false },
+  jump:      { folder: 'jumping',       frames: [0,1,2,3], ms: 250,  loop: false },
+  run_left:  { folder: 'running-left',  frames: [0,3,4,5,7], ms: 150,  loop: true },
+  run_right: { folder: 'running-right', frames: [0,3,4,5,7], ms: 150,  loop: true },
+  wave:      { folder: 'waving',        frames: [0,1,2,3,2,1,0], ms: 200,  loop: false },
+};
+
 const defaultConfig = JSON.parse(fs.readFileSync(path.join(appDir, 'config.json'), 'utf8'));
 const userConfig    = (() => {
   try { return JSON.parse(fs.readFileSync(path.join(userDataDir, 'config.json'), 'utf8')); }
@@ -88,6 +100,70 @@ if (config.modes?.obs) {
       twitch:  { enabled: config.twitch?.enabled  ?? false, channel: config.twitch?.channel  ?? '' },
       youtube: { enabled: config.youtube?.enabled ?? false, channel: config.youtube?.channel ?? '' },
     }),
+    getPetConfig: () => ({
+      yoliaStates:        config.yoliaStates        ?? [],
+      greetings:          config.greetings          ?? [],
+      greetingResponse:   config.greetingResponse   ?? '',
+      greetingAnimations: config.greetingAnimations ?? [],
+      commands:           config.commands           ?? {},
+      scale:              config.obs?.scale         ?? 2,
+    }),
+    savePetConfig: (patch) => {
+      const cfgPath = path.join(userDataDir, 'config.json');
+      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      let chatNeedsRestart = false;
+
+      if (patch.yoliaStates !== undefined) {
+        raw.yoliaStates = patch.yoliaStates;
+        config.yoliaStates = patch.yoliaStates;
+        sm.updateStates(patch.yoliaStates);
+        sm.state = sm.computeState();
+        broadcastState();
+      }
+      if (patch.greetings !== undefined) {
+        raw.greetings = patch.greetings;
+        config.greetings = patch.greetings;
+        chatNeedsRestart = true;
+      }
+      if (patch.greetingResponse !== undefined) {
+        raw.greetingResponse = patch.greetingResponse;
+        config.greetingResponse = patch.greetingResponse;
+        chatNeedsRestart = true;
+      }
+      if (patch.greetingAnimations !== undefined) {
+        raw.greetingAnimations = patch.greetingAnimations;
+        config.greetingAnimations = patch.greetingAnimations;
+        obsServer?.broadcast({ setWaveVariants: patch.greetingAnimations });
+      }
+      if (patch.commands !== undefined) {
+        raw.commands = patch.commands;
+        config.commands = patch.commands;
+        Object.keys(commands).forEach(k => delete commands[k]);
+        Object.assign(commands, patch.commands);
+        chatNeedsRestart = true;
+      }
+      if (patch.scale !== undefined) {
+        raw.obs = raw.obs ?? {};
+        config.obs = config.obs ?? {};
+        raw.obs.scale = patch.scale;
+        config.obs.scale = patch.scale;
+        obsServer?.broadcast({ setScale: patch.scale });
+      }
+
+      fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
+
+      if (chatNeedsRestart) {
+        chatListener?.stop();
+        if (config.twitch?.enabled || config.youtube?.enabled) {
+          chatListener = createChatListener(config, commands, sm, broadcastState);
+          chatListener.start();
+        } else {
+          chatListener = null;
+        }
+      }
+
+      obsServer?.broadcast({ reloadCommands: true });
+    },
     saveConfig: (patch) => {
       const cfgPath = path.join(userDataDir, 'config.json');
       const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
@@ -123,6 +199,27 @@ if (config.modes?.obs) {
       } else {
         chatListener = null;
       }
+    },
+    getAnimations: () => ({
+      animations: { ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) },
+      defaults:   DEFAULT_ANIMATIONS,
+    }),
+    saveAnimations: ({ animations: patch, greetingAnimations } = {}) => {
+      const cfgPath = path.join(userDataDir, 'config.json');
+      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      if (patch !== undefined) {
+        raw.animations = patch;
+        config.animations = patch;
+      }
+      if (greetingAnimations !== null && greetingAnimations !== undefined) {
+        raw.greetingAnimations = greetingAnimations;
+        config.greetingAnimations = greetingAnimations;
+        obsServer?.broadcast({ setWaveVariants: greetingAnimations });
+      }
+      fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
+      const merged = { ...DEFAULT_ANIMATIONS, ...(patch ?? {}) };
+      obsServer?.broadcast({ setAnimations: merged });
+      win?.webContents.send('animations-update', merged);
     },
     getVersion: () => app.getVersion(),
     userDataDir,
@@ -255,6 +352,7 @@ ipcMain.on('quit', () => win?.close());
 
 ipcMain.handle('get-config', () => ({
   greetingAnimations: config.greetingAnimations ?? [],
+  animations: { ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) },
 }));
 
 app.on('window-all-closed', () => {});

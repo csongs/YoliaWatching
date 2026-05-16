@@ -326,6 +326,16 @@ function createCharacter({
       _waveVariants = v;
       if (v) v.forEach(variant => cacheFrames(frames('waving', variant.frames)));
     },
+    setAnimations(cfg) {
+      Object.entries(cfg).forEach(([state, def]) => {
+        if (!def?.folder || !Array.isArray(def.frames)) return;
+        const srcs = def.frames.map(
+          i => `${assetBase}/${def.folder}/${String(i).padStart(2, '0')}.png`
+        );
+        ANIMATIONS[state] = { srcs, loop: !!def.loop, ms: def.ms };
+        cacheFrames(srcs);
+      });
+    },
     DISPLAY_W,
     DISPLAY_H,
     POSBOT,

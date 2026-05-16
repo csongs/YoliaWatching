@@ -28,6 +28,10 @@ function createStateMachine(config = {}) {
       }
       return 'idle';
     },
+
+    updateStates(newArr) {
+      states.splice(0, states.length, ...[...newArr].sort((a, b) => b.min - a.min));
+    },
   };
 }
 

@@ -83,8 +83,9 @@
 
     fetch('/commands.json')
       .then(r => r.json())
-      .then(({ greetingAnimations }) => {
+      .then(({ greetingAnimations, animations }) => {
         if (greetingAnimations?.length) char.setWaveVariants(greetingAnimations);
+        if (animations && Object.keys(animations).length) char.setAnimations(animations);
       })
       .catch(() => {});
 
@@ -120,7 +121,13 @@
     // ── WebSocket ─────────────────────────────────────────────────────────────
     const WS_PORT = location.port || 3000;
     const ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}`);
-    ws.onmessage = (e) => char.applyUpdate(JSON.parse(e.data));
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.setScale !== undefined)        { char.setScale(data.setScale); return; }
+      if (data.setWaveVariants !== undefined) { char.setWaveVariants(data.setWaveVariants); return; }
+      if (data.setAnimations !== undefined)   { char.setAnimations(data.setAnimations); return; }
+      char.applyUpdate(data);
+    };
     ws.onclose   = () => setTimeout(() => location.reload(), 3000);
 
     char.scheduleWander();

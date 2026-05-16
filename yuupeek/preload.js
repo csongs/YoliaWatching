@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('yuuApi', {
   feed:            ()   => ipcRenderer.send('feed'),
   setYoliaSee:     (v)  => ipcRenderer.send('set-yolia-see', v),
   quit:            ()   => ipcRenderer.send('quit'),
-  getConfig:       ()   => ipcRenderer.invoke('get-config'),
+  getConfig:            ()   => ipcRenderer.invoke('get-config'),
+  onAnimationsUpdate:   (cb) => ipcRenderer.on('animations-update', (_e, data) => cb(data)),
 });

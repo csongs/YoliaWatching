@@ -53,6 +53,29 @@
 
     .divider { border: none; border-top: 1px solid #2d3748; margin: 20px 0; }
 
+    select {
+      padding: 6px 10px; background: #0d111a; border: 1px solid #334155;
+      border-radius: 6px; color: #e2e8f0; font-size: 13px;
+    }
+    select:focus { outline: none; border-color: #60a5fa; }
+
+    textarea {
+      width: 100%; padding: 9px 12px; background: #0d111a; border: 1px solid #334155;
+      border-radius: 6px; color: #e2e8f0; font-family: 'Consolas', monospace;
+      font-size: 12px; resize: vertical; line-height: 1.5;
+    }
+    textarea:focus { outline: none; border-color: #60a5fa; }
+
+    .dyn-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .dyn-row input[type=text], .dyn-row input[type=number] {
+      padding: 6px 8px; background: #0d111a; border: 1px solid #334155;
+      border-radius: 6px; color: #e2e8f0; font-family: 'Consolas', monospace; font-size: 13px;
+    }
+    .dyn-row input[type=text] { flex: 1; }
+    .dyn-row input[type=number] { width: 72px; }
+    .dyn-row input:focus { outline: none; border-color: #60a5fa; }
+    .row-label { color: #64748b; font-size: 12px; white-space: nowrap; }
+
     .toast {
       position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
       background: #14532d; color: #4ade80; border-radius: 8px; font-size: 13px;
@@ -66,7 +89,10 @@
 <div class="tabs">
   <div class="tab active" onclick="showTab('guide')">安裝說明</div>
   <div class="tab" onclick="showTab('status')">模組狀態</div>
+  <div class="tab" onclick="showTab('pet')">桌寵設定</div>
+  <div class="tab" onclick="showTab('animations')">動作區</div>
   <div class="tab" onclick="showTab('settings')">設定</div>
+  <span style="margin-left:auto;padding:0 16px;color:#475569;font-size:11px;display:flex;align-items:center;white-space:nowrap;pointer-events:none">Ctrl + 滾輪 縮放</span>
 </div>
 
 <!-- ── 安裝說明 ── -->
@@ -143,6 +169,72 @@
 
 </div>
 
+<!-- ── 桌寵設定 ── -->
+<div id="pet" class="panel">
+
+  <div class="card">
+    <h3>角色大小（OBS 比例）</h3>
+    <div class="form-group" style="margin-bottom:0">
+      <label>顯示比例</label>
+      <select id="pet-scale" onchange="savePetConfig()">
+        <option value="1">1x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+        <option value="2.5">2.5x</option>
+        <option value="3">3x</option>
+        <option value="3.5">3.5x</option>
+        <option value="4">4x</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>幽視狀態對應</h3>
+    <p style="color:#64748b;font-size:12px;margin-bottom:12px">幽視值 ≥ 門檻時套用對應狀態。若只設一筆且門檻為 0，則無論幽視值如何都維持同一狀態。</p>
+    <div id="states-list"></div>
+    <button class="btn btn-secondary btn-small" style="margin-top:10px" onclick="addStateRow();debouncedPetSave()">+ 新增狀態</button>
+  </div>
+
+  <div class="card">
+    <h3>招呼關鍵詞</h3>
+    <label>輸入後按角色會揮手，多個關鍵詞以逗號分隔</label>
+    <input type="text" id="pet-greetings" placeholder="安安, 午安, 早安, 晚安" style="width:100%;margin-top:6px" oninput="debouncedPetSave()">
+  </div>
+
+  <div class="card">
+    <h3>招呼回應訊息</h3>
+    <label><code style="font-size:12px">{user}</code> 會被替換成聊天者名稱</label>
+    <input type="text" id="pet-greeting-response" placeholder="{user} 安安~" style="width:100%;margin-top:6px" oninput="debouncedPetSave()">
+  </div>
+
+  <div class="card">
+    <h3>聊天室指令</h3>
+    <p style="color:#64748b;font-size:12px;margin-bottom:10px">聊天者輸入指令時觸發對應狀態，幽視增減可為負數。</p>
+    <div style="display:grid;grid-template-columns:110px 1fr 80px 60px;gap:6px;margin-bottom:4px;padding:0 2px">
+      <span style="color:#64748b;font-size:11px">指令</span>
+      <span style="color:#64748b;font-size:11px">狀態</span>
+      <span style="color:#64748b;font-size:11px">幽視增減</span>
+      <span></span>
+    </div>
+    <div id="commands-list"></div>
+    <button class="btn btn-secondary btn-small" style="margin-top:10px" onclick="addCommandRow();debouncedPetSave()">+ 新增指令</button>
+  </div>
+
+
+</div>
+
+<!-- ── 動作區 ── -->
+<div id="animations" class="panel">
+  <p style="color:#64748b;font-size:13px;margin-bottom:20px">為每個動作狀態選擇圖框序列。點可用圖框加入序列，點序列中的圖框移除。變更後會自動儲存。</p>
+  <div id="anim-cards"></div>
+  <div style="margin-top:12px;margin-bottom:8px">
+    <button class="btn btn-secondary btn-small" onclick="addCustomAnimCard()">+ 新增自訂動作</button>
+  </div>
+  <div style="padding-bottom:8px">
+    <span id="anim-save-status" style="font-size:12px;color:#64748b"></span>
+  </div>
+</div>
+
 <!-- ── 模組狀態 ── -->
 <div id="status" class="panel">
   <div id="status-cards"><p style="color:#64748b">載入中…</p></div>
@@ -154,28 +246,26 @@
     <h3>Twitch 設定</h3>
     <div class="form-group">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="tw-enabled"> 啟用 Twitch 聊天監聽
+        <input type="checkbox" id="tw-enabled" onchange="savePlatformConfig('twitch')"> 啟用 Twitch 聊天監聽
       </label>
     </div>
     <div class="form-group">
       <label>頻道名稱</label>
-      <input type="text" id="tw-channel" placeholder="altheayolia">
+      <input type="text" id="tw-channel" placeholder="altheayolia" oninput="debouncedTwitchSave()">
     </div>
-    <button class="btn btn-primary" onclick="savePlatformConfig('twitch')">儲存 Twitch</button>
   </div>
 
   <div class="card">
     <h3>YouTube 設定</h3>
     <div class="form-group">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="yt-enabled"> 啟用 YouTube 聊天監聽
+        <input type="checkbox" id="yt-enabled" onchange="savePlatformConfig('youtube')"> 啟用 YouTube 聊天監聽
       </label>
     </div>
     <div class="form-group">
       <label>頻道 Handle</label>
-      <input type="text" id="yt-channel" placeholder="@altheayolia">
+      <input type="text" id="yt-channel" placeholder="@altheayolia" oninput="debouncedYtSave()">
     </div>
-    <button class="btn btn-primary" onclick="savePlatformConfig('youtube')">儲存 YouTube</button>
   </div>
 
   <div class="card">
@@ -193,20 +283,18 @@
     <div class="form-group">
       <label>TWITCH_OAUTH</label>
       <div class="input-row">
-        <input type="password" id="tw-oauth" placeholder="oauth:xxxxxxxxxxxxxxxxxxxxxxxx">
+        <input type="password" id="tw-oauth" placeholder="oauth:xxxxxxxxxxxxxxxxxxxxxxxx" oninput="debouncedEnvSave()">
       </div>
     </div>
     <div class="form-group">
       <label>YOUTUBE_API_KEY</label>
       <div class="input-row">
-        <input type="password" id="yt-key" placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXX">
+        <input type="password" id="yt-key" placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXX" oninput="debouncedEnvSave()">
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn btn-primary" onclick="saveEnv()">儲存</button>
+    <div style="margin-top:4px">
       <button class="btn btn-secondary" onclick="togglePasswords()">顯示／隱藏</button>
     </div>
-    <p style="margin-top:12px;color:#64748b;font-size:12px">儲存後重新啟動程式生效</p>
   </div>
 
   <div class="card">
@@ -230,7 +318,7 @@
 
 <script>
   // ── Tab switching ──────────────────────────────────────────────────────────
-  const TAB_IDS = ['guide', 'status', 'settings'];
+  const TAB_IDS = ['guide', 'status', 'pet', 'animations', 'settings'];
 
   let hasAutoCheckedUpdate = false;
 
@@ -238,6 +326,8 @@
     document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_IDS[i] === id));
     document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === id));
     if (id === 'status') refreshStatus();
+    if (id === 'pet') loadPetConfig();
+    if (id === 'animations') loadAnimationsTab();
     if (id === 'settings') {
       loadEnv();
       loadConfig();
@@ -424,6 +514,494 @@
     const t = passwordsVisible ? 'text' : 'password';
     document.getElementById('tw-oauth').type = t;
     document.getElementById('yt-key').type   = t;
+  }
+
+  // ── Ctrl+scroll zoom ──────────────────────────────────────────────────────
+  let panelZoom = parseFloat(localStorage.getItem('panelZoom') || '1');
+  document.body.style.zoom = panelZoom;
+  window.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    panelZoom = Math.max(0.5, Math.min(2.5, panelZoom + (e.deltaY < 0 ? 0.1 : -0.1)));
+    panelZoom = Math.round(panelZoom * 10) / 10;
+    document.body.style.zoom = panelZoom;
+    localStorage.setItem('panelZoom', panelZoom);
+  }, { passive: false });
+
+  // ── Auto-save utilities ───────────────────────────────────────────────────
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+  const debouncedSave       = debounce(() => saveAnimations(true), 800);
+  const debouncedPetSave    = debounce(savePetConfig, 800);
+  const debouncedTwitchSave = debounce(() => savePlatformConfig('twitch'), 800);
+  const debouncedYtSave     = debounce(() => savePlatformConfig('youtube'), 800);
+  const debouncedEnvSave    = debounce(saveEnv, 1200);
+
+  function showAnimSaveStatus(msg, isErr) {
+    const el = document.getElementById('anim-save-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = isErr ? '#f87171' : '#4ade80';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.textContent = ''; }, 2500);
+  }
+
+  // ── Animations tab ────────────────────────────────────────────────────────
+  const ANIM_STATES = [
+    { key: 'idle',      label: 'idle',      desc: '閒置' },
+    { key: 'peek',      label: 'peek',      desc: '偷看' },
+    { key: 'cheer',     label: 'cheer',     desc: '歡呼' },
+    { key: 'cry',       label: 'cry',       desc: '哭哭' },
+    { key: 'eat',       label: 'eat',       desc: '吃東西' },
+    { key: 'jump',      label: 'jump',      desc: '跳躍' },
+    { key: 'run_left',  label: 'run_left',  desc: '往左跑' },
+    { key: 'run_right', label: 'run_right', desc: '往右跑' },
+    { key: 'wave',      label: 'wave',      desc: '揮手（預設）' },
+  ];
+
+  let _spriteFolders = {};
+  let _animTabLoaded = false;
+
+  async function loadAnimationsTab() {
+    if (_animTabLoaded) return;
+    _animTabLoaded = true;
+    const [foldersRes, animsRes, petRes] = await Promise.all([
+      fetch('/panel/api/sprite-frames').then(r => r.json()),
+      fetch('/panel/api/animations').then(r => r.json()),
+      fetch('/panel/api/pet-config').then(r => r.json()),
+    ]);
+    _spriteFolders = foldersRes;
+    const animsMap   = animsRes.animations ?? animsRes;
+    const defaultsMap = animsRes.defaults  ?? {};
+    const initVariants = petRes.greetingAnimations ?? [];
+    const container = document.getElementById('anim-cards');
+    container.innerHTML = '';
+    ANIM_STATES.forEach(({ key, label, desc }) =>
+      container.appendChild(buildAnimCard(key, label, desc, animsMap[key], key === 'wave' ? initVariants : [], defaultsMap[key]))
+    );
+    // Render any custom states not in ANIM_STATES
+    const builtinKeys = new Set(ANIM_STATES.map(s => s.key));
+    Object.entries(animsMap).forEach(([key, animCfg]) => {
+      if (!builtinKeys.has(key))
+        container.appendChild(buildAnimCard(key, key, '', animCfg, [], null, { isCustom: true }));
+    });
+  }
+
+  function addCustomAnimCard() {
+    const firstFolder = Object.keys(_spriteFolders).sort()[0] ?? '';
+    const card = buildAnimCard('', '', '', { folder: firstFolder, frames: [], ms: 150, loop: false }, [], null, { isCustom: true });
+    document.getElementById('anim-cards').appendChild(card);
+  }
+
+  function buildAnimCard(stateKey, label, desc, cfg, initVariants = [], defaultCfg = null, opts = {}) {
+    const { isCustom = false } = opts;
+    const folder   = cfg?.folder ?? (isCustom ? (Object.keys(_spriteFolders).sort()[0] ?? '') : stateKey);
+    const initFr   = cfg?.frames ?? [];
+    const ms       = cfg?.ms     ?? 150;
+    const loop     = cfg?.loop   ?? false;
+    const folders  = Object.keys(_spriteFolders).sort();
+
+    const card = document.createElement('div');
+    card.className = 'card anim-state-card';
+    if (isCustom) card.dataset.custom = 'true';
+    else          card.dataset.state  = stateKey;
+    card.style.marginBottom = '14px';
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">
+          ${isCustom
+            ? `<input type="text" class="anim-state-name" value="${esc(stateKey)}" placeholder="動作名稱（英文/底線）"
+                 style="padding:4px 8px;background:#111827;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-family:monospace;font-size:14px;width:180px">
+               <span style="font-size:12px;color:#64748b;font-weight:400"> （自訂動作）</span>`
+            : `${esc(label)} <span style="font-size:12px;color:#64748b;font-weight:400">（${esc(desc)}）</span>`
+          }
+        </h3>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:5px">
+            資料夾
+            <select class="anim-folder-sel">
+              ${folders.map(f => `<option value="${esc(f)}"${f === folder ? ' selected' : ''}>${esc(f)}</option>`).join('')}
+            </select>
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:5px">
+            <input type="checkbox" class="anim-loop-check"${loop ? ' checked' : ''}> loop
+          </label>
+          ${defaultCfg && !isCustom ? `<button class="btn btn-secondary btn-small anim-reset-btn" style="padding:4px 10px;font-size:11px">恢復預設</button>` : ''}
+          ${isCustom ? `<button class="btn btn-secondary btn-small anim-delete-btn" style="padding:4px 10px;font-size:11px;background:#2d1515;border-color:#7f1d1d;color:#f87171">刪除動作</button>` : ''}
+        </div>
+      </div>
+      <p style="color:#64748b;font-size:11px;margin-bottom:5px">可用圖框（點擊加入序列）：</p>
+      <div class="anim-picker" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+        <p style="color:#64748b;font-size:11px">序列（點擊移除）：</p>
+        <button class="btn btn-secondary btn-small anim-clear-btn" style="padding:3px 8px;font-size:11px">清除</button>
+      </div>
+      <div class="anim-sequence" style="display:flex;gap:4px;flex-wrap:wrap;min-height:46px;background:#070b12;border:1px solid #1e2130;border-radius:6px;padding:6px;align-content:flex-start;margin-bottom:10px"></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:5px">
+          每格 <input type="number" class="anim-ms-input" min="50" max="2000" value="${esc(ms)}" style="width:60px;padding:4px 6px;background:#111827;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:12px"> ms
+        </label>
+        <div style="flex:1"></div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:#64748b;font-size:11px">預覽：</span>
+          <img class="anim-preview-img" style="width:40px;height:43px;image-rendering:pixelated;border:1px solid #334155;border-radius:3px" src="">
+        </div>
+      </div>
+    `;
+
+    const pickerEl  = card.querySelector('.anim-picker');
+    const seqEl     = card.querySelector('.anim-sequence');
+    const animImg   = card.querySelector('.anim-preview-img');
+    const msInput   = card.querySelector('.anim-ms-input');
+    const folderSel = card.querySelector('.anim-folder-sel');
+    const loopCheck = card.querySelector('.anim-loop-check');
+    let animTimer   = null;
+    let _suppress   = false;
+
+    function frameUrl(f, idx) {
+      return `/assets/sprites/frames/${f}/${String(idx).padStart(2, '0')}.png`;
+    }
+
+    function refreshPreview() {
+      clearInterval(animTimer);
+      const indices = [...seqEl.querySelectorAll('img[data-frame]')].map(img => parseInt(img.dataset.frame));
+      const msVal   = parseInt(msInput.value) || 150;
+      const f       = folderSel.value;
+      if (!indices.length) { animImg.src = ''; return; }
+      let fi = 0;
+      animImg.src = frameUrl(f, indices[0]);
+      if (indices.length > 1) {
+        animTimer = setInterval(() => {
+          fi = (fi + 1) % indices.length;
+          animImg.src = frameUrl(f, indices[fi]);
+        }, msVal);
+      }
+    }
+
+    function appendFrame(f, idx) {
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position:relative;cursor:pointer;flex-shrink:0';
+      wrapper.title = `圖框 ${idx}，點擊移除`;
+      wrapper.innerHTML = `
+        <img data-frame="${idx}" src="${frameUrl(f, idx)}"
+             style="width:36px;display:block;image-rendering:pixelated;border:1px solid #475569;border-radius:4px">
+        <span style="position:absolute;top:-5px;right:-5px;width:15px;height:15px;background:#ef4444;border-radius:50%;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center">✕</span>
+      `;
+      wrapper.addEventListener('click', () => { wrapper.remove(); refreshPreview(); debouncedSave(); });
+      seqEl.appendChild(wrapper);
+      refreshPreview();
+      if (!_suppress) debouncedSave();
+    }
+
+    function rebuildPicker(f) {
+      pickerEl.innerHTML = '';
+      const indices = _spriteFolders[f] ?? [];
+      indices.forEach(i => {
+        const btn = document.createElement('div');
+        btn.style.cssText = 'position:relative;cursor:pointer;border:1px solid #334155;border-radius:5px;overflow:hidden;transition:border-color 0.12s';
+        btn.title = `圖框 ${i}，點擊加入序列`;
+        btn.innerHTML = `
+          <img src="${frameUrl(f, i)}" style="width:36px;display:block;image-rendering:pixelated">
+          <span style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:10px;color:rgba(255,255,255,.75);background:rgba(0,0,0,.5);font-family:monospace">${i}</span>
+        `;
+        btn.addEventListener('mouseenter', () => btn.style.borderColor = '#60a5fa');
+        btn.addEventListener('mouseleave', () => btn.style.borderColor = '#334155');
+        btn.addEventListener('click', () => appendFrame(folderSel.value, i));
+        pickerEl.appendChild(btn);
+      });
+    }
+
+    folderSel.addEventListener('change', () => {
+      seqEl.innerHTML = '';
+      clearInterval(animTimer);
+      animImg.src = '';
+      rebuildPicker(folderSel.value);
+      debouncedSave();
+    });
+    msInput.addEventListener('input', () => { refreshPreview(); debouncedSave(); });
+    loopCheck.addEventListener('change', debouncedSave);
+    card.querySelector('.anim-clear-btn').addEventListener('click', () => { seqEl.innerHTML = ''; refreshPreview(); debouncedSave(); });
+
+    if (isCustom) {
+      card.querySelector('.anim-state-name').addEventListener('input', debouncedSave);
+      card.querySelector('.anim-delete-btn').addEventListener('click', () => { card.remove(); debouncedSave(); });
+    } else if (defaultCfg) {
+      card.querySelector('.anim-reset-btn').addEventListener('click', () => {
+        _suppress = true;
+        folderSel.value = defaultCfg.folder;
+        rebuildPicker(defaultCfg.folder);
+        seqEl.innerHTML = '';
+        defaultCfg.frames.forEach(i => appendFrame(defaultCfg.folder, i));
+        _suppress = false;
+        msInput.value = defaultCfg.ms;
+        loopCheck.checked = !!defaultCfg.loop;
+        refreshPreview();
+        debouncedSave();
+      });
+    }
+
+    _suppress = true;
+    rebuildPicker(folder);
+    initFr.forEach(i => appendFrame(folder, i));
+    _suppress = false;
+
+    if (stateKey === 'wave' && !isCustom) {
+      const variantsSection = document.createElement('div');
+      variantsSection.innerHTML = `
+        <hr style="border:none;border-top:1px solid #2d3748;margin:16px 0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h4 style="color:#cbd5e1;font-size:14px;margin:0">揮手變體 <span style="font-size:12px;color:#64748b;font-weight:400">（觸發揮手時依 weight 機率挑選）</span></h4>
+          <button class="btn btn-secondary btn-small add-wave-variant-btn">+ 新增變體</button>
+        </div>
+        <div class="wave-variants-inner"></div>
+      `;
+      card.appendChild(variantsSection);
+      const variantsInner = card.querySelector('.wave-variants-inner');
+      card.querySelector('.add-wave-variant-btn').addEventListener('click', () => {
+        addWaveVariantRow(null, variantsInner);
+        debouncedSave();
+      });
+      initVariants.forEach(v => addWaveVariantRow(v, variantsInner, true));
+    }
+
+    return card;
+  }
+
+  function saveAnimations(silent = false) {
+    const animations = {};
+    let greetingAnimations = null;
+    document.querySelectorAll('.anim-state-card').forEach(card => {
+      const state = card.dataset.custom
+        ? (card.querySelector('.anim-state-name')?.value.trim() ?? '')
+        : card.dataset.state;
+      if (!state) return;
+      animations[state] = {
+        folder: card.querySelector('.anim-folder-sel').value,
+        frames: [...card.querySelector('.anim-sequence').querySelectorAll('img[data-frame]')].map(img => parseInt(img.dataset.frame)),
+        ms:     parseInt(card.querySelector('.anim-ms-input').value) || 150,
+        loop:   card.querySelector('.anim-loop-check').checked,
+      };
+      if (state === 'wave') {
+        const inner = card.querySelector('.wave-variants-inner');
+        greetingAnimations = inner ? [...inner.querySelectorAll('.wave-row')].map(row => ({
+          frames: [...row.querySelector('.wave-sequence').querySelectorAll('img[data-frame]')].map(img => parseInt(img.dataset.frame)),
+          ms:     parseInt(row.querySelector('.wave-ms-input').value)     || 200,
+          weight: parseInt(row.querySelector('.wave-weight-input').value) || 1,
+        })).filter(v => v.frames.length > 0) : [];
+      }
+    });
+    fetch('/panel/api/animations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ animations, greetingAnimations }),
+    })
+      .then(r => r.json())
+      .then(() => silent ? showAnimSaveStatus('已自動儲存') : showToast('已套用'))
+      .catch(() => silent ? showAnimSaveStatus('自動儲存失敗', true) : showToast('套用失敗', true));
+  }
+
+  // ── Pet config tab ────────────────────────────────────────────────────────
+  const STATE_OPTIONS = ['idle', 'peek', 'cheer', 'cry', 'eat', 'jump', 'run_right', 'run_left'];
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function stateSelect(selected) {
+    return `<select>${STATE_OPTIONS.map(s => `<option value="${s}"${s === selected ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+  }
+
+  function loadPetConfig() {
+    fetch('/panel/api/pet-config')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('pet-scale').value = String(data.scale ?? 2);
+
+        const statesList = document.getElementById('states-list');
+        statesList.innerHTML = '';
+        (data.yoliaStates ?? []).forEach(s => addStateRow(s.min, s.state));
+
+        document.getElementById('pet-greetings').value = (data.greetings ?? []).join(', ');
+        document.getElementById('pet-greeting-response').value = data.greetingResponse ?? '';
+
+        const cmdList = document.getElementById('commands-list');
+        cmdList.innerHTML = '';
+        Object.entries(data.commands ?? {}).forEach(([cmd, cfg]) => addCommandRow(cmd, cfg.state, cfg.yolia_see));
+      })
+      .catch(() => showToast('載入設定失敗', true));
+  }
+
+  function addStateRow(min = 0, state = 'idle') {
+    const row = document.createElement('div');
+    row.className = 'dyn-row state-row';
+    row.innerHTML = `
+      <span class="row-label">幽視值 ≥</span>
+      <input type="number" min="0" max="100" value="${esc(min)}" style="width:64px">
+      ${stateSelect(state)}
+      <button class="btn btn-secondary btn-small">刪除</button>
+    `;
+    row.querySelector('input[type=number]').addEventListener('input', debouncedPetSave);
+    row.querySelector('select').addEventListener('change', debouncedPetSave);
+    row.querySelector('button').addEventListener('click', () => { row.remove(); debouncedPetSave(); });
+    document.getElementById('states-list').appendChild(row);
+  }
+
+  function addWaveVariantRow(variant = null, container = null, suppressInit = false) {
+    const initFrames = variant ? variant.frames : [0, 1, 2, 3, 2, 1, 0];
+    const ms     = variant ? (variant.ms     ?? 200) : 200;
+    const weight = variant ? (variant.weight ?? 1)   : 1;
+    let _suppress = suppressInit;
+
+    const row = document.createElement('div');
+    row.className = 'wave-row';
+    row.style.cssText = 'background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:12px;margin-top:10px';
+    row.innerHTML = `
+      <div style="margin-bottom:8px">
+        <p style="color:#64748b;font-size:11px;margin-bottom:5px">可用圖框（點擊加入序列）：</p>
+        <div class="wave-picker" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <p style="color:#64748b;font-size:11px">序列（點擊移除）：</p>
+          <button class="btn btn-secondary btn-small wave-clear-btn" style="padding:3px 8px;font-size:11px">清除</button>
+        </div>
+        <div class="wave-sequence" style="display:flex;gap:4px;flex-wrap:wrap;min-height:46px;background:#070b12;border:1px solid #1e2130;border-radius:6px;padding:6px;align-content:flex-start"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:5px">
+          每格 <input type="number" class="wave-ms-input" min="50" max="2000" value="${esc(ms)}" style="width:60px;padding:4px 6px;background:#111827;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:12px"> ms
+        </label>
+        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:5px">
+          weight <input type="number" class="wave-weight-input" min="1" value="${esc(weight)}" style="width:50px;padding:4px 6px;background:#111827;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:12px">
+        </label>
+        <div style="flex:1"></div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:#64748b;font-size:11px">預覽：</span>
+          <img class="wave-anim-img" style="width:40px;height:43px;image-rendering:pixelated;border:1px solid #334155;border-radius:3px" src="">
+        </div>
+        <button class="btn btn-secondary btn-small wave-delete-btn">刪除</button>
+      </div>
+    `;
+
+    const pickerEl  = row.querySelector('.wave-picker');
+    const seqEl     = row.querySelector('.wave-sequence');
+    const animImg   = row.querySelector('.wave-anim-img');
+    const msInput   = row.querySelector('.wave-ms-input');
+    let   animTimer = null;
+
+    function frameUrl(idx) {
+      return `/assets/sprites/frames/waving/${String(idx).padStart(2, '0')}.png`;
+    }
+
+    function refreshAnimation() {
+      clearInterval(animTimer);
+      const indices = [...seqEl.querySelectorAll('img[data-frame]')].map(img => parseInt(img.dataset.frame));
+      const msVal   = parseInt(msInput.value) || 200;
+      if (!indices.length) { animImg.src = ''; return; }
+      let fi = 0;
+      animImg.src = frameUrl(indices[0]);
+      if (indices.length > 1) {
+        animTimer = setInterval(() => {
+          fi = (fi + 1) % indices.length;
+          animImg.src = frameUrl(indices[fi]);
+        }, msVal);
+      }
+    }
+
+    function appendFrame(idx) {
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position:relative;cursor:pointer;flex-shrink:0';
+      wrapper.title = `圖框 ${idx}，點擊移除`;
+      wrapper.innerHTML = `
+        <img data-frame="${idx}" src="${frameUrl(idx)}"
+             style="width:36px;display:block;image-rendering:pixelated;border:1px solid #475569;border-radius:4px">
+        <span style="position:absolute;top:-5px;right:-5px;width:15px;height:15px;background:#ef4444;border-radius:50%;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center">✕</span>
+      `;
+      wrapper.addEventListener('click', () => { wrapper.remove(); refreshAnimation(); debouncedSave(); });
+      seqEl.appendChild(wrapper);
+      refreshAnimation();
+      if (!_suppress) debouncedSave();
+    }
+
+    // Build frame picker (0–7)
+    for (let i = 0; i <= 7; i++) {
+      const btn = document.createElement('div');
+      btn.style.cssText = 'position:relative;cursor:pointer;border:1px solid #334155;border-radius:5px;overflow:hidden;transition:border-color 0.12s';
+      btn.title = `圖框 ${i}，點擊加入序列`;
+      btn.innerHTML = `
+        <img src="${frameUrl(i)}" style="width:36px;display:block;image-rendering:pixelated">
+        <span style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:10px;color:rgba(255,255,255,.75);background:rgba(0,0,0,.5);font-family:monospace">${i}</span>
+      `;
+      btn.addEventListener('mouseenter', () => btn.style.borderColor = '#60a5fa');
+      btn.addEventListener('mouseleave', () => btn.style.borderColor = '#334155');
+      btn.addEventListener('click', () => appendFrame(i));
+      pickerEl.appendChild(btn);
+    }
+
+    initFrames.forEach(i => appendFrame(i));
+    _suppress = false;
+
+    row.querySelector('.wave-clear-btn').addEventListener('click', () => { seqEl.innerHTML = ''; refreshAnimation(); debouncedSave(); });
+    msInput.addEventListener('input', () => { refreshAnimation(); debouncedSave(); });
+    row.querySelector('.wave-weight-input').addEventListener('input', debouncedSave);
+    row.querySelector('.wave-delete-btn').addEventListener('click', () => { clearInterval(animTimer); row.remove(); debouncedSave(); });
+
+    if (container) container.appendChild(row);
+  }
+
+  function addCommandRow(cmd = '', state = 'idle', yolia_see = 0) {
+    const row = document.createElement('div');
+    row.className = 'dyn-row cmd-row';
+    row.style.display = 'grid';
+    row.style.gridTemplateColumns = '110px 1fr 80px 60px';
+    row.style.gap = '6px';
+    row.innerHTML = `
+      <input type="text" placeholder="!指令" value="${esc(cmd)}" style="width:100%">
+      ${stateSelect(state)}
+      <input type="number" value="${esc(yolia_see)}" style="width:100%" placeholder="0">
+      <button class="btn btn-secondary btn-small">刪除</button>
+    `;
+    row.querySelector('input[type=text]').addEventListener('input', debouncedPetSave);
+    row.querySelector('select').addEventListener('change', debouncedPetSave);
+    row.querySelector('input[type=number]').addEventListener('input', debouncedPetSave);
+    row.querySelector('button').addEventListener('click', () => { row.remove(); debouncedPetSave(); });
+    document.getElementById('commands-list').appendChild(row);
+  }
+
+  function savePetConfig() {
+    const yoliaStates = [...document.querySelectorAll('.state-row')].map(row => ({
+      min:   parseInt(row.querySelector('input[type=number]').value) || 0,
+      state: row.querySelector('select').value,
+    })).sort((a, b) => b.min - a.min);
+
+    const greetings = document.getElementById('pet-greetings').value
+      .split(',').map(s => s.trim()).filter(Boolean);
+
+    const commands = {};
+    document.querySelectorAll('.cmd-row').forEach(row => {
+      const cmdInput = row.querySelector('input[type=text]');
+      const numInput = row.querySelector('input[type=number]');
+      const sel      = row.querySelector('select');
+      const key      = cmdInput.value.trim();
+      if (key) commands[key] = { state: sel.value, yolia_see: parseInt(numInput.value) || 0 };
+    });
+
+    fetch('/panel/api/pet-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        yoliaStates,
+        greetings,
+        greetingResponse: document.getElementById('pet-greeting-response').value,
+        commands,
+        scale: parseFloat(document.getElementById('pet-scale').value),
+      }),
+    })
+      .then(r => r.json())
+      .then(() => showToast('已套用'))
+      .catch(() => showToast('套用失敗', true));
   }
 
   // ── Toast ──────────────────────────────────────────────────────────────────
