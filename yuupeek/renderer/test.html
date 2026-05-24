@@ -45,9 +45,6 @@
     }
     code { color: #9f9; }
 
-    /* ── Two-column guide ────────────────────────────────────────────────── */
-    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-
     /* ── Chat simulator ──────────────────────────────────────────────────── */
     #chat-log {
       height: 180px; overflow-y: auto;
@@ -106,7 +103,6 @@
     }
     #speech-bubble.show { opacity: 1; }
 
-    p.note { color: #555; margin-top: 6px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -138,57 +134,6 @@
       <input id="chat-input" placeholder="輸入聊天訊息或指令，例如 !跳…" autofocus>
       <button onclick="sendMsg()">送出</button>
     </div>
-  </div>
-
-  <!-- ── 新增指令 / 新增動畫 ──────────────────────────────────────────── -->
-  <div class="panel cols">
-    <div>
-      <h2>新增指令</h2>
-      <p class="note" style="margin-bottom:6px">編輯 <code>commands.json</code>，加一行：</p>
-      <pre>// 觸發動畫（播完自動回原狀）：
-"!指令": { "state": "動畫名", "yuushi": 0 }
-
-// 同時改幽視值：
-"!指令": { "state": "cheer", "yuushi": 10 }
-
-// 只改幽視值（不換動畫）：
-"!指令": { "yuushi": -5 }</pre>
-      <p class="note">重新整理此頁即可看到新指令。</p>
-    </div>
-    <div>
-      <h2>新增角色動畫</h2>
-      <p class="note" style="margin-bottom:6px">1. 放入圖片（PNG，從 00 開始）：</p>
-      <pre>assets/sprites/frames/
-  └── 動作名稱/
-        ├── 00.png
-        ├── 01.png
-        └── 02.png</pre>
-      <p class="note" style="margin:6px 0">2. 在 <code>renderer/character.js</code> 的 <code>ANIMATIONS</code> 加一行：</p>
-      <pre>動作名稱: {
-  srcs: frames('動作名稱', 3), // 張數
-  loop: true,   // false=播完回原狀
-  ms: 150,      // 每幀毫秒（可省略）
-},</pre>
-      <p class="note">3. 在 <code>commands.json</code> 新增對應指令即完成。</p>
-    </div>
-  </div>
-
-  <!-- ── 可用狀態一覽 ─────────────────────────────────────────────────── -->
-  <div class="panel">
-    <h2>可用動畫狀態</h2>
-    <table>
-      <thead><tr><th>狀態名</th><th>說明</th><th>loop</th><th>角色位置</th></tr></thead>
-      <tbody>
-        <tr><td>idle</td><td>閒置（幽視 &lt; 40）</td><td>✓</td><td>右側邊緣</td></tr>
-        <tr><td>peek</td><td>偷看（幽視 ≥ 40）</td><td>✓</td><td>右側</td></tr>
-        <tr><td>cheer</td><td>歡呼（幽視 ≥ 80）</td><td>✓</td><td>更靠左</td></tr>
-        <tr><td>cry</td><td>哭哭</td><td>✓</td><td>原地不動</td></tr>
-        <tr><td>eat</td><td>吃東西，播完回原狀</td><td>✗</td><td>原地不動</td></tr>
-        <tr><td>jump</td><td>跳躍，播完回原狀</td><td>✗</td><td>原地＋垂直位移</td></tr>
-        <tr><td>run_left</td><td>往左跑（移動時自動觸發）</td><td>✓</td><td>移動中</td></tr>
-        <tr><td>run_right</td><td>往右跑（移動時自動觸發）</td><td>✓</td><td>移動中</td></tr>
-      </tbody>
-    </table>
   </div>
 
 </div><!-- /#app -->
