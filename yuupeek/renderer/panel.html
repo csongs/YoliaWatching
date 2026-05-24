@@ -158,7 +158,7 @@
   <div class="guide-section">
     <h3>config.json 設定</h3>
     <ul>
-      <li><strong>modes</strong>：pet（桌面寵物）/ obs（OBS 伺服器）/ test（啟動時開啟測試頁）</li>
+      <li><strong>modes</strong>：obs（OBS 伺服器）/ test（啟動時開啟測試頁）</li>
       <li><strong>twitch.channel</strong>：你的 Twitch 頻道 ID</li>
       <li><strong>youtube.channel</strong>：你的 YouTube 頻道 handle，例如 <code>@altheayolia</code></li>
       <li><strong>commands</strong>：聊天室指令，可自訂 state 和 yolia_see 增減</li>
@@ -353,14 +353,6 @@
             ` : ''}
           </div>
 
-          <div class="card">
-            <h3>桌面寵物 ${s.pet?.visible ? badge('ok', '運行中') : badge('off', '已關閉')}</h3>
-            <div class="row" style="margin-top:12px">
-              <button class="btn btn-secondary btn-small" onclick="togglePet()">
-                ${s.pet?.visible ? '關閉寵物' : '開啟寵物'}
-              </button>
-            </div>
-          </div>
         `;
       })
       .catch(() => {
@@ -476,10 +468,6 @@
 
   function openConfig() {
     fetch('/panel/api/open-config', { method: 'POST' });
-  }
-
-  function togglePet() {
-    fetch('/panel/api/pet-toggle', { method: 'POST' }).then(() => setTimeout(refreshStatus, 300));
   }
 
   let passwordsVisible = false;

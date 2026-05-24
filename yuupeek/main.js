@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, shell, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog } = require('electron');
 
 app.commandLine.appendSwitch('disable-gpu-disk-cache');
 const path = require('path');
@@ -53,13 +53,11 @@ const userConfig    = (() => {
 })();
 const config = deepMerge(defaultConfig, userConfig);
 
-let win;
 let tray;
 const sm = createStateMachine(config);
 
 function broadcastState(payload) {
   const data = payload ?? { value: sm.yolia_see, state: sm.state };
-  if (win && !win.isDestroyed()) win.webContents.send('yolia-update', data);
   if (obsServer) {
     if (!data.animOnly) obsServer.setWelcomeData(data);
     obsServer.broadcast(data);
@@ -88,10 +86,6 @@ if (config.modes?.obs) {
       obs: {
         enabled: true,
         port:    obsServer.port() ?? config.obs?.port ?? 3000,
-      },
-      pet: {
-        enabled: config.modes?.pet ?? false,
-        visible: !!(win && !win.isDestroyed() && win.isVisible()),
       },
     }),
     getConfig: () => ({
@@ -199,20 +193,12 @@ if (config.modes?.obs) {
       fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
       const merged = { ...DEFAULT_ANIMATIONS, ...(patch ?? {}) };
       obsServer?.broadcast({ setAnimations: merged });
-      win?.webContents.send('animations-update', merged);
     },
     getVersion: () => app.getVersion(),
     userDataDir,
     openUrl: (url) => shell.openExternal(url),
     openUserDataDir: () => shell.openPath(userDataDir),
     openConfigFile: () => shell.openPath(path.join(userDataDir, 'config.json')),
-    togglePet: () => {
-      if (!win || win.isDestroyed()) {
-        createPetWindow();
-      } else {
-        win.close();
-      }
-    },
   });
   obsServer.start().then(() => {
     const port = obsServer.port();
@@ -243,21 +229,6 @@ if (config.twitch?.enabled || config.youtube?.enabled) {
   chatListener.start();
 }
 
-
-// ── Electron overlay ──────────────────────────────────────────────────────────
-function createPetWindow() {
-  if (win && !win.isDestroyed()) return;
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  win = new BrowserWindow({
-    width, height, x: 0, y: 0,
-    transparent: true, frame: false, alwaysOnTop: true,
-    skipTaskbar: true, resizable: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
-  });
-  win.setIgnoreMouseEvents(true, { forward: true });
-  win.loadFile('renderer/index.html');
-  win.setVisibleOnAllWorkspaces(true);
-}
 
 app.whenReady().then(() => {
 
@@ -296,38 +267,6 @@ app.whenReady().then(() => {
   ]));
 
 });
-
-ipcMain.on('punish', () => {
-  sm.punish();
-  broadcastState();
-});
-
-ipcMain.on('set-yolia-see', (_e, v) => {
-  sm.yolia_see = Math.max(0, Math.min(100, v));
-  sm.state     = sm.computeState();
-  broadcastState();
-});
-
-ipcMain.on('feed', () => {
-  sm.yolia_see = Math.max(0, sm.yolia_see - 15);
-  win?.webContents.send('yolia-update', { value: sm.yolia_see, state: 'eat', animOnly: true });
-  obsServer?.broadcast({ value: sm.yolia_see, state: 'eat', animOnly: true });
-  setTimeout(() => {
-    sm.state = sm.computeState();
-    broadcastState();
-  }, 3000);
-});
-
-ipcMain.on('set-click-through', (_e, on) => {
-  win?.setIgnoreMouseEvents(on, { forward: true });
-});
-
-ipcMain.on('quit', () => win?.close());
-
-ipcMain.handle('get-config', () => ({
-  greetingAnimations: config.greetingAnimations ?? [],
-  animations: { ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) },
-}));
 
 app.on('window-all-closed', () => {});
 

@@ -1,6 +1,5 @@
 {
   "modes": {
-    "pet": true,
     "obs": true,
     "test": true
   },
@@ -37,42 +36,60 @@
       "animation": "cheer",
       "yolia_see": 10,
       "response": "",
-      "match": ["!加油", "！加油"]
+      "match": [
+        "!加油",
+        "！加油"
+      ]
     },
     {
       "trigger": "command",
       "animation": "cry",
       "yolia_see": -15,
       "response": "",
-      "match": ["!哭", "！哭"]
+      "match": [
+        "!哭",
+        "！哭"
+      ]
     },
     {
       "trigger": "command",
       "animation": "eat",
       "yolia_see": 0,
       "response": "",
-      "match": ["!香菜", "！香菜"]
+      "match": [
+        "!香菜",
+        "！香菜"
+      ]
     },
     {
       "trigger": "command",
       "animation": "jump",
       "yolia_see": 0,
       "response": "",
-      "match": ["!跳", "！跳"]
+      "match": [
+        "!跳",
+        "！跳"
+      ]
     },
     {
       "trigger": "command",
       "animation": "run_right",
       "yolia_see": 0,
       "response": "",
-      "match": ["!右", "！右"]
+      "match": [
+        "!右",
+        "！右"
+      ]
     },
     {
       "trigger": "command",
       "animation": "run_left",
       "yolia_see": 0,
       "response": "",
-      "match": ["!左", "！左"]
+      "match": [
+        "!左",
+        "！左"
+      ]
     }
   ],
   "obs": {
@@ -80,7 +97,7 @@
     "scale": 1
   },
   "twitch": {
-    "enabled": false,
+    "enabled": true,
     "channel": "altheayolia"
   },
   "youtube": {
