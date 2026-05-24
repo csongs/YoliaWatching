@@ -256,6 +256,19 @@ app.whenReady().then(() => {
     panelWin.loadURL(`http://localhost:${port}/panel`);
     panelWin.setMenu(null);
     panelWin.webContents.setWindowOpenHandler(({ url }) => {
+      try {
+        const parsed = new URL(url);
+        if (parsed.hostname === 'localhost' && parsed.port === String(port)) {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              width: 1280, height: 720,
+              title: 'OBS 預覽',
+              autoHideMenuBar: true,
+            },
+          };
+        }
+      } catch {}
       shell.openExternal(url);
       return { action: 'deny' };
     });
