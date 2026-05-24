@@ -1,73 +1,91 @@
 # YoliaWatching
-桌面寵物，監控你是否在偷看 LoL 直播。支援 Electron 透明 overlay 及 OBS Browser Source 兩種模式。
 
-指令列表與即時測試請開啟 **test 頁面**：`http://localhost:3000/renderer/test.html`
+Twitch / YouTube 聊天室監控桌寵，透過 OBS Browser Source 顯示在直播畫面上。
 
 ---
 
-## 啟動
+## 啟動（開發模式）
 
 ```bash
 npm install
 npm start
 ```
 
+啟動後開啟控制面板：`http://localhost:3000/panel`
+
 ---
 
-## config.json
+## 設定檔說明
+
+### default.config.json（預設值，隨程式更新）
+
+程式內建預設值，安裝後位於程式目錄。**請勿直接編輯**，改以控制面板調整。
+
+### config.json（使用者設定，更新後保留）
+
+位於 `%APPDATA%\YoliaWatching\config.json`，只儲存與預設值不同的設定，格式如下：
 
 ```json
 {
-  "modes": {
-    "pet": true,      // Electron 透明 overlay（桌面寵物）
-    "obs": true,      // 啟動 OBS Browser Source 伺服器
-    "test": false     // 啟動時自動開啟 test 頁面
-  },
   "obs": {
     "port": 3000,
-    "scale": 2        // 角色尺寸倍率（1 / 1.5 / 2 … 4）
+    "scale": 2
   },
-  "yoliaStates": [
-    { "min": 80, "state": "cheer" },
-    { "min": 40, "state": "peek"  },
-    { "min": 0,  "state": "idle"  }
-  ],
   "twitch": {
     "enabled": true,
-    "channel": "頻道名稱"       // 你的 Twitch 頻道 ID
+    "channel": "你的頻道名稱"
   },
   "youtube": {
     "enabled": false,
-    "channel": "@頻道handle"    // 你的 YouTube 頻道 handle，例如 @altheayolia
+    "channel": "@你的頻道handle"
   },
-  "greetings": ["安安", "午安", "早安", "晚安"],  // 觸發揮手動畫的關鍵詞
-  "greetingResponse": "{user} 安安~",              // 對話泡泡格式，{user}=觀眾名，{word}=符合的詞
-  "greetingAnimations": [                          // 揮手動畫變體（依 weight 隨機抽選）
+  "interactions": [
+    {
+      "id": "t_ab12",
+      "trigger": "threshold",
+      "min": 80,
+      "state": "cheer"
+    },
+    {
+      "id": "k_cd34",
+      "trigger": "keyword",
+      "keywords": "安安,午安,早安",
+      "state": "wave",
+      "response": "{user} 安安~"
+    },
+    {
+      "id": "c_ef56",
+      "trigger": "command",
+      "command": "!加油",
+      "state": "cheer",
+      "yolia_see": 10,
+      "cost": 0
+    }
+  ],
+  "greetingAnimations": [
     { "frames": [0,1,2,3,2,1,0], "ms": 200, "weight": 80 },
     { "frames": [4,5,6,7,6,5,4], "ms": 200, "weight": 20 }
-  ],
-  "commands": {
-    "!加油": { "state": "cheer", "yolia_see": 10  },
-    "!哭":   { "state": "cry",   "yolia_see": -15 }
-  }
+  ]
 }
 ```
 
-**yoliaStates**：依 `yolia_see` 值決定角色狀態，由高到低匹配，可自由新增或調整門檻。
+**interactions 三種觸發類型：**
 
-**greetings**：觀眾訊息包含這些詞時觸發揮手動畫。設為 `[]` 可停用。
+| trigger | 說明 |
+|---|---|
+| `threshold` | 幽視值門檻，`min` 以上時進入指定 `state` |
+| `keyword` | 觀眾訊息含關鍵字時觸發，多關鍵字用逗號分隔 |
+| `command` | 指令觸發，可設定 `yolia_see` 增減與 `cost` 消耗門檻 |
 
-**greetingResponse**：對話泡泡文字模板。`{user}` 替換為觀眾名，`{word}` 替換為符合的關鍵詞。
+### animations.json（動畫自訂，更新後保留）
 
-**greetingAnimations**：揮手動畫變體，依 `weight` 比例隨機抽選。`frames` 為 `waving/` 資料夾的幀號，`ms` 為每幀毫秒。
-
-**commands**：聊天室指令自訂。`state` 為觸發的動畫，`yolia_see` 為數值增減（可省略）。非指令的一般訊息每則 +1。
+位於 `%APPDATA%\YoliaWatching\animations.json`，只儲存與內建不同的動畫設定。
 
 ---
 
 ## .env
 
-放在 `.env`，不進版本庫。
+放在 `%APPDATA%\YoliaWatching\.env`，不進版本庫。
 
 ```
 TWITCH_OAUTH=oauth:xxxxxxxxxxxxxxxxxxxxxxxx
@@ -75,33 +93,20 @@ YOUTUBE_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXX
 ```
 
 ### Twitch OAuth Token
-用來讓程式連線讀取你的聊天室。
 
 1. 前往 [twitchtokengenerator.com](https://twitchtokengenerator.com/)
 2. 選擇 **Bot Chat Token**
 3. 授權後複製 **ACCESS TOKEN**
 4. 填入 `TWITCH_OAUTH`，格式為 `oauth:你的token`
 
-**測試方式（不需要真的開播）**
-
-在 OBS 串流設定中，把原本的 Stream Key 最後加上 `?bandwidthtest=true`：
-```
-live_12345678_xxxxxxxxxxxx?bandwidthtest=true
-```
-如果是帳號直連模式，可勾選「**啟用頻寬測試模式 (Enable Bandwidth Test Mode)**」，效果相同。
-這樣可以模擬開播但不會實際對觀眾直播，程式即可偵測到聊天室。
-
 ### YouTube Data API Key
-用來查詢頻道直播狀態並讀取 Live Chat。
 
 1. 前往 [Google Cloud Console](https://console.cloud.google.com/)
 2. 建立專案 → 啟用 **YouTube Data API v3**
 3. 建立憑證 → **API 金鑰**
 4. 填入 `YOUTUBE_API_KEY`
 
-> YouTube API 每日有 10,000 quota 限制。本程式在直播中約用 500–2,000 quota/小時，離線時每 30 秒查詢一次直播狀態。
->
-> 若遇到配額錯誤，請前往 Google Cloud Console，選擇專案後前往「IAM 與管理 → 配額與系統限制」，或從「API 和服務 → 儀表板」找到 YouTube Data API v3，檢查每日使用量與配額狀態。
+> YouTube API 每日有 10,000 quota 限制，直播中約消耗 500–2,000 quota/小時。
 
 ---
 
@@ -109,4 +114,35 @@ live_12345678_xxxxxxxxxxxx?bandwidthtest=true
 
 將 `http://localhost:3000` 加入 OBS（建議 1920×1080，背景透明）。
 
-右鍵 Source → **Interact** 可操作 HUD 按鈕及拖曳角色。
+右鍵 Source → **Interact** 可操作控制按鈕及拖曳角色。
+
+---
+
+## 發布新版本
+
+### 前置需求
+
+- 設定環境變數 `GH_TOKEN`（GitHub Personal Access Token，需有 `repo` 權限）
+
+### 流程
+
+1. 更新 `package.json` 的 `version` 欄位（例如 `1.0.3`）
+2. Commit 版本變更
+3. 執行發布指令：
+
+```bash
+cd yuupeek
+npm run release
+```
+
+`npm run release` 會自動：
+- 打 git tag（例如 `v1.0.3`）並 push 到 GitHub
+- 打包 Windows 安裝檔（`.exe`）
+- 上傳到 GitHub Releases
+
+### 本機測試打包（不發布）
+
+```bash
+npm run build        # 產生安裝檔到 dist/
+npm run build:dir    # 解壓資料夾到 dist/win-unpacked/（較快）
+```
