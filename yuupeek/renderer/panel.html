@@ -91,7 +91,10 @@
   <div class="tab" onclick="showTab('status')">模組狀態</div>
   <div class="tab" onclick="showTab('pet')">桌寵設定</div>
   <div class="tab" onclick="showTab('settings')">設定</div>
-  <span style="margin-left:auto;padding:0 16px;color:#475569;font-size:11px;display:flex;align-items:center;white-space:nowrap;pointer-events:none">Ctrl + 滾輪 縮放</span>
+  <span style="margin-left:auto;display:flex;align-items:center;gap:12px;padding:0 16px;white-space:nowrap;pointer-events:none">
+    <span style="color:#475569;font-size:11px">Ctrl + 滾輪 縮放</span>
+    <span id="version-badge" style="color:#334155;font-size:11px;font-family:'Consolas',monospace"></span>
+  </span>
 </div>
 
 <!-- ── 安裝說明 ── -->
@@ -450,7 +453,11 @@
   function loadVersion() {
     fetch('/panel/api/version')
       .then(r => r.json())
-      .then(d => { document.getElementById('current-version').textContent = 'v' + d.current; });
+      .then(d => {
+        const v = 'v' + d.current;
+        document.getElementById('current-version').textContent = v;
+        document.getElementById('version-badge').textContent = v;
+      });
   }
 
   function checkUpdate() {
@@ -687,6 +694,9 @@ async function resetPetConfig() {
       .then(() => showToast('已套用'))
       .catch(() => showToast('套用失敗', true));
   }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  loadVersion();
 
   // ── Toast ──────────────────────────────────────────────────────────────────
   function showToast(msg, isError = false) {
