@@ -322,13 +322,32 @@
   }
 
   function refreshStatus() {
-    fetch('/panel/api/status')
-      .then(r => r.json())
-      .then(s => {
+    Promise.all([
+      fetch('/panel/api/status').then(r => r.json()),
+      fetch('/panel/api/metrics').then(r => r.json()),
+    ])
+      .then(([s, m]) => {
         const port = s.obs?.port ?? 3000;
         const youtubeStatusBadge = s.youtube?.error
           ? badge('warn', '配額已用完')
           : moduleBadge(s.youtube?.enabled, s.youtube?.live, '直播中', '等待直播');
+
+        const TYPE_LABEL = { Browser: 'Main', Renderer: 'Renderer', 'GPU Process': 'GPU' };
+        const metricsRows = (m.processes ?? []).map(p => {
+          const cpu   = (p.cpu?.percentCPUUsage ?? 0).toFixed(1);
+          const wakes = p.cpu?.idleWakeupsPerSecond ?? 0;
+          const mem   = p.memoryMB ?? 0;
+          const label = TYPE_LABEL[p.type] ?? p.type;
+          const wakeColor = wakes > 60 ? '#fb923c' : wakes > 20 ? '#fbbf24' : '#4ade80';
+          return `
+            <div style="display:flex;gap:16px;align-items:center;padding:6px 0;border-bottom:1px solid #1e2130;font-size:13px">
+              <span style="width:80px;color:#cbd5e1;font-weight:600">${label}</span>
+              <span style="width:70px;color:#94a3b8">CPU <strong style="color:#e2e8f0">${cpu}%</strong></span>
+              <span style="width:70px;color:#94a3b8">RAM <strong style="color:#e2e8f0">${mem} MB</strong></span>
+              <span style="color:#94a3b8">喚醒 <strong style="color:${wakeColor}">${wakes}/s</strong></span>
+            </div>`;
+        }).join('');
+
         document.getElementById('status-cards').innerHTML = `
           <div class="card">
             <h3>Twitch ${moduleBadge(s.twitch?.enabled, s.twitch?.connected, '已連線', '未連線')}</h3>
@@ -353,6 +372,10 @@
             ` : ''}
           </div>
 
+          <div class="card">
+            <h3>進程效能 <span style="font-size:11px;color:#475569;font-weight:400">每 3 秒更新・喚醒次數偏高（橘/紅）代表有不必要的背景活動</span></h3>
+            ${metricsRows || '<span style="color:#64748b;font-size:13px">無資料</span>'}
+          </div>
         `;
       })
       .catch(() => {

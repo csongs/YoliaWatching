@@ -224,6 +224,12 @@ function createObsServer(config, rootDir) {
       return;
     }
 
+    if (req.url === '/panel/api/metrics' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(panelHandlers?.getMetrics?.() ?? {}));
+      return;
+    }
+
     // ── Existing routes ─────────────────────────────────────────────────────────
 
     if (req.url === '/obs-config') {

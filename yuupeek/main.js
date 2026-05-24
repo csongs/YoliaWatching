@@ -194,6 +194,13 @@ if (config.modes?.obs) {
       const merged = { ...DEFAULT_ANIMATIONS, ...(patch ?? {}) };
       obsServer?.broadcast({ setAnimations: merged });
     },
+    getMetrics: () => ({
+      processes: app.getAppMetrics().map(p => ({
+        type:     p.type,
+        cpu:      p.cpu,
+        memoryMB: Math.round(p.memory.workingSetSize / 1024),
+      })),
+    }),
     getVersion: () => app.getVersion(),
     userDataDir,
     openUrl: (url) => shell.openExternal(url),
