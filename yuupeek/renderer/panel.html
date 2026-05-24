@@ -73,9 +73,6 @@
     }
     .dyn-row input[type=text] { flex: 1; }
     .dyn-row input[type=number] { width: 72px; }
-    input[type=number] { -moz-appearance: textfield; appearance: textfield; }
-    input[type=number]::-webkit-inner-spin-button,
-    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     .dyn-row input:focus { outline: none; border-color: #60a5fa; }
     .row-label { color: #64748b; font-size: 12px; white-space: nowrap; }
 
@@ -196,8 +193,7 @@
     <div id="interactions-list"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn btn-secondary btn-small" onclick="addInteractionRow();debouncedPetSave()">+ 新增互動</button>
-      <button class="btn btn-secondary btn-small" style="margin-left:auto" onclick="saveAsDefault()">設為預設值</button>
-      <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" onclick="resetPetConfig()">還原預設</button>
+      <button class="btn btn-secondary btn-small" style="margin-left:auto;color:#f87171;border-color:#f87171" onclick="resetPetConfig()">還原預設</button>
     </div>
   </div>
 
@@ -527,6 +523,12 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  function generateId(trigger) {
+    const p = trigger === 'threshold' ? 't' : trigger === 'keyword' ? 'k' : 'c';
+    const r = Array.from({length: 4}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+    return `${p}_${r}`;
+  }
+
   function stateSelect(selected, opts) {
     const list = opts ?? STATE_OPTIONS;
     return `<select>${list.map(s => `<option value="${s}"${s === selected ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
@@ -554,12 +556,13 @@
     const row = document.createElement('div');
     row.className = 'interaction-row';
     row.style.cssText = 'background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:12px;margin-bottom:10px';
+    row.dataset.id = interaction.id ?? generateId(trigger);
 
     function buildFields(t, src) {
       if (t === 'threshold') {
         return `
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            幽視值 ≥ <input type="number" class="int-min" min="0" max="100" value="${esc(src.min ?? 0)}" style="width:60px">
+            幽視值 ≥ <input type="text" inputmode="numeric" class="int-min" value="${esc(src.min ?? 0)}" style="width:60px">
           </label>
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
             對應狀態 ${stateSelect(src.state ?? 'idle')}
@@ -578,7 +581,7 @@
           </div>
           <div style="display:flex;gap:10px;align-items:center">
             <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-              幽視值± <input type="number" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
+              幽視值± <input type="text" inputmode="numeric" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
             </label>
             <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
               回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user} 安安~" style="flex:1">
@@ -599,10 +602,10 @@
         </div>
         <div style="display:flex;gap:10px;align-items:center">
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            幽視值± <input type="number" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
+            幽視值± <input type="text" inputmode="numeric" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
           </label>
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            需消耗幽視值 <input type="number" class="int-cost" value="${esc(costVal)}" placeholder="—" style="width:60px">
+            需消耗幽視值 <input type="text" inputmode="numeric" class="int-cost" value="${esc(costVal)}" placeholder="—" style="width:60px">
           </label>
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
             回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user}: !加油" style="flex:1">
@@ -640,8 +643,10 @@
 
   function readInteractionRow(row) {
     const trigger = row.querySelector('.int-trigger').value;
+    const id      = row.dataset.id || generateId(trigger);
     if (trigger === 'threshold') {
       return {
+        id,
         trigger: 'threshold',
         min:   parseInt(row.querySelector('.int-min')?.value)    || 0,
         state: row.querySelector('.int-fields select')?.value   ?? 'idle',
@@ -649,6 +654,7 @@
     }
     const costRaw = row.querySelector('.int-cost')?.value;
     const obj = {
+      id,
       trigger,
       animation: row.querySelector('.int-fields select')?.value ?? (trigger === 'keyword' ? 'wave' : 'idle'),
       yolia_see: parseFloat(row.querySelector('.int-yolia')?.value) || 0,
@@ -660,19 +666,7 @@
     return obj;
   }
 
-  async function saveAsDefault() {
-    if (!confirm('將目前的互動設定設為預設值？（「還原預設」將回到此狀態）')) return;
-    const interactions = [...document.querySelectorAll('.interaction-row')].map(readInteractionRow);
-    const scale = parseFloat(document.getElementById('pet-scale').value);
-    await fetch('/panel/api/default-pet-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interactions, scale }),
-    });
-    showToast('已設為預設值');
-  }
-
-  async function resetPetConfig() {
+async function resetPetConfig() {
     if (!confirm('確定要還原所有互動設定為預設值嗎？')) return;
     const data = await fetch('/panel/api/default-pet-config').then(r => r.json());
     document.getElementById('interactions-list').innerHTML = '';

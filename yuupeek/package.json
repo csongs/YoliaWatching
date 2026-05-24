@@ -39,7 +39,7 @@
       "assets/**"
     ],
     "extraFiles": [
-      { "from": "config.json", "to": "config.json" }
+      { "from": "default.config.json", "to": "default.config.json" }
     ],
     "nsis": {
       "oneClick": true,

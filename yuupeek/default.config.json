@@ -5,21 +5,25 @@
   },
   "interactions": [
     {
+      "id": "t_sxry",
       "trigger": "threshold",
       "min": 80,
       "state": "cheer"
     },
     {
+      "id": "t_q0dj",
       "trigger": "threshold",
       "min": 40,
       "state": "peek"
     },
     {
+      "id": "t_4nku",
       "trigger": "threshold",
       "min": 0,
       "state": "idle"
     },
     {
+      "id": "k_7dwk",
       "trigger": "keyword",
       "animation": "wave",
       "yolia_see": 0,
@@ -32,6 +36,7 @@
       ]
     },
     {
+      "id": "c_nzr2",
       "trigger": "command",
       "animation": "cheer",
       "yolia_see": 10,
@@ -42,6 +47,7 @@
       ]
     },
     {
+      "id": "c_vasc",
       "trigger": "command",
       "animation": "cry",
       "yolia_see": -15,
@@ -54,6 +60,7 @@
       ]
     },
     {
+      "id": "c_l4qs",
       "trigger": "command",
       "animation": "eat",
       "yolia_see": 0,
@@ -62,9 +69,10 @@
         "!香菜",
         "！香菜"
       ],
-      "cost": 50
+      "cost": 10
     },
     {
+      "id": "c_cf54",
       "trigger": "command",
       "animation": "jump",
       "yolia_see": 0,
@@ -75,6 +83,7 @@
       ]
     },
     {
+      "id": "c_fkdp",
       "trigger": "command",
       "animation": "run_right",
       "yolia_see": 0,
@@ -85,6 +94,7 @@
       ]
     },
     {
+      "id": "c_mw2h",
       "trigger": "command",
       "animation": "watch_excited",
       "yolia_see": 0,
@@ -134,147 +144,5 @@
       "ms": 200,
       "weight": 20
     }
-  ],
-  "animations": {
-    "idle": {
-      "folder": "idle",
-      "frames": [
-        0,
-        2,
-        4,
-        5,
-        4,
-        2,
-        0,
-        0,
-        1,
-        0
-      ],
-      "ms": 150,
-      "loop": false
-    },
-    "peek": {
-      "folder": "review",
-      "frames": [
-        2,
-        2,
-        2,
-        2,
-        4,
-        2,
-        2,
-        2,
-        3,
-        3,
-        3
-      ],
-      "ms": 250,
-      "loop": false
-    },
-    "cheer": {
-      "folder": "cheer",
-      "frames": [
-        0,
-        2,
-        3,
-        5,
-        0,
-        5
-      ],
-      "ms": 150,
-      "loop": false
-    },
-    "cry": {
-      "folder": "cry",
-      "frames": [
-        0,
-        7,
-        7,
-        7,
-        0,
-        1,
-        1,
-        1,
-        0,
-        0
-      ],
-      "ms": 150,
-      "loop": false
-    },
-    "eat": {
-      "folder": "cilantro",
-      "frames": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        7
-      ],
-      "ms": 250,
-      "loop": false
-    },
-    "jump": {
-      "folder": "jumping",
-      "frames": [
-        0,
-        1,
-        2,
-        3
-      ],
-      "ms": 250,
-      "loop": false
-    },
-    "run_left": {
-      "folder": "running-left",
-      "frames": [
-        0,
-        3,
-        4,
-        5,
-        7
-      ],
-      "ms": 150,
-      "loop": true
-    },
-    "run_right": {
-      "folder": "running-right",
-      "frames": [
-        0,
-        3,
-        4,
-        5,
-        7
-      ],
-      "ms": 150,
-      "loop": true
-    },
-    "watch-excited": {
-      "folder": "watch-excited",
-      "frames": [
-        0,
-        1,
-        2,
-        2,
-        1,
-        0
-      ],
-      "ms": 200,
-      "loop": false
-    },
-    "watch_excited": {
-      "folder": "watch-excited",
-      "frames": [
-        0,
-        1,
-        2,
-        3
-      ],
-      "ms": 200,
-      "loop": false
-    }
-  }
+  ]
 }

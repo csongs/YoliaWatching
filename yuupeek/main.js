@@ -24,7 +24,7 @@ if (app.isPackaged) {
   fs.mkdirSync(userDataDir, { recursive: true });
   const userCfg = path.join(userDataDir, 'config.json');
   if (!fs.existsSync(userCfg)) {
-    fs.copyFileSync(path.join(appDir, 'config.json'), userCfg);
+    fs.copyFileSync(path.join(appDir, 'default.config.json'), userCfg);
   }
 }
 
@@ -47,12 +47,23 @@ const DEFAULT_ANIMATIONS = {
   watch_excited:  { folder: 'watch-excited', frames: [0,0,0,1,2,1,2,1,2,3,3,3,3], ms: 300,  loop: false },
 };
 
-const defaultConfig = JSON.parse(fs.readFileSync(path.join(appDir, 'config.json'), 'utf8'));
+const defaultConfig = JSON.parse(fs.readFileSync(path.join(appDir, 'default.config.json'), 'utf8'));
 const userConfig    = (() => {
   try { return JSON.parse(fs.readFileSync(path.join(userDataDir, 'config.json'), 'utf8')); }
   catch { return {}; }
 })();
 const config = deepMerge(defaultConfig, userConfig);
+
+function readUserCfg(p) {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return {}; }
+}
+
+// User animation overrides live in animations.json (separate from config.json)
+const animationsPath = path.join(userDataDir, 'animations.json');
+let userAnimations = (() => {
+  try { return JSON.parse(fs.readFileSync(animationsPath, 'utf8')); }
+  catch { return {}; }
+})();
 
 let tray;
 const sm = createStateMachine(config);
@@ -99,7 +110,7 @@ if (config.modes?.obs) {
       scale:              defaultConfig.obs?.scale         ?? 1,
     }),
     setDefaultPetConfig: (patch) => {
-      const cfgPath = path.join(appDir, 'config.json');
+      const cfgPath = path.join(appDir, 'default.config.json');
       const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
       if (patch.interactions       !== undefined) { raw.interactions       = patch.interactions;       defaultConfig.interactions       = patch.interactions; }
       if (patch.greetingAnimations !== undefined) { raw.greetingAnimations = patch.greetingAnimations; defaultConfig.greetingAnimations = patch.greetingAnimations; }
@@ -113,7 +124,7 @@ if (config.modes?.obs) {
     }),
     savePetConfig: (patch) => {
       const cfgPath = path.join(userDataDir, 'config.json');
-      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      const raw = readUserCfg(cfgPath);
       let chatNeedsRestart = false;
 
       if (patch.interactions !== undefined) {
@@ -154,7 +165,7 @@ if (config.modes?.obs) {
     },
     saveConfig: (patch) => {
       const cfgPath = path.join(userDataDir, 'config.json');
-      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      const raw = readUserCfg(cfgPath);
       if (patch.twitch) {
         raw.twitch = raw.twitch ?? {};
         config.twitch = config.twitch ?? {};
@@ -189,24 +200,28 @@ if (config.modes?.obs) {
       }
     },
     getAnimations: () => ({
-      animations: { ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) },
+      animations: { ...DEFAULT_ANIMATIONS, ...userAnimations },
       defaults:   DEFAULT_ANIMATIONS,
     }),
     saveAnimations: ({ animations: patch, greetingAnimations } = {}) => {
-      const cfgPath = path.join(userDataDir, 'config.json');
-      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
       if (patch !== undefined) {
-        raw.animations = patch;
-        config.animations = patch;
+        // Only persist keys that differ from DEFAULT_ANIMATIONS
+        const overrides = {};
+        for (const [k, v] of Object.entries(patch)) {
+          if (JSON.stringify(v) !== JSON.stringify(DEFAULT_ANIMATIONS[k])) overrides[k] = v;
+        }
+        userAnimations = overrides;
+        fs.writeFileSync(animationsPath, JSON.stringify(overrides, null, 2), 'utf8');
       }
-      if (greetingAnimations !== null && greetingAnimations !== undefined) {
+      if (greetingAnimations != null) {
+        const cfgPath = path.join(userDataDir, 'config.json');
+        const raw = readUserCfg(cfgPath);
         raw.greetingAnimations = greetingAnimations;
         config.greetingAnimations = greetingAnimations;
+        fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
         obsServer?.broadcast({ setWaveVariants: greetingAnimations });
       }
-      fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
-      const merged = { ...DEFAULT_ANIMATIONS, ...(patch ?? {}) };
-      obsServer?.broadcast({ setAnimations: merged });
+      obsServer?.broadcast({ setAnimations: { ...DEFAULT_ANIMATIONS, ...userAnimations } });
     },
     getMetrics: () => {
       const winMap = {};

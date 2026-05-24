@@ -19,7 +19,7 @@ function makeHandler(root) {
   return (req, res) => {
     if (req.url === '/commands.json') {
       try {
-        const cfg = JSON.parse(fs.readFileSync(path.join(root, 'config.json'), 'utf8'));
+        const cfg = JSON.parse(fs.readFileSync(path.join(root, 'default.config.json'), 'utf8'));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           commands:    cfg.commands    ?? {},
