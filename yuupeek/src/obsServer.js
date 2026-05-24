@@ -251,8 +251,6 @@ function createObsServer(config, rootDir) {
     let filePath;
     if (req.url === '/' || req.url === '/index.html') {
       filePath = path.join(root, 'renderer', 'obs-overlay.html');
-    } else if (req.url === '/hud') {
-      filePath = path.join(root, 'renderer', 'obs-hud.html');
     } else {
       filePath = path.join(root, req.url);
     }

@@ -369,7 +369,6 @@
             <h3>OBS Server ${s.obs?.enabled ? badge('ok', '運行中') : badge('off', '停用')}</h3>
             ${s.obs?.enabled ? `
               <div class="row">OBS Overlay：<a href="http://localhost:${port}" target="_blank">http://localhost:${port}</a></div>
-              <div class="row">HUD：<a href="http://localhost:${port}/hud" target="_blank">http://localhost:${port}/hud</a></div>
               <div class="row" style="margin-top:12px">
                 <button class="btn btn-secondary btn-small" onclick="window.open('http://localhost:${port}/renderer/test.html')">開啟測試頁面</button>
               </div>
