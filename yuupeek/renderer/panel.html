@@ -332,19 +332,23 @@
           ? badge('warn', '配額已用完')
           : moduleBadge(s.youtube?.enabled, s.youtube?.live, '直播中', '等待直播');
 
-        const TYPE_LABEL = { Browser: 'Main', Renderer: 'Renderer', 'GPU Process': 'GPU' };
+        const TYPE_LABEL = { Browser: 'Main', Renderer: 'Tab', 'GPU Process': 'GPU' };
         const metricsRows = (m.processes ?? []).map(p => {
           const cpu   = (p.cpu?.percentCPUUsage ?? 0).toFixed(1);
           const wakes = p.cpu?.idleWakeupsPerSecond ?? 0;
           const mem   = p.memoryMB ?? 0;
           const label = TYPE_LABEL[p.type] ?? p.type;
           const wakeColor = wakes > 60 ? '#fb923c' : wakes > 20 ? '#fbbf24' : '#4ade80';
+          const winInfo = p.window
+            ? `<span style="color:#475569;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px" title="${esc(p.window.url)}">${esc(p.window.title || p.window.url)}</span>`
+            : '';
           return `
             <div style="display:flex;gap:16px;align-items:center;padding:6px 0;border-bottom:1px solid #1e2130;font-size:13px">
-              <span style="width:80px;color:#cbd5e1;font-weight:600">${label}</span>
+              <span style="width:60px;color:#cbd5e1;font-weight:600">${label}</span>
               <span style="width:70px;color:#94a3b8">CPU <strong style="color:#e2e8f0">${cpu}%</strong></span>
               <span style="width:70px;color:#94a3b8">RAM <strong style="color:#e2e8f0">${mem} MB</strong></span>
-              <span style="color:#94a3b8">喚醒 <strong style="color:${wakeColor}">${wakes}/s</strong></span>
+              <span style="color:#94a3b8;width:90px">喚醒 <strong style="color:${wakeColor}">${wakes}/s</strong></span>
+              ${winInfo}
             </div>`;
         }).join('');
 

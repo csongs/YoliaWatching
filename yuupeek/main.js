@@ -194,13 +194,21 @@ if (config.modes?.obs) {
       const merged = { ...DEFAULT_ANIMATIONS, ...(patch ?? {}) };
       obsServer?.broadcast({ setAnimations: merged });
     },
-    getMetrics: () => ({
-      processes: app.getAppMetrics().map(p => ({
-        type:     p.type,
-        cpu:      p.cpu,
-        memoryMB: Math.round(p.memory.workingSetSize / 1024),
-      })),
-    }),
+    getMetrics: () => {
+      const winMap = {};
+      BrowserWindow.getAllWindows().forEach(w => {
+        try { winMap[w.webContents.getOSProcessId()] = { title: w.getTitle(), url: w.webContents.getURL() }; } catch {}
+      });
+      return {
+        processes: app.getAppMetrics().map(p => ({
+          type:     p.type,
+          pid:      p.pid,
+          cpu:      p.cpu,
+          memoryMB: Math.round(p.memory.workingSetSize / 1024),
+          window:   winMap[p.pid] ?? null,
+        })),
+      };
+    },
     getVersion: () => app.getVersion(),
     userDataDir,
     openUrl: (url) => shell.openExternal(url),
@@ -247,6 +255,10 @@ app.whenReady().then(() => {
     panelWin = new BrowserWindow({ width: 860, height: 660, title: 'YoliaWatching 控制面板', webPreferences: { partition: 'in-memory-panel' } });
     panelWin.loadURL(`http://localhost:${port}/panel`);
     panelWin.setMenu(null);
+    panelWin.webContents.setWindowOpenHandler(({ url }) => {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    });
     let quitting = false;
     panelWin.on('close', async (e) => {
       if (quitting) return;
