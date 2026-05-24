@@ -209,6 +209,21 @@ function createObsServer(config, rootDir) {
       return;
     }
 
+    if (req.url === '/panel/api/default-pet-config' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(panelHandlers?.getDefaultPetConfig?.() ?? {}));
+      return;
+    }
+
+    if (req.url === '/panel/api/default-pet-config' && req.method === 'POST') {
+      readBody(req).then(body => {
+        panelHandlers?.setDefaultPetConfig?.(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
     if (req.url === '/panel/api/pet-config' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(panelHandlers?.getPetConfig?.() ?? {}));

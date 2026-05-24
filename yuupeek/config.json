@@ -48,7 +48,9 @@
       "response": "",
       "match": [
         "!哭",
-        "！哭"
+        "！哭",
+        "!主播",
+        "!分數"
       ]
     },
     {
@@ -59,7 +61,8 @@
       "match": [
         "!香菜",
         "！香菜"
-      ]
+      ],
+      "cost": 50
     },
     {
       "trigger": "command",
@@ -83,12 +86,12 @@
     },
     {
       "trigger": "command",
-      "animation": "run_left",
+      "animation": "watch_excited",
       "yolia_see": 0,
       "response": "",
       "match": [
-        "!左",
-        "！左"
+        "!幽視",
+        "！幽視"
       ]
     }
   ],
@@ -249,16 +252,26 @@
       "ms": 150,
       "loop": true
     },
-    "wave": {
-      "folder": "waving",
+    "watch-excited": {
+      "folder": "watch-excited",
       "frames": [
         0,
         1,
         2,
-        3,
         2,
         1,
         0
+      ],
+      "ms": 200,
+      "loop": false
+    },
+    "watch_excited": {
+      "folder": "watch-excited",
+      "frames": [
+        0,
+        1,
+        2,
+        3
       ],
       "ms": 200,
       "loop": false

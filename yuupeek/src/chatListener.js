@@ -28,11 +28,11 @@ function createChatListener(config, sm, broadcast) {
     if (cmd) {
       // Cost gate
       if (cmd.cost !== undefined && sm.yolia_see < cmd.cost) {
-        const diff   = Math.ceil(cmd.cost - sm.yolia_see);
         const speech = username
-          ? `${username} 幽視值不足，還差 ${diff}！`
-          : `幽視值不足，還差 ${diff}！`;
+          ? `${username} 幽視值不足，需要 ${cmd.cost}！`
+          : `幽視值不足，需要 ${cmd.cost}！`;
         broadcast({ value: sm.yolia_see, state: sm.state, speech });
+        setTimeout(() => broadcast({ value: sm.yolia_see, state: sm.state }), 3000);
         return;
       }
       if (cmd.cost      !== undefined) sm.yolia_see = Math.max(0, sm.yolia_see - cmd.cost);
@@ -109,6 +109,7 @@ function createChatListener(config, sm, broadcast) {
   let notLiveLogged  = false;
   let lastSearchAt   = 0;
   const SEARCH_INTERVAL_MS = 30_000;
+  let youtubeClient  = null;
 
   async function resolveLiveVideoId(youtube) {
     const ch = config.youtube.channel;
@@ -140,7 +141,8 @@ function createChatListener(config, sm, broadcast) {
       return { pageToken, delayMs: SEARCH_INTERVAL_MS };
     }
 
-    const youtube = google.youtube({ version: 'v3', auth: process.env.YOUTUBE_API_KEY });
+    if (!youtubeClient) youtubeClient = google.youtube({ version: 'v3', auth: process.env.YOUTUBE_API_KEY });
+    const youtube = youtubeClient;
 
     try {
       if (!liveVideoId) {

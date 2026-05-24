@@ -73,6 +73,9 @@
     }
     .dyn-row input[type=text] { flex: 1; }
     .dyn-row input[type=number] { width: 72px; }
+    input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     .dyn-row input:focus { outline: none; border-color: #60a5fa; }
     .row-label { color: #64748b; font-size: 12px; white-space: nowrap; }
 
@@ -191,7 +194,11 @@
     <h3>互動設定</h3>
     <p style="color:#64748b;font-size:12px;margin-bottom:14px">設定所有觸發條件與對應動作。<code style="font-size:11px">門檻</code> 讓觀眾需要累積幽視值才能兌換指令，不足時角色會說明。</p>
     <div id="interactions-list"></div>
-    <button class="btn btn-secondary btn-small" style="margin-top:12px" onclick="addInteractionRow();debouncedPetSave()">+ 新增互動</button>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-secondary btn-small" onclick="addInteractionRow();debouncedPetSave()">+ 新增互動</button>
+      <button class="btn btn-secondary btn-small" style="margin-left:auto" onclick="saveAsDefault()">設為預設值</button>
+      <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" onclick="resetPetConfig()">還原預設</button>
+    </div>
   </div>
 
 </div>
@@ -514,7 +521,7 @@
 
 
   // ── Pet config tab ────────────────────────────────────────────────────────
-  const STATE_OPTIONS = ['idle', 'peek', 'cheer', 'cry', 'eat', 'jump', 'run_right', 'run_left'];
+  let STATE_OPTIONS = ['idle', 'peek', 'cheer', 'cry', 'eat', 'jump', 'run_left', 'run_right', 'wave'];
 
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -526,9 +533,13 @@
   }
 
   function loadPetConfig() {
-    fetch('/panel/api/pet-config')
-      .then(r => r.json())
-      .then(data => {
+    Promise.all([
+      fetch('/panel/api/pet-config').then(r => r.json()),
+      fetch('/panel/api/animations').then(r => r.json()),
+    ])
+      .then(([data, animData]) => {
+        const names = [...new Set(Object.keys(animData.animations ?? animData))];
+        if (names.length) STATE_OPTIONS = names;
         document.getElementById('pet-scale').value = String(data.scale ?? 2);
         const list = document.getElementById('interactions-list');
         list.innerHTML = '';
@@ -539,7 +550,7 @@
 
   function addInteractionRow(interaction = {}) {
     const trigger   = interaction.trigger ?? 'threshold';
-    const ANIM_OPTS = [...STATE_OPTIONS, 'wave'];
+    const ANIM_OPTS = [...new Set(STATE_OPTIONS)];
     const row = document.createElement('div');
     row.className = 'interaction-row';
     row.style.cssText = 'background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:12px;margin-bottom:10px';
@@ -557,38 +568,46 @@
       if (t === 'keyword') {
         const matchRaw = Array.isArray(src.match) ? src.match.join(',') : (src.match ?? '');
         return `
-          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1;min-width:150px">
-            關鍵詞（逗號） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="安安,早安" style="flex:1">
-          </label>
-          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            動畫 ${stateSelect(src.animation ?? 'wave', ANIM_OPTS)}
-          </label>
-          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            幽視值± <input type="number" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
-          </label>
-          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1;min-width:150px">
-            回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user} 安安~" style="flex:1">
-          </label>`;
+          <div style="display:flex;gap:10px;align-items:center">
+            <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
+              關鍵詞（逗號） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="安安,早安" style="flex:1">
+            </label>
+            <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+              動畫 ${stateSelect(src.animation ?? 'wave', ANIM_OPTS)}
+            </label>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+              幽視值± <input type="number" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
+            </label>
+            <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
+              回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user} 安安~" style="flex:1">
+            </label>
+          </div>`;
       }
       // command
       const costVal  = src.cost != null ? src.cost : '';
       const matchRaw = Array.isArray(src.match) ? src.match.join(',') : (src.match ?? '');
       return `
-        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1;min-width:150px">
-          指令（逗號） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="!加油,！加油" style="flex:1">
-        </label>
-        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-          動畫 ${stateSelect(src.animation ?? 'idle', ANIM_OPTS)}
-        </label>
-        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-          幽視值± <input type="number" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
-        </label>
-        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-          消耗門檻 <input type="number" class="int-cost" value="${esc(costVal)}" placeholder="—" style="width:60px">
-        </label>
-        <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1;min-width:150px">
-          回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user}: !加油" style="flex:1">
-        </label>`;
+        <div style="display:flex;gap:10px;align-items:center">
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
+            指令（逗號） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="!加油,！加油" style="flex:1">
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+            動畫 ${stateSelect(src.animation ?? 'idle', ANIM_OPTS)}
+          </label>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+            幽視值± <input type="number" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+            需消耗幽視值 <input type="number" class="int-cost" value="${esc(costVal)}" placeholder="—" style="width:60px">
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
+            回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user}: !加油" style="flex:1">
+          </label>
+        </div>`;
     }
 
     row.innerHTML = `
@@ -600,7 +619,7 @@
         </select>
         <button class="btn btn-secondary btn-small int-delete" style="margin-left:auto">刪除</button>
       </div>
-      <div class="int-fields" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">${buildFields(trigger, interaction)}</div>
+      <div class="int-fields" style="display:flex;flex-direction:column;gap:8px">${buildFields(trigger, interaction)}</div>
     `;
 
     function wireFields() {
@@ -639,6 +658,28 @@
     obj.match = parts.length === 1 ? parts[0] : parts;
     if (costRaw !== undefined && costRaw !== '') obj.cost = parseFloat(costRaw) || 0;
     return obj;
+  }
+
+  async function saveAsDefault() {
+    if (!confirm('將目前的互動設定設為預設值？（「還原預設」將回到此狀態）')) return;
+    const interactions = [...document.querySelectorAll('.interaction-row')].map(readInteractionRow);
+    const scale = parseFloat(document.getElementById('pet-scale').value);
+    await fetch('/panel/api/default-pet-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interactions, scale }),
+    });
+    showToast('已設為預設值');
+  }
+
+  async function resetPetConfig() {
+    if (!confirm('確定要還原所有互動設定為預設值嗎？')) return;
+    const data = await fetch('/panel/api/default-pet-config').then(r => r.json());
+    document.getElementById('interactions-list').innerHTML = '';
+    for (const i of data.interactions ?? []) addInteractionRow(i);
+    const scaleEl = document.getElementById('pet-scale');
+    if (scaleEl && data.scale != null) scaleEl.value = data.scale;
+    savePetConfig();
   }
 
   function savePetConfig() {

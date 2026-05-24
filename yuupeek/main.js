@@ -43,7 +43,8 @@ const DEFAULT_ANIMATIONS = {
   jump:      { folder: 'jumping',       frames: [0,1,2,3], ms: 250,  loop: false },
   run_left:  { folder: 'running-left',  frames: [0,3,4,5,7], ms: 150,  loop: true },
   run_right: { folder: 'running-right', frames: [0,3,4,5,7], ms: 150,  loop: true },
-  wave:      { folder: 'waving',        frames: [0,1,2,3,2,1,0], ms: 200,  loop: false },
+  wave:           { folder: 'waving',        frames: [0,1,2,3,2,1,0], ms: 200,  loop: false },
+  watch_excited:  { folder: 'watch-excited', frames: [0,0,0,1,2,1,2,1,2,3,3,3,3], ms: 300,  loop: false },
 };
 
 const defaultConfig = JSON.parse(fs.readFileSync(path.join(appDir, 'config.json'), 'utf8'));
@@ -92,6 +93,19 @@ if (config.modes?.obs) {
       twitch:  { enabled: config.twitch?.enabled  ?? false, channel: config.twitch?.channel  ?? '' },
       youtube: { enabled: config.youtube?.enabled ?? false, channel: config.youtube?.channel ?? '' },
     }),
+    getDefaultPetConfig: () => ({
+      interactions:       defaultConfig.interactions       ?? [],
+      greetingAnimations: defaultConfig.greetingAnimations ?? [],
+      scale:              defaultConfig.obs?.scale         ?? 1,
+    }),
+    setDefaultPetConfig: (patch) => {
+      const cfgPath = path.join(appDir, 'config.json');
+      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      if (patch.interactions       !== undefined) { raw.interactions       = patch.interactions;       defaultConfig.interactions       = patch.interactions; }
+      if (patch.greetingAnimations !== undefined) { raw.greetingAnimations = patch.greetingAnimations; defaultConfig.greetingAnimations = patch.greetingAnimations; }
+      if (patch.scale              !== undefined) { raw.obs = raw.obs ?? {}; raw.obs.scale = patch.scale; defaultConfig.obs = defaultConfig.obs ?? {}; defaultConfig.obs.scale = patch.scale; }
+      fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
+    },
     getPetConfig: () => ({
       interactions:       config.interactions       ?? [],
       greetingAnimations: config.greetingAnimations ?? [],
@@ -256,6 +270,19 @@ app.whenReady().then(() => {
     panelWin.loadURL(`http://localhost:${port}/panel`);
     panelWin.setMenu(null);
     panelWin.webContents.setWindowOpenHandler(({ url }) => {
+      try {
+        const parsed = new URL(url);
+        if (parsed.hostname === 'localhost' && parsed.port === String(port)) {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              width: 1280, height: 720,
+              title: 'OBS 預覽',
+              autoHideMenuBar: true,
+            },
+          };
+        }
+      } catch {}
       shell.openExternal(url);
       return { action: 'deny' };
     });

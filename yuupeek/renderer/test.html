@@ -223,17 +223,29 @@
   });
   char.scheduleWander();
 
-  // ── Simple state machine (client-side) ─────────────────────────────────────
-  let yolia_see  = 0;
-  let commands   = {};
-  let yoliaStates = [
-    { min: 80, state: 'cheer' },
-    { min: 40, state: 'peek'  },
-    { min: 0,  state: 'idle'  },
-  ];
+  // ── State ─────────────────────────────────────────────────────────────────
+  let yolia_see    = 0;
+  let interactions = [];
+
+  function buildHandlers() {
+    const thresholds = interactions.filter(i => i.trigger === 'threshold');
+    const keywords   = interactions.filter(i => i.trigger === 'keyword');
+    const cmdMap     = {};
+    for (const i of interactions.filter(i => i.trigger === 'command')) {
+      const keys = Array.isArray(i.match) ? i.match : (i.match ? [i.match] : []);
+      for (const k of keys) cmdMap[k] = i;
+    }
+    let keywordRe = null;
+    if (keywords.length) {
+      const allWords = keywords.flatMap(i => Array.isArray(i.match) ? i.match : [i.match]);
+      const escaped  = allWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      keywordRe = new RegExp(escaped.join('|'));
+    }
+    return { thresholds, keywords, cmdMap, keywordRe };
+  }
 
   function computeState() {
-    const sorted = [...yoliaStates].sort((a, b) => b.min - a.min);
+    const sorted = interactions.filter(i => i.trigger === 'threshold').sort((a, b) => b.min - a.min);
     for (const s of sorted) {
       if (yolia_see >= s.min) return s.state;
     }
@@ -246,53 +258,51 @@
     sliderLabel.textContent = yolia_see + '%';
   }
 
-  function syncChar() {
-    char.applyUpdate({ value: yolia_see, state: computeState() });
-  }
-
   // ── Slider ─────────────────────────────────────────────────────────────────
   const slider      = document.getElementById('yuushi-slider');
   const sliderLabel = document.getElementById('slider-label');
 
   slider.addEventListener('input', () => {
     applyYoliaSee(parseInt(slider.value));
-    syncChar();
+    char.applyUpdate({ value: yolia_see, state: computeState() });
   });
 
   function resetState() {
     applyYoliaSee(0);
-    syncChar();
+    char.applyUpdate({ value: yolia_see, state: computeState() });
     addLog('重設 yolia_see → 0%', 'info');
   }
 
-  // ── commands.json loader ───────────────────────────────────────────────────
-  async function loadCommands() {
+  // ── Config loader ──────────────────────────────────────────────────────────
+  async function loadConfig() {
     try {
-      const r    = await fetch('/commands.json');
-      const data = await r.json();
-      commands   = data.commands    ?? data;
-      if (data.yoliaStates?.length)        yoliaStates = data.yoliaStates;
-      if (data.greetingAnimations?.length) char.setWaveVariants(data.greetingAnimations);
-      if (data.animations && Object.keys(data.animations).length) char.setAnimations(data.animations);
+      const [petCfg, cmdData] = await Promise.all([
+        fetch('/panel/api/pet-config').then(r => r.json()),
+        fetch('/commands.json').then(r => r.json()),
+      ]);
+      interactions = petCfg.interactions ?? [];
+      if (petCfg.greetingAnimations?.length) char.setWaveVariants(petCfg.greetingAnimations);
+      if (cmdData.animations && Object.keys(cmdData.animations).length) char.setAnimations(cmdData.animations);
       renderTable();
     } catch {
       document.getElementById('cmd-tbody').innerHTML =
         '<tr><td colspan="3" class="neg" style="padding:6px 10px">' +
-        '無法載入 commands.json — 請透過 OBS server 開啟（http://localhost:3000/renderer/test.html）</td></tr>';
+        '無法載入設定 — 請透過 OBS server 開啟（http://localhost:3000/renderer/test.html）</td></tr>';
     }
   }
 
   function renderTable() {
-    const rows = Object.entries(commands).map(([cmd, cfg]) => {
-      const y = cfg.yolia_see ?? 0;
+    const { cmdMap } = buildHandlers();
+    const rows = Object.entries(cmdMap).map(([cmd, cfg]) => {
+      const y    = cfg.yolia_see ?? 0;
+      const cost = cfg.cost ?? null;
       const yStr = y > 0 ? `<span class="pos">+${y}</span>`
                  : y < 0 ? `<span class="neg">${y}</span>`
                  : '<span class="nil">—</span>';
-      const sStr = cfg.state
-        ? `<span class="tag">${cfg.state}</span>`
-        : '<span class="nil">（僅改值）</span>';
+      const costStr = cost != null ? ` <span class="neg">消耗 ${cost}</span>` : '';
+      const aStr = cfg.animation ? `<span class="tag">${cfg.animation}</span>` : '<span class="nil">—</span>';
       const escaped = cmd.replace(/'/g, "\\'");
-      return `<tr onclick="processMessage('${escaped}')"><td><strong>${cmd}</strong></td><td>${sStr}</td><td>${yStr}</td></tr>`;
+      return `<tr onclick="processMessage('${escaped}')"><td><strong>${cmd}</strong></td><td>${aStr}</td><td>${yStr}${costStr}</td></tr>`;
     });
     document.getElementById('cmd-tbody').innerHTML =
       rows.length ? rows.join('') : '<tr><td colspan="3" class="nil">（無指令）</td></tr>';
@@ -309,31 +319,44 @@
     chatLog.scrollTop = chatLog.scrollHeight;
   }
 
-  function processMessage(raw) {
+  function processMessage(raw, username = 'viewer') {
     raw = raw.trim();
     if (!raw) return;
 
+    const { cmdMap, keywords, keywordRe } = buildHandlers();
     const word = raw.split(' ')[0];
-    const cmd  = commands[word];
+    const cmd  = cmdMap[word];
 
-    if (!cmd) {
-      // Non-command: simulate +1 yolia_see like real chat
-      applyYoliaSee(yolia_see + 1);
-      syncChar();
-      addLog(`viewer: ${raw}`, 'chat');
+    if (cmd) {
+      if (cmd.cost !== undefined && yolia_see < cmd.cost) {
+        const speech = `${username} 幽視值不足，需要 ${cmd.cost}！`;
+        char.applyUpdate({ value: yolia_see, state: computeState(), speech });
+        addLog(`✗ ${word} — 幽視值不足 (需要 ${cmd.cost}，目前 ${yolia_see})`, 'info');
+        setTimeout(() => char.applyUpdate({ value: yolia_see, state: computeState() }), 3000);
+        return;
+      }
+      if (cmd.cost      !== undefined) applyYoliaSee(yolia_see - cmd.cost);
+      if (cmd.yolia_see !== undefined) applyYoliaSee(yolia_see + cmd.yolia_see);
+      const speech = cmd.response ? cmd.response.replace('{user}', username) : `${username}: ${word}`;
+      const anim   = cmd.animation ?? computeState();
+      addLog(`⚡ ${word}  →  anim: ${anim}  yolia_see: ${yolia_see}%`, 'cmd');
+      char.applyUpdate({ value: yolia_see, state: anim, animOnly: !!cmd.animation, speech });
+      if (cmd.animation) setTimeout(() => char.applyUpdate({ value: yolia_see, state: computeState() }), 3000);
       return;
     }
 
-    if (cmd.yolia_see != null) applyYoliaSee(yolia_see + cmd.yolia_see);
-
-    const speech = `viewer: ${word}`;
-    if (cmd.state) {
-      addLog(`⚡ ${word}  →  state: ${cmd.state}  yolia_see: ${yolia_see}%`, 'cmd');
-      char.applyUpdate({ value: yolia_see, state: cmd.state, animOnly: true, speech });
+    // Non-command: +1
+    applyYoliaSee(yolia_see + 1);
+    const matched = keywordRe ? raw.match(keywordRe)?.[0] : null;
+    if (matched) {
+      const kw = keywords.find(i => (Array.isArray(i.match) ? i.match : [i.match]).includes(matched));
+      if (kw?.yolia_see) applyYoliaSee(yolia_see + kw.yolia_see);
+      const speech = (kw?.response ?? '').replace('{user}', username).replace('{word}', matched) || `${username} ${matched}`;
+      addLog(`🔑 ${matched}  →  anim: ${kw?.animation ?? 'wave'}  yolia_see: ${yolia_see}%`, 'cmd');
+      char.applyUpdate({ value: yolia_see, state: kw?.animation ?? 'wave', animOnly: true, speech });
     } else {
-      const s = computeState();
-      addLog(`⚡ ${word}  →  yolia_see: ${yolia_see}%  state: ${s}`, 'cmd');
-      char.applyUpdate({ value: yolia_see, state: s, speech });
+      addLog(`${username}: ${raw}`, 'chat');
+      char.applyUpdate({ value: yolia_see, state: computeState() });
     }
   }
 
@@ -345,7 +368,8 @@
   }
 
   function randomCmd() {
-    const keys = Object.keys(commands);
+    const { cmdMap } = buildHandlers();
+    const keys = Object.keys(cmdMap);
     if (!keys.length) { addLog('尚未載入指令', 'info'); return; }
     const pick = keys[Math.floor(Math.random() * keys.length)];
     addLog(`隨機：${pick}`, 'info');
@@ -361,7 +385,7 @@
     const ws = new WebSocket(`ws://${location.hostname}:${location.port || 3000}`);
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      if (data.reloadCommands)               { loadCommands(); return; }
+      if (data.reloadCommands)               { loadConfig(); return; }
       if (data.setWaveVariants !== undefined) { char.setWaveVariants(data.setWaveVariants); return; }
       if (data.setScale !== undefined)        { char.setScale(data.setScale); return; }
       if (data.setAnimations !== undefined)   { char.setAnimations(data.setAnimations); return; }
@@ -370,7 +394,7 @@
   })();
 
   // ── Init ───────────────────────────────────────────────────────────────────
-  loadCommands();
+  loadConfig();
   addLog('測試台就緒。輸入指令測試，或拖動幽視滑桿觀察狀態。', 'info');
 </script>
 </body>
