@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; width: 100vw; height: 100vh; }
+    #character { position: fixed; bottom: 60px; right: 40px; }
+    #char-canvas { display: block; }
+
+    #hud {
+      position: fixed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0,0,0,0.78);
+      border-radius: 16px;
+      padding: 8px 16px 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    #hud > span  { color: #fff; font-size: 14px; font-family: monospace; white-space: nowrap; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold; }
+    #bar-track   { width: 90px; height: 7px; background: rgba(255,255,255,.2); border-radius: 4px; overflow: hidden; }
+    #bar-fill    { height: 100%; width: 0%; background: #4af; border-radius: 3px; transition: width .3s; }
+    #bar-fill.peek  { background: #fa4; }
+    #bar-fill.angry { background: #f44; }
+
+    #speech-bubble {
+      max-width: 200px; word-break: break-all;
+      background: rgba(255,255,255,0.92); color: #222;
+      font-size: 13px; font-family: monospace;
+      border-radius: 10px; padding: 5px 10px;
+      pointer-events: none;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    #speech-bubble.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="speech-bubble"></div>
+    <span>yolia_see <span id="yolia-see-val">0</span>%</span>
+    <div id="bar-track"><div id="bar-fill"></div></div>
+  </div>
+  <div id="character"><canvas id="char-canvas"></canvas></div>
+
+  <script src="./character.js"></script>
+  <script src="./chatProcessor.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+  <script>
+    // ── Default animations (mirrors main.js DEFAULT_ANIMATIONS) ──────────────
+    const DEFAULT_ANIMATIONS = {
+      idle:          { folder: 'idle',           frames: [0,2,4,5,4,2,0,0,1,0],          ms: 150, loop: false },
+      peek:          { folder: 'review',         frames: [2,2,2,2,4,2,2,2,3,3,3],        ms: 250, loop: false },
+      cheer:         { folder: 'cheer',          frames: [0,2,3,5,0,5],                  ms: 150, loop: false },
+      cry:           { folder: 'cry',            frames: [0,7,7,7,0,1,1,1,0,0],          ms: 150, loop: false },
+      eat:           { folder: 'cilantro',       frames: [0,1,2,3,4,5,6,7,7],            ms: 250, loop: false },
+      jump:          { folder: 'jumping',        frames: [0,1,2,3],                       ms: 250, loop: false },
+      run_left:      { folder: 'running-left',   frames: [0,3,4,5,7],                    ms: 150, loop: true  },
+      run_right:     { folder: 'running-right',  frames: [0,3,4,5,7],                    ms: 150, loop: true  },
+      wave:          { folder: 'waving',         frames: [0,1,2,3,2,1,0],                ms: 200, loop: false },
+      watch_excited: { folder: 'watch-excited',  frames: [0,0,0,1,2,1,2,1,2,3,3,3,3],   ms: 300, loop: false },
+    };
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    const sm = { yolia_see: 0 };
+    let thresholds = [];
+
+    function onMessage(text, username) {
+      const r = ChatProcessor.processMessage(text, username, handlers, sm.yolia_see, thresholds);
+      sm.yolia_see = r.yolia_see;
+      char.applyUpdate({ value: sm.yolia_see, state: r.state, animOnly: r.animOnly, speech: r.speech });
+      if (r.costDenied) {
+        setTimeout(() => char.applyUpdate({ value: sm.yolia_see, state: r.state }), 3000);
+        return;
+      }
+      if (r.resetState !== null) {
+        setTimeout(() => char.applyUpdate({ value: sm.yolia_see, state: r.resetState }), 3000);
+      }
+    }
+
+    let handlers = ChatProcessor.buildHandlers([]);
+
+    // ── Character setup ───────────────────────────────────────────────────────
+    const canvas   = document.getElementById('char-canvas');
+    const ctx      = canvas.getContext('2d');
+    const charEl   = document.getElementById('character');
+    const hudEl    = document.getElementById('hud');
+    const valEl    = document.getElementById('yolia-see-val');
+    const barFill  = document.getElementById('bar-fill');
+    const speechEl = document.getElementById('speech-bubble');
+
+    canvas.style.cursor = 'grab';
+    let dragging = false;
+
+    const char = createCharacter({
+      canvas, ctx, charEl, valEl, barFill, speechEl,
+      assetBase: './assets/sprites/frames',
+      onUpdateHud({ posRight, posBottom, jumpOffset, canvasW, canvasH }) {
+        const hudW = hudEl.offsetWidth || 100;
+        hudEl.style.right  = (posRight + canvasW / 2 - hudW / 2) + 'px';
+        hudEl.style.bottom = (posBottom + jumpOffset + canvasH + 8) + 'px';
+      },
+      getIsDragging: () => dragging,
+    });
+
+    // ── Twitch ────────────────────────────────────────────────────────────────
+    function startTwitch(channel, oauthToken) {
+      let stopped = false;
+      let ws = null;
+
+      function connect() {
+        if (stopped) return;
+        ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+        ws.onopen = () => {
+          ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+          if (oauthToken) {
+            const pass = oauthToken.startsWith('oauth:') ? oauthToken : `oauth:${oauthToken}`;
+            ws.send(`PASS ${pass}`);
+            ws.send(`NICK ${channel}`);
+          } else {
+            ws.send('NICK justinfan' + Math.floor(Math.random() * 99999));
+          }
+          ws.send(`JOIN #${channel}`);
+          console.log('[Twitch] connected to #' + channel + (oauthToken ? ' (authenticated)' : ' (anonymous)'));
+        };
+        ws.onmessage = (e) => {
+          for (const raw of e.data.split('\r\n').filter(Boolean)) {
+            if (raw.startsWith('PING')) { ws.send('PONG :tmi.twitch.tv'); continue; }
+            const msgMatch = raw.match(/PRIVMSG #\S+ :(.+)$/);
+            if (!msgMatch) continue;
+            const tags = {};
+            const tagMatch = raw.match(/^@(\S+)/);
+            if (tagMatch) {
+              for (const part of tagMatch[1].split(';')) {
+                const eq = part.indexOf('=');
+                if (eq !== -1) tags[part.slice(0, eq)] = part.slice(eq + 1);
+              }
+            }
+            onMessage(msgMatch[1], tags['display-name'] || '');
+          }
+        };
+        ws.onclose = () => { if (!stopped) { console.log('[Twitch] disconnected, retrying in 5s...'); setTimeout(connect, 5000); } };
+        ws.onerror = (e) => console.error('[Twitch] error', e);
+      }
+
+      connect();
+      return () => { stopped = true; ws?.close(); };
+    }
+
+    // ── YouTube ───────────────────────────────────────────────────────────────
+    const YT_BASE = 'https://www.googleapis.com/youtube/v3';
+    const LIVE_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 不開播時 15 分鐘查一次（省 quota）
+    const RETRY_INTERVAL_MS      = 30_000;          // 錯誤重試間隔
+
+    async function ytFetch(path, params, apiKey) {
+      const url = new URL(`${YT_BASE}${path}`);
+      url.searchParams.set('key', apiKey);
+      for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`YouTube API ${res.status}`);
+      return res.json();
+    }
+
+    function startYouTube(channel, apiKey) {
+      let stopped     = false;
+      let timer       = null;
+      let channelId   = channel.startsWith('UC') ? channel : null;
+      let liveVideoId = null;
+      let chatId      = null;
+      let pageToken   = null;
+      let lastSearchAt = 0;
+
+      async function resolveChannelId() {
+        const handle = channel.startsWith('@') ? channel : `@${channel}`;
+        const data   = await ytFetch('/channels', { part: 'id', forHandle: handle }, apiKey);
+        return data.items?.[0]?.id ?? null;
+      }
+
+      async function poll() {
+        if (stopped) return;
+        try {
+          if (!channelId) channelId = await resolveChannelId();
+          if (!channelId) { timer = setTimeout(poll, RETRY_INTERVAL_MS); return; }
+
+          if (!liveVideoId) {
+            const now = Date.now();
+            if (now - lastSearchAt < LIVE_CHECK_INTERVAL_MS) { timer = setTimeout(poll, LIVE_CHECK_INTERVAL_MS - (now - lastSearchAt)); return; }
+            lastSearchAt = now;
+            const search = await ytFetch('/search', { part: 'id', channelId, eventType: 'live', type: 'video', maxResults: 1 }, apiKey);
+            liveVideoId  = search.items?.[0]?.id?.videoId ?? null;
+            if (!liveVideoId) { console.log('[YouTube] 尚未開播，15分後重試'); timer = setTimeout(poll, LIVE_CHECK_INTERVAL_MS); return; }
+            console.log('[YouTube] 找到直播：' + liveVideoId);
+          }
+
+          if (!chatId) {
+            const video = await ytFetch('/videos', { part: 'liveStreamingDetails', id: liveVideoId }, apiKey);
+            chatId = video.items?.[0]?.liveStreamingDetails?.activeLiveChatId ?? null;
+            if (!chatId) { liveVideoId = null; timer = setTimeout(poll, RETRY_INTERVAL_MS); return; }
+            console.log('[YouTube] 連線聊天室成功');
+          }
+
+          const params = { part: 'snippet,authorDetails', liveChatId: chatId, maxResults: 200 };
+          if (pageToken) params.pageToken = pageToken;
+          const chat = await ytFetch('/liveChat/messages', params, apiKey);
+
+          if (pageToken) {
+            for (const item of chat.items ?? []) {
+              const text     = item.snippet?.displayMessage ?? '';
+              const username = item.authorDetails?.displayName ?? '';
+              if (text) onMessage(text, username);
+            }
+          }
+
+          pageToken = chat.nextPageToken ?? null;
+          timer = setTimeout(poll, chat.pollingIntervalMillis ?? 5000);
+        } catch (e) {
+          console.error('[YouTube]', e.message);
+          if (e.message.includes('403') || e.message.includes('quota')) {
+            console.error('[YouTube] 配額超限，停止輪詢'); return;
+          }
+          chatId = null; liveVideoId = null;
+          timer = setTimeout(poll, RETRY_INTERVAL_MS);
+        }
+      }
+
+      poll();
+      return () => { stopped = true; if (timer) clearTimeout(timer); };
+    }
+
+    // ── Firebase → 即時監聽 config ───────────────────────────────────────────
+    firebase.initializeApp(FIREBASE_CONFIG);
+    const db = firebase.database();
+
+    let stopTwitch  = null;
+    let stopYoutube = null;
+    let prevTwitchKey = '';
+    let prevYtKey     = '';
+
+    db.ref('config').on('value', (snap) => {
+      const config = snap.val() ?? {};
+
+      thresholds = (config.interactions ?? []).filter(i => i.trigger === 'threshold');
+      handlers   = ChatProcessor.buildHandlers(config.interactions ?? []);
+      char.setAnimations({ ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) });
+      if (config.obs?.scale)                 char.setScale(config.obs.scale);
+      if (config.greetingAnimations?.length) char.setWaveVariants(config.greetingAnimations);
+
+      const twitchKey = `${config.twitch?.enabled}|${config.twitch?.channel}|${config.twitchOauth ?? ''}`;
+      if (twitchKey !== prevTwitchKey) {
+        prevTwitchKey = twitchKey;
+        stopTwitch?.(); stopTwitch = null;
+        if (config.twitch?.enabled && config.twitch?.channel)
+          stopTwitch = startTwitch(config.twitch.channel, config.twitchOauth ?? '');
+      }
+
+      const ytKey = `${config.youtube?.enabled}|${config.youtube?.channel}|${config.youtubeApiKey ?? ''}`;
+      if (ytKey !== prevYtKey) {
+        prevYtKey = ytKey;
+        stopYoutube?.(); stopYoutube = null;
+        if (config.youtube?.enabled && config.youtube?.channel && config.youtubeApiKey)
+          stopYoutube = startYouTube(config.youtube.channel, config.youtubeApiKey);
+      }
+    });
+
+    // ── Drag ──────────────────────────────────────────────────────────────────
+    let dragStartX, dragStartY, dragStartRight, dragStartBottom;
+
+    canvas.addEventListener('mousedown', (e) => {
+      dragging = true;
+      dragStartX = e.clientX; dragStartY = e.clientY;
+      ({ posRight: dragStartRight, posBottom: dragStartBottom } = char.getPos());
+      canvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      char.setPos(dragStartRight - (e.clientX - dragStartX), Math.max(0, dragStartBottom - (e.clientY - dragStartY)));
+    });
+    window.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      canvas.style.cursor = 'grab';
+      const { posRight } = char.getPos();
+      char.setDragOffset(posRight - char.getNaturalRight());
+      char.setTargetRight(posRight);
+    });
+
+    char.scheduleWander();
+  </script>
+</body>
+</html>

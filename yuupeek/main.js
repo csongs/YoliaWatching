@@ -125,7 +125,6 @@ if (config.modes?.obs) {
     savePetConfig: (patch) => {
       const cfgPath = path.join(userDataDir, 'config.json');
       const raw = readUserCfg(cfgPath);
-      let chatNeedsRestart = false;
 
       if (patch.interactions !== undefined) {
         raw.interactions = patch.interactions;
@@ -134,7 +133,7 @@ if (config.modes?.obs) {
         sm.updateStates(thresholds);
         sm.state = sm.computeState();
         broadcastState();
-        chatNeedsRestart = true;
+        chatListener?.updateHandlers(patch.interactions);
       }
       if (patch.greetingAnimations !== undefined) {
         raw.greetingAnimations = patch.greetingAnimations;
@@ -150,17 +149,6 @@ if (config.modes?.obs) {
       }
 
       fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
-
-      if (chatNeedsRestart) {
-        chatListener?.stop();
-        if (config.twitch?.enabled || config.youtube?.enabled) {
-          chatListener = createChatListener(config, sm, broadcastState);
-          chatListener.start();
-        } else {
-          chatListener = null;
-        }
-      }
-
       obsServer?.broadcast({ reloadCommands: true });
     },
     saveConfig: (patch) => {

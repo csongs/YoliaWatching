@@ -88,7 +88,7 @@
 
 <div class="tabs">
   <div class="tab active" onclick="showTab('guide')">安裝說明</div>
-  <div class="tab" onclick="showTab('status')">模組狀態</div>
+  <div class="tab local-only" onclick="showTab('status')">模組狀態</div>
   <div class="tab" onclick="showTab('pet')">桌寵設定</div>
   <div class="tab" onclick="showTab('settings')">設定</div>
   <span style="margin-left:auto;display:flex;align-items:center;gap:12px;padding:0 16px;white-space:nowrap;pointer-events:none">
@@ -100,7 +100,7 @@
 <!-- ── 安裝說明 ── -->
 <div id="guide" class="panel active">
 
-  <div class="guide-section">
+  <div class="guide-section local-only">
     <h3>Twitch OAuth Token</h3>
     <ol>
       <li>前往 <a href="https://twitchtokengenerator.com" target="_blank">twitchtokengenerator.com</a></li>
@@ -139,7 +139,7 @@
       <li>OBS 左下「來源（Sources）」→ 點 <strong>+</strong> → <strong>瀏覽器（Browser）</strong></li>
       <li>填入設定：
         <ul style="margin-top:4px">
-          <li>URL：<code>http://localhost:3000</code></li>
+          <li>URL：<code id="guide-obs-url">http://localhost:3000</code></li>
           <li>寬度（Width）：<code>1920</code>　高度（Height）：<code>1080</code></li>
         </ul>
       </li>
@@ -150,14 +150,14 @@
       <li>右鍵 Source → <strong>Interact</strong> 可操作 HUD 按鈕、拖曳角色位置</li>
     </ol>
     <div class="note" style="margin-top:12px">
-      <strong>角色大小</strong>：在 <code>config.json</code> 的 <code>obs.scale</code> 調整（預設 2，範圍 1–4）。也可以直接在 OBS 中縮放 Source（右鍵 → <strong>Transform → Edit Transform</strong>）。
+      <strong>角色大小</strong>：在「桌寵設定」頁調整顯示比例（預設 2，範圍 1–4）。也可以直接在 OBS 中縮放 Source（右鍵 → <strong>Transform → Edit Transform</strong>）。
     </div>
     <div class="note" style="margin-top:8px;background:#1a2d1a;border-color:#4ade80;color:#bbf7d0">
       <strong>Custom CSS 說明</strong>：OBS Browser Source 預設背景是白色。貼上這段 CSS 後，<code>rgba(0,0,0,0)</code> 讓背景完全透明，角色才能正確疊在畫面上。若角色周圍出現白框，請確認此欄位有正確填入。
     </div>
   </div>
 
-  <div class="guide-section">
+  <div class="guide-section local-only">
     <h3>config.json 設定</h3>
     <ul>
       <li><strong>modes</strong>：obs（OBS 伺服器）/ test（啟動時開啟測試頁）</li>
@@ -235,7 +235,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card local-only">
     <h3>設定檔位置</h3>
     <div class="row" style="flex-wrap:wrap;word-break:break-all">
       <code id="userdata-path" style="color:#94a3b8;font-size:12px">載入中…</code>
@@ -274,7 +274,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card local-only">
     <h3>設定檔</h3>
     <p style="color:#94a3b8;margin-bottom:14px">以文字編輯器開啟 config.json 修改頻道、模式、指令等設定</p>
     <button class="btn btn-secondary" onclick="openConfig()">開啟 config.json</button>
@@ -284,14 +284,37 @@
 <div class="toast" id="toast"></div>
 
 <script>
+  // ── Environment detection ─────────────────────────────────────────────────
+  const IS_WEB = !location.hostname.includes('localhost');
+
+  if (IS_WEB) {
+    const s = document.createElement('style');
+    s.textContent = '.local-only{display:none!important}';
+    document.head.appendChild(s);
+    document.getElementById('guide-obs-url').textContent = location.origin + '/';
+  }
+
+  // ── Script loader ─────────────────────────────────────────────────────────
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  // ── API adapter (populated by initApp) ───────────────────────────────────
+  let api;
+  let apiReady = false;
+
   // ── Tab switching ──────────────────────────────────────────────────────────
   const TAB_IDS = ['guide', 'status', 'pet', 'settings'];
-
   let hasAutoCheckedUpdate = false;
 
   function showTab(id) {
     document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_IDS[i] === id));
     document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === id));
+    if (!apiReady) return;
     if (id === 'status') refreshStatus();
     if (id === 'pet') loadPetConfig();
     if (id === 'settings') {
@@ -314,10 +337,11 @@
   }
 
   function refreshStatus() {
-    Promise.all([
-      fetch('/panel/api/status').then(r => r.json()),
-      fetch('/panel/api/metrics').then(r => r.json()),
-    ])
+    if (IS_WEB) {
+      document.getElementById('status-cards').innerHTML = '<p style="color:#64748b">雲端版不提供即時狀態監控</p>';
+      return;
+    }
+    Promise.all([api.getStatus(), api.getMetrics()])
       .then(([s, m]) => {
         const port = s.obs?.port ?? 3000;
         const youtubeStatusBadge = s.youtube?.error
@@ -384,8 +408,7 @@
 
   // ── Settings tab ───────────────────────────────────────────────────────────
   function loadEnv() {
-    fetch('/panel/api/env')
-      .then(r => r.json())
+    api.getEnv()
       .then(data => {
         document.getElementById('tw-oauth').value = data.TWITCH_OAUTH ?? '';
         document.getElementById('yt-key').value   = data.YOUTUBE_API_KEY ?? '';
@@ -393,22 +416,16 @@
   }
 
   function saveEnv() {
-    fetch('/panel/api/env', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        TWITCH_OAUTH:    document.getElementById('tw-oauth').value,
-        YOUTUBE_API_KEY: document.getElementById('yt-key').value,
-      }),
+    api.saveEnv({
+      TWITCH_OAUTH:    document.getElementById('tw-oauth').value,
+      YOUTUBE_API_KEY: document.getElementById('yt-key').value,
     })
-      .then(r => r.json())
       .then(() => showToast('已儲存'))
       .catch(() => showToast('儲存失敗', true));
   }
 
   function loadConfig() {
-    fetch('/panel/api/config')
-      .then(r => r.json())
+    api.getConfig()
       .then(data => {
         document.getElementById('tw-enabled').checked = data.twitch?.enabled  ?? false;
         document.getElementById('tw-channel').value   = data.twitch?.channel  ?? '';
@@ -430,31 +447,24 @@
         channel: document.getElementById('yt-channel').value.trim(),
       };
     }
-    fetch('/panel/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-      .then(r => r.json())
+    api.saveConfig(body)
       .then(() => showToast('已套用'))
       .catch(() => showToast('儲存失敗', true));
   }
 
   function loadPaths() {
-    fetch('/panel/api/paths')
-      .then(r => r.json())
+    api.getPaths()
       .then(d => { document.getElementById('userdata-path').textContent = d.userDataDir || '—'; });
   }
 
   function openUserDataDir() {
-    fetch('/panel/api/open-userdata', { method: 'POST' });
+    api.openUserData();
   }
 
   function loadVersion() {
-    fetch('/panel/api/version')
-      .then(r => r.json())
+    api.getVersion()
       .then(d => {
-        const v = 'v' + d.current;
+        const v = d.current === 'web' ? 'web' : 'v' + d.current;
         document.getElementById('current-version').textContent = v;
         document.getElementById('version-badge').textContent = v;
       });
@@ -465,8 +475,7 @@
     const btn = document.getElementById('check-update-btn');
     el.innerHTML = '<span style="color:#64748b">檢查中…</span>';
     btn.disabled = true;
-    fetch('/panel/api/check-update')
-      .then(r => r.json())
+    api.checkUpdate()
       .then(d => {
         btn.disabled = false;
         if (d.error) { el.innerHTML = '<span style="color:#f87171">檢查失敗，請確認網路連線</span>'; return; }
@@ -481,15 +490,11 @@
   }
 
   function openExternal(url) {
-    fetch('/panel/api/open-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
+    api.openUrl(url);
   }
 
   function openConfig() {
-    fetch('/panel/api/open-config', { method: 'POST' });
+    api.openConfig();
   }
 
   let passwordsVisible = false;
@@ -522,7 +527,6 @@
   const debouncedYtSave     = debounce(() => savePlatformConfig('youtube'), 800);
   const debouncedEnvSave    = debounce(saveEnv, 1200);
 
-
   // ── Pet config tab ────────────────────────────────────────────────────────
   let STATE_OPTIONS = ['idle', 'peek', 'cheer', 'cry', 'eat', 'jump', 'run_left', 'run_right', 'wave'];
 
@@ -543,8 +547,8 @@
 
   function loadPetConfig() {
     Promise.all([
-      fetch('/panel/api/pet-config').then(r => r.json()),
-      fetch('/panel/api/animations').then(r => r.json()),
+      api.getPetConfig(),
+      api.getAnimations(),
     ])
       .then(([data, animData]) => {
         const names = [...new Set(Object.keys(animData.animations ?? animData))];
@@ -673,9 +677,9 @@
     return obj;
   }
 
-async function resetPetConfig() {
+  async function resetPetConfig() {
     if (!confirm('確定要還原所有互動設定為預設值嗎？')) return;
-    const data = await fetch('/panel/api/default-pet-config').then(r => r.json());
+    const data = await api.getDefaultPetConfig();
     document.getElementById('interactions-list').innerHTML = '';
     for (const i of data.interactions ?? []) addInteractionRow(i);
     const scaleEl = document.getElementById('pet-scale');
@@ -685,18 +689,10 @@ async function resetPetConfig() {
 
   function savePetConfig() {
     const interactions = [...document.querySelectorAll('.interaction-row')].map(readInteractionRow);
-    fetch('/panel/api/pet-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interactions, scale: parseFloat(document.getElementById('pet-scale').value) }),
-    })
-      .then(r => r.json())
+    api.savePetConfig({ interactions, scale: parseFloat(document.getElementById('pet-scale').value) })
       .then(() => showToast('已套用'))
       .catch(() => showToast('套用失敗', true));
   }
-
-  // ── Init ───────────────────────────────────────────────────────────────────
-  loadVersion();
 
   // ── Toast ──────────────────────────────────────────────────────────────────
   function showToast(msg, isError = false) {
@@ -706,6 +702,92 @@ async function resetPetConfig() {
     el.style.display = 'block';
     setTimeout(() => el.style.display = 'none', 3000);
   }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  async function initApp() {
+    if (IS_WEB) {
+      await loadScript('/firebase-config.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js');
+      firebase.initializeApp(FIREBASE_CONFIG);
+      const db = firebase.database();
+
+      api = {
+        getConfig: () => db.ref('config').once('value').then(s => {
+          const c = s.val() ?? {};
+          return { twitch: c.twitch ?? {}, youtube: c.youtube ?? {} };
+        }),
+        saveConfig: (body) => {
+          const updates = {};
+          if (body.twitch?.enabled  !== undefined) updates['twitch/enabled']  = body.twitch.enabled;
+          if (body.twitch?.channel  !== undefined) updates['twitch/channel']  = body.twitch.channel;
+          if (body.youtube?.enabled !== undefined) updates['youtube/enabled'] = body.youtube.enabled;
+          if (body.youtube?.channel !== undefined) updates['youtube/channel'] = body.youtube.channel;
+          return db.ref('config').update(updates).then(() => ({ ok: true }));
+        },
+        getPetConfig: () => db.ref('config').once('value').then(s => {
+          const c = s.val() ?? {};
+          return { interactions: c.interactions ?? [], greetingAnimations: c.greetingAnimations ?? [], scale: c.obs?.scale ?? 2 };
+        }),
+        savePetConfig: (body) => {
+          const updates = {};
+          if (body.interactions !== undefined) updates['interactions'] = body.interactions;
+          if (body.scale        !== undefined) updates['obs/scale']    = body.scale;
+          return db.ref('config').update(updates).then(() => ({ ok: true }));
+        },
+        getAnimations: () => db.ref('config/animations').once('value').then(s => ({ animations: s.val() ?? {} })),
+        getEnv: () => db.ref('config').once('value').then(s => {
+          const c = s.val() ?? {};
+          return { TWITCH_OAUTH: c.twitchOauth ?? '', YOUTUBE_API_KEY: c.youtubeApiKey ?? '' };
+        }),
+        saveEnv: (body) => {
+          const updates = {};
+          if (body.TWITCH_OAUTH    !== undefined) updates['twitchOauth']   = body.TWITCH_OAUTH;
+          if (body.YOUTUBE_API_KEY !== undefined) updates['youtubeApiKey'] = body.YOUTUBE_API_KEY;
+          return db.ref('config').update(updates).then(() => ({ ok: true }));
+        },
+        getVersion:         () => Promise.resolve({ current: 'web' }),
+        checkUpdate:        () => fetch('https://api.github.com/repos/csongs/YoliaWatching/releases/latest', { headers: { 'User-Agent': 'YoliaWatching' } })
+                                    .then(r => r.json())
+                                    .then(d => ({ current: 'web', latest: (d.tag_name ?? '').replace(/^v/, ''), hasUpdate: false, url: d.html_url ?? '' })),
+        openUrl:            (url) => { window.open(url, '_blank'); return Promise.resolve({ ok: true }); },
+        getStatus:          () => Promise.resolve({}),
+        getMetrics:         () => Promise.resolve({ processes: [] }),
+        getPaths:           () => Promise.resolve({ userDataDir: '（雲端版不適用）' }),
+        openUserData:       () => Promise.resolve({ ok: true }),
+        openConfig:         () => Promise.resolve({ ok: true }),
+        getDefaultPetConfig: () => Promise.resolve({ interactions: [], greetingAnimations: [], scale: 2 }),
+      };
+    } else {
+      const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+      api = {
+        getConfig:           () => fetch('/panel/api/config').then(r => r.json()),
+        saveConfig:          (b) => post('/panel/api/config', b),
+        getPetConfig:        () => fetch('/panel/api/pet-config').then(r => r.json()),
+        savePetConfig:       (b) => post('/panel/api/pet-config', b),
+        getAnimations:       () => fetch('/panel/api/animations').then(r => r.json()),
+        getEnv:              () => fetch('/panel/api/env').then(r => r.json()),
+        saveEnv:             (b) => post('/panel/api/env', b),
+        getVersion:          () => fetch('/panel/api/version').then(r => r.json()),
+        checkUpdate:         () => fetch('/panel/api/check-update').then(r => r.json()),
+        openUrl:             (url) => post('/panel/api/open-url', { url }),
+        getStatus:           () => fetch('/panel/api/status').then(r => r.json()),
+        getMetrics:          () => fetch('/panel/api/metrics').then(r => r.json()),
+        getPaths:            () => fetch('/panel/api/paths').then(r => r.json()),
+        openUserData:        () => post('/panel/api/open-userdata', {}),
+        openConfig:          () => post('/panel/api/open-config', {}),
+        getDefaultPetConfig: () => fetch('/panel/api/default-pet-config').then(r => r.json()),
+      };
+    }
+
+    apiReady = true;
+    loadVersion();
+  }
+
+  initApp().catch(e => {
+    console.error('[panel] initApp failed:', e);
+    showToast('初始化失敗', true);
+  });
 </script>
 </body>
 </html>

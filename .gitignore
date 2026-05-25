@@ -4,3 +4,19 @@ out/
 *.log
 .env
 .claude/
+
+# Firebase CLI cache
+web/.firebase/
+
+# 隱私設定（含 API key）
+web/public/firebase-config.js
+web/config-export.json
+
+# sync.js 自動產生（原始碼在 yuupeek/）
+web/public/character.js
+web/public/chatProcessor.js
+web/public/panel.html
+web/public/assets/
+
+# 工具（暫不追蹤）
+tools/

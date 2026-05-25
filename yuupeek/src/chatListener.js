@@ -1,74 +1,26 @@
 const tmi = require('tmi.js');
 const { google } = require('googleapis');
-
-function buildHandlers(interactions) {
-  const kwInteractions = interactions.filter(i => i.trigger === 'keyword');
-  const commandMap = {};
-  for (const i of interactions.filter(i => i.trigger === 'command')) {
-    const keys = Array.isArray(i.match) ? i.match : (i.match ? [i.match] : []);
-    for (const k of keys) commandMap[k] = i;
-  }
-  let keywordRe = null;
-  if (kwInteractions.length) {
-    const allWords = kwInteractions.flatMap(i => Array.isArray(i.match) ? i.match : [i.match]);
-    const escaped  = allWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    keywordRe = new RegExp(escaped.join('|'));
-  }
-  return { kwInteractions, commandMap, keywordRe };
-}
+const { buildHandlers, computeState, processMessage: processMsg } = require('./chatProcessor');
 
 function createChatListener(config, sm, broadcast) {
-  const { kwInteractions, commandMap, keywordRe } = buildHandlers(config.interactions ?? []);
+  let thresholds = (config.interactions ?? []).filter(i => i.trigger === 'threshold');
+  let handlers   = buildHandlers(config.interactions ?? []);
 
   function processMessage(text, username, source) {
-    const trimmed = text.trim();
-    const word    = trimmed.split(' ')[0];
-    const cmd     = commandMap[word];
+    const r = processMsg(text, username, handlers, sm.yolia_see, thresholds);
+    sm.yolia_see = r.yolia_see;
+    sm.state     = r.state;
 
-    if (cmd) {
-      // Cost gate
-      if (cmd.cost !== undefined && sm.yolia_see < cmd.cost) {
-        const speech = username
-          ? `${username} 幽視值不足，需要 ${cmd.cost}！`
-          : `幽視值不足，需要 ${cmd.cost}！`;
-        broadcast({ value: sm.yolia_see, state: sm.state, speech });
-        setTimeout(() => broadcast({ value: sm.yolia_see, state: sm.state }), 3000);
-        return;
-      }
-      if (cmd.cost      !== undefined) sm.yolia_see = Math.max(0, sm.yolia_see - cmd.cost);
-      if (cmd.yolia_see !== undefined) sm.yolia_see = Math.max(0, Math.min(100, sm.yolia_see + cmd.yolia_see));
-      sm.state = sm.computeState();
-
-      const speech = cmd.response
-        ? cmd.response.replace('{user}', username)
-        : username ? `${username}: ${word}` : word;
-
-      console.log(`[${source}] ${word} → yolia_see:${sm.yolia_see} anim:${cmd.animation ?? sm.state}`);
-      broadcast({ value: sm.yolia_see, state: cmd.animation ?? sm.state, animOnly: !!cmd.animation, speech });
-      if (cmd.animation) {
-        setTimeout(() => { sm.state = sm.computeState(); broadcast({ value: sm.yolia_see, state: sm.state }); }, 3000);
-      }
+    if (r.costDenied) {
+      broadcast({ value: sm.yolia_see, state: sm.state, speech: r.speech });
+      setTimeout(() => broadcast({ value: sm.yolia_see, state: sm.state }), 3000);
       return;
     }
 
-    // Non-command: +1 yolia_see
-    sm.yolia_see = Math.min(100, sm.yolia_see + 1);
-    sm.state     = sm.computeState();
-
-    const matched = keywordRe ? trimmed.match(keywordRe)?.[0] : null;
-    if (matched) {
-      const kw = kwInteractions.find(i => (Array.isArray(i.match) ? i.match : [i.match]).includes(matched));
-      if (kw?.yolia_see) {
-        sm.yolia_see = Math.max(0, Math.min(100, sm.yolia_see + kw.yolia_see));
-        sm.state = sm.computeState();
-      }
-      const speech = (kw?.response ?? '')
-        .replace('{user}', username)
-        .replace('{word}', matched)
-        || (username ? `${username} ${matched}` : matched);
-      broadcast({ value: sm.yolia_see, state: kw?.animation ?? 'wave', animOnly: true, speech });
-    } else {
-      broadcast({ value: sm.yolia_see, state: sm.state });
+    console.log(`[${source}] → yolia_see:${sm.yolia_see} state:${sm.state}`);
+    broadcast({ value: sm.yolia_see, state: sm.state, animOnly: r.animOnly, speech: r.speech });
+    if (r.resetState !== null) {
+      setTimeout(() => { sm.state = r.resetState; broadcast({ value: sm.yolia_see, state: sm.state }); }, 3000);
     }
   }
 
@@ -212,6 +164,10 @@ function createChatListener(config, sm, broadcast) {
       stopped = true;
       twitchClient?.disconnect();
       if (youtubeInterval) clearTimeout(youtubeInterval);
+    },
+    updateHandlers(interactions) {
+      thresholds = (interactions ?? []).filter(i => i.trigger === 'threshold');
+      handlers   = buildHandlers(interactions ?? []);
     },
     getStatus() {
       return {
