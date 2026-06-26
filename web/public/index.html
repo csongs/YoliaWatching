@@ -233,14 +233,120 @@
       return () => { stopped = true; if (timer) clearTimeout(timer); };
     }
 
+    // ── SOOP ─────────────────────────────────────────────────────────────────
+    const SOOP_STARTER   = '\x1b\t';
+    const SOOP_SEP       = '\x0c';
+    const SOOP_LIVE_API  = 'https://live.sooplive.co.kr/afreeca/player_live_api.php';
+    const SOOP_RETRY_MS  = 30_000;
+    const SOOP_LIVE_CHECK_MS = 15 * 60 * 1000;
+
+    function soopPacket(type, payload) {
+      const len = String(new TextEncoder().encode(payload).length).padStart(6, '0');
+      return SOOP_STARTER + type + len + '00' + payload;
+    }
+
+    function startSoop(channel, apiMode) {
+      if (apiMode === 'official') {
+        console.log('[SOOP] 官方 API 模式尚未實作，請改用社群模式 (B)');
+        return () => {};
+      }
+
+      let stopped = false;
+      let ws = null;
+      let pingTimer = null;
+      let retryTimer = null;
+
+      async function connect() {
+        if (stopped) return;
+        try {
+          const res = await fetch(`${SOOP_LIVE_API}?bjid=${encodeURIComponent(channel)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `bid=${encodeURIComponent(channel)}&type=live&player_type=html5&stream_type=common&quality=original&mode=live&from_api=0&is_revive=0`,
+          });
+          const data = await res.json();
+          const ch = data?.CHANNEL;
+
+          if (!ch?.CHDOMAIN || !ch?.CHPT) {
+            console.log('[SOOP] 尚未開播，' + (SOOP_LIVE_CHECK_MS / 60000) + '分後重試');
+            if (!stopped) retryTimer = setTimeout(connect, SOOP_LIVE_CHECK_MS);
+            return;
+          }
+
+          const wsUrl = `wss://${ch.CHDOMAIN}:${parseInt(ch.CHPT) + 1}/Websocket/${channel}`;
+          ws = new WebSocket(wsUrl);
+          ws.binaryType = 'text';
+
+          ws.onopen = () => {
+            ws.send(soopPacket('0001', `${SOOP_SEP}${SOOP_SEP}${SOOP_SEP}16${SOOP_SEP}`));
+          };
+
+          ws.onmessage = (e) => {
+            const raw = typeof e.data === 'string' ? e.data : '';
+            if (raw.length < 14) return;
+            const type = raw.substring(2, 6);
+            const payload = raw.substring(14);
+
+            if (type === '0001') {
+              // CONNECT ack → join room
+              ws.send(soopPacket('0002', `${SOOP_SEP}${ch.CHATNO}${SOOP_SEP}${SOOP_SEP}${SOOP_SEP}${SOOP_SEP}${SOOP_SEP}`));
+              pingTimer = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN)
+                  ws.send(soopPacket('0000', SOOP_SEP));
+              }, 60_000);
+              console.log(`[SOOP] connected to ${channel}`);
+            } else if (type === '0005') {
+              // CHAT
+              const parts = payload.split(SOOP_SEP);
+              const comment  = parts[1] ?? '';
+              const username = parts[6] ?? '';
+              if (comment) onMessage(comment, username);
+            } else if (type === '0007') {
+              console.log('[SOOP] stream ended');
+              ws.close();
+            }
+          };
+
+          ws.onclose = () => {
+            clearInterval(pingTimer);
+            pingTimer = null;
+            if (!stopped) {
+              console.log('[SOOP] disconnected, retrying in 5s...');
+              retryTimer = setTimeout(connect, 5_000);
+            }
+          };
+
+          ws.onerror = () => console.error('[SOOP] WebSocket error');
+
+        } catch (e) {
+          console.error('[SOOP]', e.message);
+          if (e.message?.includes('Failed to fetch') || e.message?.includes('CORS')) {
+            console.error('[SOOP] CORS 問題：SOOP live API 不允許瀏覽器直接存取，此功能目前僅支援 Electron 版');
+            return;
+          }
+          if (!stopped) retryTimer = setTimeout(connect, SOOP_RETRY_MS);
+        }
+      }
+
+      connect();
+      return () => {
+        stopped = true;
+        clearInterval(pingTimer);
+        clearTimeout(retryTimer);
+        ws?.close();
+      };
+    }
+
     // ── Firebase → 即時監聽 config ───────────────────────────────────────────
     firebase.initializeApp(FIREBASE_CONFIG);
     const db = firebase.database();
 
     let stopTwitch  = null;
     let stopYoutube = null;
+    let stopSoop    = null;
     let prevTwitchKey = '';
     let prevYtKey     = '';
+    let prevSoopKey   = '';
 
     db.ref('config').on('value', (snap) => {
       const config = snap.val() ?? {};
@@ -265,6 +371,14 @@
         stopYoutube?.(); stopYoutube = null;
         if (config.youtube?.enabled && config.youtube?.channel && config.youtubeApiKey)
           stopYoutube = startYouTube(config.youtube.channel, config.youtubeApiKey);
+      }
+
+      const soopKey = `${config.soop?.enabled}|${config.soop?.channel}|${config.soop?.apiMode ?? 'community'}`;
+      if (soopKey !== prevSoopKey) {
+        prevSoopKey = soopKey;
+        stopSoop?.(); stopSoop = null;
+        if (config.soop?.enabled && config.soop?.channel)
+          stopSoop = startSoop(config.soop.channel, config.soop.apiMode ?? 'community');
       }
     });
 

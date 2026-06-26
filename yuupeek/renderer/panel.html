@@ -235,6 +235,29 @@
     </div>
   </div>
 
+  <div class="card">
+    <h3>SOOP 設定</h3>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="soop-enabled" onchange="savePlatformConfig('soop')"> 啟用 SOOP 聊天監聽
+      </label>
+    </div>
+    <div class="form-group">
+      <label>BJ ID</label>
+      <input type="text" id="soop-channel" placeholder="altheayolia" oninput="debouncedSoopSave()">
+    </div>
+    <div class="form-group">
+      <label>API 模式</label>
+      <select id="soop-api-mode" onchange="onSoopModeChange()">
+        <option value="community">社群版 B（預設）</option>
+        <option value="official">官方 API A（需要合作夥伴）</option>
+      </select>
+    </div>
+    <div id="soop-official-section" style="display:none;margin-top:8px">
+      <div class="note" style="margin-bottom:10px">官方 API 串接功能尚在開發中，敬請期待。申請合作夥伴：<a href="https://developers.sooplive.com" target="_blank">developers.sooplive.com ↗</a></div>
+    </div>
+  </div>
+
   <div class="card local-only">
     <h3>設定檔位置</h3>
     <div class="row" style="flex-wrap:wrap;word-break:break-all">
@@ -257,6 +280,12 @@
       <label>YOUTUBE_API_KEY</label>
       <div class="input-row">
         <input type="password" id="yt-key" placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXX" oninput="debouncedEnvSave()">
+      </div>
+    </div>
+    <div class="form-group" id="soop-key-row" style="display:none">
+      <label>SOOP_API_KEY <span style="color:#64748b;font-weight:400">（官方模式 A 專用）</span></label>
+      <div class="input-row">
+        <input type="password" id="soop-key" placeholder="SOOP 官方 API Key" oninput="debouncedEnvSave()">
       </div>
     </div>
     <div style="margin-top:4px">
@@ -382,6 +411,12 @@
           </div>
 
           <div class="card">
+            <h3>SOOP ${moduleBadge(s.soop?.enabled, s.soop?.connected, '已連線', '未連線')}</h3>
+            <div class="row">頻道：<strong>${s.soop?.channel || '未設定'}</strong></div>
+            <div class="row">模式：<strong>${s.soop?.apiMode === 'official' ? '官方 API (A)' : '社群版 (B)'}</strong></div>
+          </div>
+
+          <div class="card">
             <h3>OBS Server ${s.obs?.enabled ? badge('ok', '運行中') : badge('off', '停用')}</h3>
             ${s.obs?.enabled ? `
               <div class="row">OBS Overlay：<a href="http://localhost:${port}" target="_blank">http://localhost:${port}</a></div>
@@ -410,8 +445,9 @@
   function loadEnv() {
     api.getEnv()
       .then(data => {
-        document.getElementById('tw-oauth').value = data.TWITCH_OAUTH ?? '';
+        document.getElementById('tw-oauth').value = data.TWITCH_OAUTH    ?? '';
         document.getElementById('yt-key').value   = data.YOUTUBE_API_KEY ?? '';
+        document.getElementById('soop-key').value = data.SOOP_API_KEY    ?? '';
       });
   }
 
@@ -419,6 +455,7 @@
     api.saveEnv({
       TWITCH_OAUTH:    document.getElementById('tw-oauth').value,
       YOUTUBE_API_KEY: document.getElementById('yt-key').value,
+      SOOP_API_KEY:    document.getElementById('soop-key').value,
     })
       .then(() => showToast('已儲存'))
       .catch(() => showToast('儲存失敗', true));
@@ -427,11 +464,26 @@
   function loadConfig() {
     api.getConfig()
       .then(data => {
-        document.getElementById('tw-enabled').checked = data.twitch?.enabled  ?? false;
-        document.getElementById('tw-channel').value   = data.twitch?.channel  ?? '';
-        document.getElementById('yt-enabled').checked = data.youtube?.enabled ?? false;
-        document.getElementById('yt-channel').value   = data.youtube?.channel ?? '';
+        document.getElementById('tw-enabled').checked    = data.twitch?.enabled  ?? false;
+        document.getElementById('tw-channel').value      = data.twitch?.channel  ?? '';
+        document.getElementById('yt-enabled').checked    = data.youtube?.enabled ?? false;
+        document.getElementById('yt-channel').value      = data.youtube?.channel ?? '';
+        document.getElementById('soop-enabled').checked  = data.soop?.enabled    ?? false;
+        document.getElementById('soop-channel').value    = data.soop?.channel    ?? '';
+        document.getElementById('soop-api-mode').value   = data.soop?.apiMode    ?? 'community';
+        updateSoopOfficialVisibility();
       });
+  }
+
+  function onSoopModeChange() {
+    updateSoopOfficialVisibility();
+    savePlatformConfig('soop');
+  }
+
+  function updateSoopOfficialVisibility() {
+    const isOfficial = document.getElementById('soop-api-mode').value === 'official';
+    document.getElementById('soop-official-section').style.display = isOfficial ? '' : 'none';
+    document.getElementById('soop-key-row').style.display = isOfficial ? '' : 'none';
   }
 
   function savePlatformConfig(platform) {
@@ -441,10 +493,16 @@
         enabled: document.getElementById('tw-enabled').checked,
         channel: document.getElementById('tw-channel').value.trim(),
       };
-    } else {
+    } else if (platform === 'youtube') {
       body.youtube = {
         enabled: document.getElementById('yt-enabled').checked,
         channel: document.getElementById('yt-channel').value.trim(),
+      };
+    } else {
+      body.soop = {
+        enabled: document.getElementById('soop-enabled').checked,
+        channel: document.getElementById('soop-channel').value.trim(),
+        apiMode: document.getElementById('soop-api-mode').value,
       };
     }
     api.saveConfig(body)
@@ -525,6 +583,7 @@
   const debouncedPetSave    = debounce(savePetConfig, 800);
   const debouncedTwitchSave = debounce(() => savePlatformConfig('twitch'), 800);
   const debouncedYtSave     = debounce(() => savePlatformConfig('youtube'), 800);
+  const debouncedSoopSave   = debounce(() => savePlatformConfig('soop'), 800);
   const debouncedEnvSave    = debounce(saveEnv, 1200);
 
   // ── Pet config tab ────────────────────────────────────────────────────────
@@ -723,6 +782,9 @@
           if (body.twitch?.channel  !== undefined) updates['twitch/channel']  = body.twitch.channel;
           if (body.youtube?.enabled !== undefined) updates['youtube/enabled'] = body.youtube.enabled;
           if (body.youtube?.channel !== undefined) updates['youtube/channel'] = body.youtube.channel;
+          if (body.soop?.enabled    !== undefined) updates['soop/enabled']    = body.soop.enabled;
+          if (body.soop?.channel    !== undefined) updates['soop/channel']    = body.soop.channel;
+          if (body.soop?.apiMode    !== undefined) updates['soop/apiMode']    = body.soop.apiMode;
           return db.ref('config').update(updates).then(() => ({ ok: true }));
         },
         getPetConfig: () => db.ref('config').once('value').then(s => {
@@ -738,12 +800,13 @@
         getAnimations: () => db.ref('config/animations').once('value').then(s => ({ animations: s.val() ?? {} })),
         getEnv: () => db.ref('config').once('value').then(s => {
           const c = s.val() ?? {};
-          return { TWITCH_OAUTH: c.twitchOauth ?? '', YOUTUBE_API_KEY: c.youtubeApiKey ?? '' };
+          return { TWITCH_OAUTH: c.twitchOauth ?? '', YOUTUBE_API_KEY: c.youtubeApiKey ?? '', SOOP_API_KEY: c.soopApiKey ?? '' };
         }),
         saveEnv: (body) => {
           const updates = {};
           if (body.TWITCH_OAUTH    !== undefined) updates['twitchOauth']   = body.TWITCH_OAUTH;
           if (body.YOUTUBE_API_KEY !== undefined) updates['youtubeApiKey'] = body.YOUTUBE_API_KEY;
+          if (body.SOOP_API_KEY    !== undefined) updates['soopApiKey']    = body.SOOP_API_KEY;
           return db.ref('config').update(updates).then(() => ({ ok: true }));
         },
         getVersion:         () => Promise.resolve({ current: 'web' }),

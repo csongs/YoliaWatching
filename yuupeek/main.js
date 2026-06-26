@@ -95,6 +95,12 @@ if (config.modes?.obs) {
         error:   chatListener?.getStatus?.().youtube.error ?? null,
         channel: config.youtube?.channel ?? '',
       },
+      soop: {
+        enabled:   config.soop?.enabled ?? false,
+        connected: chatListener?.getStatus?.().soop.connected ?? false,
+        channel:   config.soop?.channel ?? '',
+        apiMode:   config.soop?.apiMode ?? 'community',
+      },
       obs: {
         enabled: true,
         port:    obsServer.port() ?? config.obs?.port ?? 3000,
@@ -103,6 +109,7 @@ if (config.modes?.obs) {
     getConfig: () => ({
       twitch:  { enabled: config.twitch?.enabled  ?? false, channel: config.twitch?.channel  ?? '' },
       youtube: { enabled: config.youtube?.enabled ?? false, channel: config.youtube?.channel ?? '' },
+      soop:    { enabled: config.soop?.enabled    ?? false, channel: config.soop?.channel    ?? '', apiMode: config.soop?.apiMode ?? 'community' },
     }),
     getDefaultPetConfig: () => ({
       interactions:       defaultConfig.interactions       ?? [],
@@ -166,21 +173,29 @@ if (config.modes?.obs) {
         if (patch.youtube.enabled !== undefined) { raw.youtube.enabled = patch.youtube.enabled; config.youtube.enabled = patch.youtube.enabled; }
         if (patch.youtube.channel !== undefined) { raw.youtube.channel = patch.youtube.channel; config.youtube.channel = patch.youtube.channel; }
       }
+      if (patch.soop) {
+        raw.soop = raw.soop ?? {};
+        config.soop = config.soop ?? {};
+        if (patch.soop.enabled !== undefined) { raw.soop.enabled = patch.soop.enabled; config.soop.enabled = patch.soop.enabled; }
+        if (patch.soop.channel !== undefined) { raw.soop.channel = patch.soop.channel; config.soop.channel = patch.soop.channel; }
+        if (patch.soop.apiMode !== undefined) { raw.soop.apiMode = patch.soop.apiMode; config.soop.apiMode = patch.soop.apiMode; }
+      }
       fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
       // Hot-reload chat listener with updated config
       chatListener?.stop();
-      if (config.twitch?.enabled || config.youtube?.enabled) {
+      if (config.twitch?.enabled || config.youtube?.enabled || config.soop?.enabled) {
         chatListener = createChatListener(config, sm, broadcastState);
         chatListener.start();
       } else {
         chatListener = null;
       }
     },
-    saveEnv: ({ TWITCH_OAUTH, YOUTUBE_API_KEY } = {}) => {
+    saveEnv: ({ TWITCH_OAUTH, YOUTUBE_API_KEY, SOOP_API_KEY } = {}) => {
       if (TWITCH_OAUTH    !== undefined) process.env.TWITCH_OAUTH    = TWITCH_OAUTH;
       if (YOUTUBE_API_KEY !== undefined) process.env.YOUTUBE_API_KEY = YOUTUBE_API_KEY;
+      if (SOOP_API_KEY    !== undefined) process.env.SOOP_API_KEY    = SOOP_API_KEY;
       chatListener?.stop();
-      if (config.twitch?.enabled || config.youtube?.enabled) {
+      if (config.twitch?.enabled || config.youtube?.enabled || config.soop?.enabled) {
         chatListener = createChatListener(config, sm, broadcastState);
         chatListener.start();
       } else {
@@ -256,7 +271,7 @@ if (config.modes?.obs) {
 
 // ── Chat listener ─────────────────────────────────────────────────────────────
 let chatListener = null;
-if (config.twitch?.enabled || config.youtube?.enabled) {
+if (config.twitch?.enabled || config.youtube?.enabled || config.soop?.enabled) {
   chatListener = createChatListener(config, sm, broadcastState);
   chatListener.start();
 }

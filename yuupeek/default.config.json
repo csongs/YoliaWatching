@@ -115,6 +115,11 @@
     "enabled": false,
     "channel": "@altheayolia"
   },
+  "soop": {
+    "enabled": false,
+    "channel": "",
+    "apiMode": "community"
+  },
   "greetingAnimations": [
     {
       "frames": [

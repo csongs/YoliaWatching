@@ -145,12 +145,41 @@ function createChatListener(config, sm, broadcast) {
     }
   }
 
+  // ── SOOP ──────────────────────────────────────────────────────────────────────
+  let soopChat = null;
+
+  async function startSoop() {
+    if (!config.soop?.enabled || !config.soop?.channel) return;
+    if (config.soop.apiMode === 'official') {
+      console.log('[SOOP] 官方 API 模式尚未實作，請改用社群模式 (B)');
+      return;
+    }
+    try {
+      const { SoopClient, SoopChatEvent } = await import('soop-extension');
+      const client = new SoopClient();
+      soopChat = client.chat({ streamerId: config.soop.channel });
+      soopChat.on(SoopChatEvent.CHAT, (res) => {
+        processMessage(res.comment, res.username, 'SOOP');
+      });
+      soopChat.on(SoopChatEvent.DISCONNECT, () => {
+        console.log('[SOOP] stream ended');
+        soopChat = null;
+      });
+      await soopChat.connect();
+      console.log(`[SOOP] connected to ${config.soop.channel}`);
+    } catch (e) {
+      console.error('[SOOP] failed:', e.message);
+      soopChat = null;
+    }
+  }
+
   let stopped = false;
 
   return {
     start() {
       stopped = false;
       startTwitch();
+      startSoop().catch(e => console.error('[SOOP]', e.message));
       let ytPageToken = null;
       const scheduleYt = async () => {
         if (stopped) return;
@@ -164,6 +193,7 @@ function createChatListener(config, sm, broadcast) {
       stopped = true;
       twitchClient?.disconnect();
       if (youtubeInterval) clearTimeout(youtubeInterval);
+      soopChat = null;
     },
     updateHandlers(interactions) {
       thresholds = (interactions ?? []).filter(i => i.trigger === 'threshold');
@@ -173,6 +203,7 @@ function createChatListener(config, sm, broadcast) {
       return {
         twitch:  { connected: twitchClient?.readyState?.() === 'OPEN' },
         youtube: { live: liveVideoId !== null, error: youtubeErrorMessage },
+        soop:    { connected: soopChat !== null },
       };
     },
   };
