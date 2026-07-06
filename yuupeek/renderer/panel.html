@@ -86,14 +86,32 @@
 </head>
 <body>
 
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:#0f1117;z-index:1000;align-items:center;justify-content:center">
+  <div class="card" style="width:320px">
+    <h3>🔒 管理員登入</h3>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="text" id="login-email" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>密碼</label>
+      <input type="password" id="login-password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="login-error" style="color:#f87171;font-size:13px;margin-bottom:12px;display:none"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">登入</button>
+  </div>
+</div>
+
+<div id="app-root">
 <div class="tabs">
   <div class="tab active" onclick="showTab('guide')">安裝說明</div>
   <div class="tab local-only" onclick="showTab('status')">模組狀態</div>
   <div class="tab" onclick="showTab('pet')">桌寵設定</div>
   <div class="tab" onclick="showTab('settings')">設定</div>
-  <span style="margin-left:auto;display:flex;align-items:center;gap:12px;padding:0 16px;white-space:nowrap;pointer-events:none">
-    <span style="color:#475569;font-size:11px">Ctrl + 滾輪 縮放</span>
-    <span id="version-badge" style="color:#334155;font-size:11px;font-family:'Consolas',monospace"></span>
+  <span style="margin-left:auto;display:flex;align-items:center;gap:12px;padding:0 16px;white-space:nowrap">
+    <span id="logout-btn" style="display:none;cursor:pointer;color:#94a3b8;font-size:12px" onclick="firebase.auth().signOut()">登出</span>
+    <span style="color:#475569;font-size:11px;pointer-events:none">Ctrl + 滾輪 縮放</span>
+    <span id="version-badge" style="color:#334155;font-size:11px;font-family:'Consolas',monospace;pointer-events:none"></span>
   </span>
 </div>
 
@@ -309,6 +327,7 @@
     <button class="btn btn-secondary" onclick="openConfig()">開啟 config.json</button>
   </div>
 </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -321,6 +340,18 @@
     s.textContent = '.local-only{display:none!important}';
     document.head.appendChild(s);
     document.getElementById('guide-obs-url').textContent = location.origin + '/';
+    document.getElementById('app-root').style.display = 'none';
+  }
+
+  function doLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    errEl.style.display = 'none';
+    firebase.auth().signInWithEmailAndPassword(email, password).catch(() => {
+      errEl.textContent = '登入失敗，請確認帳號密碼';
+      errEl.style.display = 'block';
+    });
   }
 
   // ── Script loader ─────────────────────────────────────────────────────────
@@ -768,6 +799,7 @@
       await loadScript('/firebase-config.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js');
       firebase.initializeApp(FIREBASE_CONFIG);
       const db = firebase.database();
 
@@ -821,6 +853,14 @@
         openConfig:         () => Promise.resolve({ ok: true }),
         getDefaultPetConfig: () => Promise.resolve({ interactions: [], greetingAnimations: [], scale: 2 }),
       };
+
+      firebase.auth().onAuthStateChanged((user) => {
+        document.getElementById('login-overlay').style.display = user ? 'none' : 'flex';
+        document.getElementById('app-root').style.display      = user ? '' : 'none';
+        document.getElementById('logout-btn').style.display    = user ? '' : 'none';
+        if (user && !apiReady) { apiReady = true; loadVersion(); }
+      });
+      return;
     } else {
       const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
       api = {

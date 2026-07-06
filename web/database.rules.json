@@ -1,7 +1,7 @@
 {
   "rules": {
     "state":  { ".read": true,  ".write": false },
-    "config": { ".read": true,  ".write": true  },
+    "config": { ".read": true,  ".write": "auth != null" },
     "$other": { ".read": false, ".write": false }
   }
 }

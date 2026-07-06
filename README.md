@@ -37,6 +37,11 @@ Firebase 是 Google 的免費雲端服務，用來存放你的設定並提供 OB
    };
    ```
 
+5. 左側選單 → **建構** → **Authentication** → 點「**開始使用**」
+   - 「Sign-in method」頁籤 → 點「**Email/Password**」→ 啟用 → 儲存
+   - 「Users」頁籤 → 「**新增使用者**」→ 輸入你要用來登入控制面板的 Email 和密碼
+   - 這組帳密就是之後打開 `/panel` 時要輸入的登入資訊，忘記密碼可以回這裡的 Users 頁籤重設
+
 ---
 
 ### 步驟二：Fork 這個 repo
@@ -104,6 +109,8 @@ npx firebase-tools login:ci
 ### 步驟七：設定頻道與 API Key
 
 打開控制面板：`https://YOUR_PROJECT_ID.web.app/panel`
+
+會先看到登入畫面，輸入步驟一設定的 Email／密碼即可進入。
 
 進入「**設定**」頁：
 
