@@ -339,6 +339,12 @@
   // ── Environment detection ─────────────────────────────────────────────────
   const IS_WEB = !location.hostname.includes('localhost');
 
+  // Client-side allowlist mirrors database.rules.json's auth.token.email check.
+  // The real enforcement lives in the RTDB rules — this just gives an
+  // unauthorized signed-in user an immediate, friendly reason instead of
+  // silently failing writes.
+  const ALLOWED_EMAILS = ['__ADMIN_EMAIL__'];
+
   if (IS_WEB) {
     const s = document.createElement('style');
     s.textContent = '.local-only{display:none!important}';
@@ -868,6 +874,15 @@
       };
 
       firebase.auth().onAuthStateChanged((user) => {
+        if (user && !ALLOWED_EMAILS.includes((user.email || '').toLowerCase())) {
+          firebase.auth().signOut();
+          document.getElementById('login-overlay').style.display = 'flex';
+          document.getElementById('app-root').style.display      = 'none';
+          const errEl = document.getElementById('login-error');
+          errEl.textContent = '此帳號沒有權限進入控制面板';
+          errEl.style.display = 'block';
+          return;
+        }
         document.getElementById('login-overlay').style.display = user ? 'none' : 'flex';
         document.getElementById('app-root').style.display      = user ? '' : 'none';
         document.getElementById('logout-btn').style.display    = user ? '' : 'none';

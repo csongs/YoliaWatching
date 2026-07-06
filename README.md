@@ -74,6 +74,7 @@ Firebase 是 Google 的免費雲端服務，用來存放你的設定並提供 OB
 | `FIREBASE_MESSAGING_SENDER_ID` | firebaseConfig 裡的 `messagingSenderId` |
 | `FIREBASE_APP_ID` | firebaseConfig 裡的 `appId` |
 | `FIREBASE_SERVICE_ACCOUNT` | 步驟三下載的 `.json` 檔案**完整內容**（整份貼上，不用額外處理） |
+| `ADMIN_EMAIL` | 你要用來登入控制面板的 Email（步驟一設定的那組），只有這個帳號能存設定 |
 
 > **注意：** `databaseURL` 如果不是預設格式（`https://PROJECT_ID-default-rtdb.firebaseio.com`），請額外新增一個 `FIREBASE_DATABASE_URL` secret，填入你的實際 URL。亞洲區域（asia-southeast1）通常需要這個。
 

@@ -2,7 +2,7 @@
   "hosting": {
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "predeploy": ["node sync.js"],
+    "predeploy": ["node sync.js", "node gen-panel-email.js"],
     "cleanUrls": true,
     "headers": [
       { "source": "**", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
