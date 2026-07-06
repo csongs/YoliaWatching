@@ -51,17 +51,13 @@ Firebase 是 Google 的免費雲端服務，用來存放你的設定並提供 OB
 
 ---
 
-### 步驟三：取得 Firebase Token（一次性）
+### 步驟三：取得 Service Account 金鑰（一次性）
 
-這個 token 讓 GitHub 有權限部署到你的 Firebase，只需要設定一次。
+這把金鑰讓 GitHub 有權限部署到你的 Firebase，只需要設定一次。全程在網頁上點選，**不需要安裝任何軟體或下指令**。
 
-需要電腦上有 Node.js。開啟終端機（命令提示字元 / PowerShell / Terminal）執行：
-
-```bash
-npx firebase-tools login:ci
-```
-
-瀏覽器會跳出 Google 登入視窗，登入後終端機會顯示一串 token（`1//0xxx...`），複製起來備用。
+1. Firebase Console → 齒輪 ⚙ → **專案設定** → **服務帳戶** 頁籤
+2. 點「**產生新的私密金鑰**」→ 確認 → 會下載一個 `.json` 檔案
+3. 用文字編輯器打開這個 `.json` 檔案，全選複製內容（下一步要貼上）
 
 ---
 
@@ -77,7 +73,7 @@ npx firebase-tools login:ci
 | `FIREBASE_API_KEY` | firebaseConfig 裡的 `apiKey` |
 | `FIREBASE_MESSAGING_SENDER_ID` | firebaseConfig 裡的 `messagingSenderId` |
 | `FIREBASE_APP_ID` | firebaseConfig 裡的 `appId` |
-| `FIREBASE_TOKEN` | 步驟三取得的 token |
+| `FIREBASE_SERVICE_ACCOUNT` | 步驟三下載的 `.json` 檔案**完整內容**（整份貼上，不用額外處理） |
 
 > **注意：** `databaseURL` 如果不是預設格式（`https://PROJECT_ID-default-rtdb.firebaseio.com`），請額外新增一個 `FIREBASE_DATABASE_URL` secret，填入你的實際 URL。亞洲區域（asia-southeast1）通常需要這個。
 
