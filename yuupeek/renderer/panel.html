@@ -99,6 +99,10 @@
     </div>
     <div id="login-error" style="color:#f87171;font-size:13px;margin-bottom:12px;display:none"></div>
     <button class="btn btn-primary" style="width:100%" onclick="doLogin()">登入</button>
+    <div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:#475569;font-size:12px">
+      <hr style="flex:1;border:none;border-top:1px solid #2d3748"><span>或</span><hr style="flex:1;border:none;border-top:1px solid #2d3748">
+    </div>
+    <button class="btn btn-secondary" style="width:100%" onclick="doGoogleLogin()">使用 Google 登入</button>
   </div>
 </div>
 
@@ -350,6 +354,15 @@
     errEl.style.display = 'none';
     firebase.auth().signInWithEmailAndPassword(email, password).catch(() => {
       errEl.textContent = '登入失敗，請確認帳號密碼';
+      errEl.style.display = 'block';
+    });
+  }
+
+  function doGoogleLogin() {
+    const errEl = document.getElementById('login-error');
+    errEl.style.display = 'none';
+    firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch((e) => {
+      errEl.textContent = 'Google 登入失敗：' + (e.message || e.code || '');
       errEl.style.display = 'block';
     });
   }
