@@ -204,6 +204,16 @@
         </div>
         <div id="wk-wizard"></div>
         <div id="wk-frame-editor"></div>
+        ${(w.defaultInteractions?.length) ? `
+        <h3 style="margin-top:14px">建議綁定</h3>
+        <p style="color:#64748b;font-size:12px">套用後到「桌寵設定」分頁管理。</p>
+        ${w.defaultInteractions.map((it, i) => `
+          <label style="display:block;color:#94a3b8;font-size:13px;margin-bottom:4px">
+            <input type="checkbox" class="wk-di" data-i="${i}" checked>
+            ${esc(it.trigger)} ${esc(Array.isArray(it.match) ? it.match.join('、') : (it.match ?? `幽視值≥${it.min}`))}
+            → ${esc(it.animation ?? it.state ?? '')}
+          </label>`).join('')}
+        <button class="btn btn-secondary btn-small" onclick="Workshop._applyBindings()">套用勾選項</button>` : ''}
         <div style="display:flex;gap:8px;margin-top:16px">
           <button class="btn btn-small" onclick="Workshop._save()">儲存包</button>
           <button class="btn btn-secondary btn-small" onclick="Workshop._cancel()">返回列表</button>
@@ -315,6 +325,129 @@
     renderEditor();
   }
 
+  // ── ③ 幀編輯器(animation-editor.md §3:獨立小畫布,不實例化 createCharacter)──
+  let editingAnim = null;   // 動畫名
+  let selectedFrame = -1;
+  let previewTimer = null;
+
+  function editAnim(name) {
+    editingAnim = name;
+    selectedFrame = -1;
+    renderEditor();
+    renderFrameEditor();
+  }
+
+  function stopPreview() {
+    if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
+  }
+
+  function renderFrameEditor() {
+    const a = working.animations[editingAnim];
+    if (!a) { document.getElementById('wk-frame-editor').innerHTML = ''; stopPreview(); return; }
+    const thumbs = a.srcs.map((f, i) => `
+      <img src="${esc(f)}" onclick="Workshop._selectFrame(${i})" title="幀 ${i}"
+           style="width:48px;height:48px;image-rendering:pixelated;background:#1a1d27;cursor:pointer;
+                  border:2px solid ${i === selectedFrame ? '#f472b6' : '#2d3748'};border-radius:4px">`).join('');
+    document.getElementById('wk-frame-editor').innerHTML = `
+      <div style="background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:12px;margin-top:12px">
+        <p style="color:#94a3b8;font-size:12px;margin-bottom:8px">幀編輯:<b>${esc(editingAnim)}</b></p>
+        <div style="display:flex;gap:16px;align-items:start;flex-wrap:wrap">
+          <canvas id="wk-preview" width="96" height="96"
+                  style="image-rendering:pixelated;background:#1a1d27;border-radius:6px"></canvas>
+          <div style="flex:1;min-width:240px">
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">
+              <label style="color:#94a3b8;font-size:12px">每幀 ms
+                <input id="wk-ed-ms" type="text" inputmode="numeric" value="${a.ms ?? 150}" style="width:60px"
+                       onchange="Workshop._setMs(parseInt(this.value,10))"></label>
+              <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:4px">
+                <input type="checkbox" ${a.loop ? 'checked' : ''} onchange="Workshop._setLoop(this.checked)"> 循環</label>
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px">${thumbs}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-secondary btn-small" onclick="Workshop._moveFrame(-1)">← 左移</button>
+              <button class="btn btn-secondary btn-small" onclick="Workshop._moveFrame(1)">右移 →</button>
+              <button class="btn btn-secondary btn-small" onclick="Workshop._dupFrame()">複製</button>
+              <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" onclick="Workshop._delFrame()">刪幀</button>
+              <button class="btn btn-secondary btn-small" style="margin-left:auto" onclick="Workshop._closeEditor()">關閉</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    startPreview();
+  }
+
+  function startPreview() {
+    stopPreview();
+    const canvas = document.getElementById('wk-preview');
+    const ctx = canvas.getContext('2d');
+    let i = 0;
+    const tick = () => {
+      const a = working.animations[editingAnim];
+      if (!a?.srcs.length) return;
+      const img = new Image();
+      img.onload = () => { ctx.clearRect(0, 0, 96, 96); ctx.drawImage(img, 0, 0, 96, 96); };
+      img.src = a.srcs[i % a.srcs.length];
+      i++;
+    };
+    tick();
+    previewTimer = setInterval(tick, working.animations[editingAnim]?.ms ?? 150);
+  }
+
+  function selectFrame(i) { selectedFrame = i; renderFrameEditor(); }
+  function setMs(ms) {
+    if (!Number.isFinite(ms) || ms < 1 || ms > 10000) { showToast('ms 需為 1–10000', true); return; }
+    working.animations[editingAnim].ms = ms;
+    dirty = true;
+    startPreview();
+  }
+  function setLoop(v) { working.animations[editingAnim].loop = v; dirty = true; }
+  function withSel(fn) {
+    const a = working.animations[editingAnim];
+    if (selectedFrame < 0 || selectedFrame >= a.srcs.length) { showToast('先點選一個幀', true); return; }
+    fn(a.srcs);
+    dirty = true;
+    renderEditor();
+    renderFrameEditor();
+  }
+  function moveFrame(dir) {
+    withSel((srcs) => {
+      const j = selectedFrame + dir;
+      if (j < 0 || j >= srcs.length) return;
+      [srcs[selectedFrame], srcs[j]] = [srcs[j], srcs[selectedFrame]];
+      selectedFrame = j;
+    });
+  }
+  function dupFrame() {
+    withSel((srcs) => {
+      if (srcs.length >= 32) { showToast('已達單一動畫 32 幀上限', true); return; }
+      srcs.splice(selectedFrame + 1, 0, srcs[selectedFrame]); // data URL 字串共享,無額外成本
+    });
+  }
+  function delFrame() {
+    withSel((srcs) => {
+      if (srcs.length <= 1) { showToast('至少要留一幀', true); return; }
+      srcs.splice(selectedFrame, 1);
+      selectedFrame = Math.min(selectedFrame, srcs.length - 1);
+    });
+  }
+  function closeEditor() { editingAnim = null; stopPreview(); renderEditor(); }
+
+  // ── ④ 建議綁定套用(寫 config.interactions;不重造第二套互動編輯器)────────
+  async function applyBindings() {
+    const picked = [...document.querySelectorAll('.wk-di:checked')]
+      .map(el => working.defaultInteractions[+el.dataset.i]);
+    if (!picked.length) { showToast('沒有勾選任何項目', true); return; }
+    try {
+      const cfg = await api.getPetConfig();
+      const { merged, added, skipped } =
+        PackFormat.applyDefaultInteractions(picked, cfg.interactions ?? [], generateId);
+      await api.savePetConfig({ interactions: merged });
+      showToast(`已套用 ${added.length} 項` + (skipped.length ? `,${skipped.length} 項與現有互動重複已跳過` : ''));
+    } catch (e) {
+      showToast('套用失敗:' + (e.message ?? e), true);
+    }
+  }
+
   // ── 儲存/返回/刪除 ────────────────────────────────────────────────────────
   async function save() {
     readManifest();
@@ -369,6 +502,8 @@
     _reslice: reslice, _addAnim: addAnim, _removeAnim: removeAnim,
     _save: save, _cancel: cancel,
     _touch: () => { dirty = true; },
-    _editAnim: () => showToast('幀編輯器尚未就緒(下一任務)', true), // Task 9 覆蓋
+    _editAnim: editAnim, _selectFrame: selectFrame, _setMs: setMs, _setLoop: setLoop,
+    _moveFrame: moveFrame, _dupFrame: dupFrame, _delFrame: delFrame, _closeEditor: closeEditor,
+    _applyBindings: applyBindings,
   };
 })();
