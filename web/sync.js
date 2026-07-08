@@ -9,6 +9,8 @@ const FILES = [
   ['yuupeek/renderer/character.js', 'web/public/character.js'],
   ['yuupeek/renderer/panel.html',   'web/public/panel.html'],
   ['yuupeek/src/chatProcessor.js',  'web/public/chatProcessor.js'],
+  ['yuupeek/src/packFormat.js',     'web/public/packFormat.js'],
+  ['yuupeek/renderer/workshop.js',  'web/public/workshop.js'],
 ];
 
 for (const [src, dst] of FILES) {

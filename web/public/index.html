@@ -48,6 +48,7 @@
 
   <script src="./character.js"></script>
   <script src="./chatProcessor.js"></script>
+  <script src="./packFormat.js"></script>
   <script src="./firebase-config.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -348,12 +349,37 @@
     let prevYtKey     = '';
     let prevSoopKey   = '';
 
+    let currentPackKey = null;   // 啟用中角色包的 RTDB key(id 的「.」換「_」);null=無
+    let packAnimations = null;   // packToAnimations 結果;null=無啟用包
+
+    // 套用順序:內建 DEFAULT + config/animations 打底,啟用中的包疊上去
+    // (擴充包=只疊自己的動作;換角包=packToAnimations 已把已知狀態映射到包的 idle)
+    function applyAllAnimations(config) {
+      char.setAnimations({ ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) });
+      if (packAnimations) char.setAnimations(packAnimations);
+    }
+
     db.ref('config').on('value', (snap) => {
       const config = snap.val() ?? {};
 
       thresholds = (config.interactions ?? []).filter(i => i.trigger === 'threshold');
       handlers   = ChatProcessor.buildHandlers(config.interactions ?? []);
-      char.setAnimations({ ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) });
+
+      const packKey = config.activePackId ? String(config.activePackId).replace(/\./g, '_') : null;
+      if (packKey !== currentPackKey) {
+        currentPackKey = packKey;
+        packAnimations = null;                       // 停用/切換:先回打底狀態
+        if (packKey) {
+          db.ref('packs/' + packKey).once('value').then((ps) => {
+            if (currentPackKey !== packKey) return;  // 載入期間又切換了,丟棄
+            const pack = ps.val();
+            if (!pack) { console.warn('[pack] 找不到角色包:', packKey); return; }
+            packAnimations = PackFormat.packToAnimations(pack);
+            applyAllAnimations(config);
+          }).catch((e) => console.warn('[pack] 載入失敗,維持現狀:', e));
+        }
+      }
+      applyAllAnimations(config);
       if (config.obs?.scale)                 char.setScale(config.obs.scale);
       if (config.greetingAnimations?.length) char.setWaveVariants(config.greetingAnimations);
 
