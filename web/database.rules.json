@@ -2,6 +2,7 @@
   "rules": {
     "state":  { ".read": true,  ".write": false },
     "config": { ".read": true,  ".write": "auth != null && auth.token.email == 'REPLACE_WITH_YOUR_EMAIL'" },
+    "packs":  { ".read": true,  ".write": "auth != null && auth.token.email == 'REPLACE_WITH_YOUR_EMAIL'" },
     "$other": { ".read": false, ".write": false }
   }
 }
