@@ -101,5 +101,44 @@
     return out;
   }
 
-  return { validatePack, packToAnimations, KNOWN_STATES };
+  // 規格 §7 步驟 1–3 的純幾何部分(canvas 切圖在 UI 層,規格 §9)
+  function sliceGeometry(imageWidth, imageHeight, frameWidth) {
+    const frameW = frameWidth ?? imageHeight;
+    if (!Number.isInteger(frameW) || frameW <= 0) return { ok: false, error: '幀寬必須是正整數' };
+    if (imageWidth % frameW !== 0) {
+      return { ok: false, error: '圖寬 ' + imageWidth + ' 不能被幀寬 ' + frameW + ' 整除,請確認幀寬' };
+    }
+    const count = imageWidth / frameW;
+    return {
+      ok: true, frameW, count,
+      rects: Array.from({ length: count }, (_, i) => ({ x: i * frameW, y: 0, w: frameW, h: imageHeight })),
+    };
+  }
+
+  // 規格 §7:loop 依名稱慣例給預設,編輯器一律可改
+  function defaultLoop(name) {
+    return name === 'idle' || name.startsWith('run_') || name.startsWith('walk');
+  }
+
+  // 規格 §2 defaultInteractions:同 match 已存在則跳過並回報;id 由呼叫端 generateId 現生成
+  function applyDefaultInteractions(packInteractions, existing, generateId) {
+    const existingMatches = new Set();
+    for (const it of existing ?? []) {
+      const m = Array.isArray(it.match) ? it.match : (it.match ? [it.match] : []);
+      m.forEach(x => existingMatches.add(x));
+    }
+    const merged = [...(existing ?? [])];
+    const added = [], skipped = [];
+    for (const it of packInteractions ?? []) {
+      const m = Array.isArray(it.match) ? it.match : (it.match ? [it.match] : []);
+      if (m.some(x => existingMatches.has(x))) { skipped.push(it); continue; }
+      const withId = { ...it, id: generateId(it.trigger) };
+      merged.push(withId);
+      added.push(withId);
+      m.forEach(x => existingMatches.add(x));
+    }
+    return { merged, added, skipped };
+  }
+
+  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, KNOWN_STATES };
 });

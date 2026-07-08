@@ -1,4 +1,4 @@
-const { validatePack, packToAnimations } = require('../packFormat');
+const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions } = require('../packFormat');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -134,5 +134,69 @@ describe('packToAnimations', () => {
   test('loop 缺省時輸出 false(布林化)', () => {
     const p = extPack({ animations: { hurt: { srcs: [PNG] } } });
     expect(packToAnimations(p).hurt.loop).toBe(false);
+  });
+});
+
+describe('sliceGeometry(規格 §7)', () => {
+  test('省略幀寬 → 猜圖高;1712×214 切 8 幀', () => {
+    const r = sliceGeometry(1712, 214);
+    expect(r).toMatchObject({ ok: true, frameW: 214, count: 8 });
+    expect(r.rects[0]).toEqual({ x: 0, y: 0, w: 214, h: 214 });
+    expect(r.rects[7]).toEqual({ x: 1498, y: 0, w: 214, h: 214 });
+  });
+
+  test('不整除 → 報錯訊息含兩個數字', () => {
+    const r = sliceGeometry(1712, 200);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/1712/);
+    expect(r.error).toMatch(/200/);
+  });
+
+  test('手動指定幀寬覆蓋猜測', () => {
+    expect(sliceGeometry(1712, 214, 856)).toMatchObject({ ok: true, count: 2 });
+  });
+
+  test('幀寬非正整數 → 錯誤', () => {
+    expect(sliceGeometry(100, 0).ok).toBe(false);
+    expect(sliceGeometry(100, 50, -2).ok).toBe(false);
+  });
+});
+
+describe('defaultLoop(規格 §7 名稱慣例)', () => {
+  test('idle/run_*/walk* 預設循環,其餘單次', () => {
+    expect(defaultLoop('idle')).toBe(true);
+    expect(defaultLoop('run_left')).toBe(true);
+    expect(defaultLoop('walking')).toBe(true);
+    expect(defaultLoop('hurt')).toBe(false);
+    expect(defaultLoop('wave')).toBe(false);
+  });
+});
+
+describe('applyDefaultInteractions', () => {
+  const genId = (t) => (t === 'command' ? 'c' : t === 'keyword' ? 'k' : 't') + '_test';
+
+  test('新互動取得現生成的 id 並加入', () => {
+    const pack = [{ trigger: 'command', match: ['!痛'], animation: 'hurt', yolia_see: 0, response: '好痛!' }];
+    const { merged, added, skipped } = applyDefaultInteractions(pack, [], genId);
+    expect(added).toHaveLength(1);
+    expect(added[0].id).toBe('c_test');
+    expect(merged).toHaveLength(1);
+    expect(skipped).toHaveLength(0);
+  });
+
+  test('同 match 已存在 → 跳過並回報', () => {
+    const existing = [{ id: 'c_old', trigger: 'command', match: '!痛', animation: 'cry' }];
+    const pack = [{ trigger: 'command', match: ['!痛'], animation: 'hurt' }];
+    const { merged, added, skipped } = applyDefaultInteractions(pack, existing, genId);
+    expect(added).toHaveLength(0);
+    expect(skipped).toHaveLength(1);
+    expect(merged).toEqual(existing);
+  });
+
+  test('threshold(無 match)一律加入', () => {
+    const pack = [{ trigger: 'threshold', min: 50, state: 'hurt' }];
+    const { added } = applyDefaultInteractions(pack, [], genId);
+    expect(added).toHaveLength(1);
+    expect(added[0].id).toBe('t_test');
   });
 });
