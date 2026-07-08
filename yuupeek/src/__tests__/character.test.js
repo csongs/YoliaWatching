@@ -106,3 +106,29 @@ describe('run animation', () => {
     expect(char.getCurrentState()).toBe('idle');
   });
 });
+
+// ── setAnimations srcs support(規格 §4)────────────────────────────────────
+
+describe('setAnimations srcs support', () => {
+  test('接受 srcs 陣列並可播放自訂狀態至結束回 baseState', () => {
+    const char = makeChar();
+    char.setAnimations({ hurt: { srcs: ['data:image/png;base64,AAA'], ms: 50, loop: false } });
+    char.applyUpdate({ value: 0, state: 'hurt', animOnly: true });
+    expect(char.getCurrentState()).toBe('hurt');
+
+    jest.advanceTimersByTime(300); // 1 幀 × 50ms 播畢 → 回 baseState(idle)
+    expect(char.getCurrentState()).toBe('idle');
+  });
+
+  test('無 srcs 也無 folder 的項目靜默跳過,不炸', () => {
+    const char = makeChar();
+    expect(() => char.setAnimations({ bad: { frames: 3 }, worse: null })).not.toThrow();
+  });
+
+  test('folder 格式(舊路徑)行為不變', () => {
+    const char = makeChar();
+    char.setAnimations({ hurt: { folder: 'hurt', frames: [0, 1], ms: 50, loop: false } });
+    char.applyUpdate({ value: 0, state: 'hurt', animOnly: true });
+    expect(char.getCurrentState()).toBe('hurt');
+  });
+});

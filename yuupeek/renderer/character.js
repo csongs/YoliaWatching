@@ -328,6 +328,11 @@ function createCharacter({
     },
     setAnimations(cfg) {
       Object.entries(cfg).forEach(([state, def]) => {
+        if (Array.isArray(def?.srcs)) {                        // 完整 URL(data URL 或 https)直通
+          ANIMATIONS[state] = { srcs: def.srcs, loop: !!def.loop, ms: def.ms };
+          cacheFrames(def.srcs);
+          return;
+        }
         if (!def?.folder || !Array.isArray(def.frames)) return;
         const srcs = def.frames.map(
           i => `${assetBase}/${def.folder}/${String(i).padStart(2, '0')}.png`
