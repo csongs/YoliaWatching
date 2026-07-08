@@ -17,6 +17,11 @@ web/public/character.js
 web/public/chatProcessor.js
 web/public/panel.html
 web/public/assets/
+web/public/packFormat.js
+web/public/workshop.js
+
+# AI session 工作檔（進度 ledger、任務簡報）
+.superpowers/
 
 # 工具（暫不追蹤）
 tools/
