@@ -676,7 +676,7 @@
     ])
       .then(([data, animData]) => {
         const names = [...new Set(Object.keys(animData.animations ?? animData))];
-        if (names.length) STATE_OPTIONS = names;
+        if (names.length) STATE_OPTIONS = [...new Set([...STATE_OPTIONS, ...names])];
         document.getElementById('pet-scale').value = String(data.scale ?? 2);
         const list = document.getElementById('interactions-list');
         list.innerHTML = '';

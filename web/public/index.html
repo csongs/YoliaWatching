@@ -352,6 +352,8 @@
     let currentPackKey = null;   // 啟用中角色包的 RTDB key(id 的「.」換「_」);null=無
     let packAnimations = null;   // packToAnimations 結果;null=無啟用包
     let prevPackStates = [];     // 上一次套用的 pack 狀態名(停用/切換時清除殘留用)
+    let latestConfig = {};       // 最新一份 config(供 pack on('value') 回呼延後觸發時使用,避免用到舊 closure)
+    let packRef = null;          // 目前訂閱中的 /packs/<key> ref(切換/停用時 off())
 
     // 套用順序:先清掉舊包引入、且新基底蓋不掉的殘留狀態,再以內建 DEFAULT + config/animations
     // 打底,最後把啟用中的包疊上去
@@ -367,6 +369,7 @@
 
     db.ref('config').on('value', (snap) => {
       const config = snap.val() ?? {};
+      latestConfig = config;
 
       thresholds = (config.interactions ?? []).filter(i => i.trigger === 'threshold');
       handlers   = ChatProcessor.buildHandlers(config.interactions ?? []);
@@ -375,14 +378,19 @@
       if (packKey !== currentPackKey) {
         currentPackKey = packKey;
         packAnimations = null;                       // 停用/切換:先回打底狀態
+        packRef?.off(); packRef = null;              // 解除舊包訂閱
         if (packKey) {
-          db.ref('packs/' + packKey).once('value').then((ps) => {
-            if (currentPackKey !== packKey) return;  // 載入期間又切換了,丟棄
-            const pack = ps.val();
-            if (!pack) { console.warn('[pack] 找不到角色包:', packKey); return; }
-            packAnimations = PackFormat.packToAnimations(pack);
-            applyAllAnimations(config);
-          }).catch((e) => console.warn('[pack] 載入失敗,維持現狀:', e));
+          packRef = db.ref('packs/' + packKey);
+          packRef.on('value', (ps) => {              // on 而非 once:編輯啟用中的包即時生效
+            try {
+              const pack = ps.val();
+              if (!pack) { console.warn('[pack] 找不到角色包:', packKey); return; }
+              packAnimations = PackFormat.packToAnimations(pack);
+              applyAllAnimations(latestConfig);
+            } catch (e) {
+              console.warn('[pack] 載入失敗,維持現狀:', e);
+            }
+          }, (e) => console.warn('[pack] 讀取失敗,維持現狀:', e));
         }
       }
       applyAllAnimations(config);

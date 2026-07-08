@@ -9,6 +9,7 @@
   let activePackId = null; // pack.id(含「.」)或 null(=內建 Yolia)
   let working = null;      // 編輯中的包(記憶體工作副本;儲存才寫 RTDB)
   let dirty = false;
+  let editingKey = null;   // edit() 進入時的原始 key;儲存時若 id 改指到別的既有 key 需覆蓋確認
 
   window.addEventListener('beforeunload', (e) => {
     if (dirty) { e.preventDefault(); e.returnValue = ''; }
@@ -139,12 +140,14 @@
     };
     if (base === 'builtin') working.base = 'builtin';
     dirty = false;
+    editingKey = null;
     renderEditor();
   }
 
   function edit(key) {
     working = JSON.parse(JSON.stringify(packs[key]));   // 深拷貝:儲存前不動原資料
     dirty = false;
+    editingKey = key;
     renderEditor();
   }
 
@@ -163,7 +166,10 @@
     if (!v.ok) { showToast(v.errors[0], true); return; }
     const n = Object.keys(pack.animations).length;
     const kb = Math.round(JSON.stringify(pack).length / 1024);
-    if (!confirm(`匯入「${pack.name}」?\n${n} 個動畫,約 ${kb} KB,授權 ${pack.license}`)) return;
+    let confirmMsg = `匯入「${pack.name}」?\n${n} 個動畫,約 ${kb} KB,授權 ${pack.license}`;
+    const existing = packs[keyOf(pack.id)];
+    if (existing) confirmMsg += `\n已存在同 ID 的角色包「${existing.name}」,匯入將覆蓋它`;
+    if (!confirm(confirmMsg)) return;
     try {
       await api.savePack(pack);
       packs[keyOf(pack.id)] = pack;
@@ -311,6 +317,7 @@
     const loop = document.getElementById('wk-anim-loop').checked;
     if (!/^[a-z][a-z0-9_]*$/.test(name)) { showToast('狀態名限小寫英文開頭+小寫英數底線', true); return; }
     if (!wizard?.frames?.length) { showToast('沒有可加入的幀', true); return; }
+    if (wizard.frames.length > 32) { showToast('單一動畫上限 32 幀,目前 ' + wizard.frames.length + ' 幀', true); return; }
     if (working.animations[name] && !confirm(`動畫「${name}」已存在,要覆蓋嗎?`)) return;
     working.animations[name] = { srcs: wizard.frames, ms: Number.isFinite(ms) ? ms : 125, loop };
     wizard = null;
@@ -461,10 +468,13 @@
     readManifest();
     const v = PackFormat.validatePack(working);
     if (!v.ok) { showToast(v.errors[0], true); return; }
+    const key = keyOf(working.id);
+    if (packs[key] && key !== editingKey && !confirm('已存在同 ID 的角色包「' + packs[key].name + '」,儲存將覆蓋它,確定?')) return;
     try {
       await api.savePack(working);
-      packs[keyOf(working.id)] = working;
+      packs[key] = working;
       dirty = false;
+      editingKey = null;
       showToast('已儲存角色包');
       if (working.id !== activePackId && confirm('立即啟用這個角色包?')) await activate(working.id);
       stopPreview(); editingAnim = null;
