@@ -3,7 +3,7 @@
 (function () {
   const root = () => document.getElementById('workshop-root');
   const keyOf = (id) => String(id).replace(/\./g, '_');
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   let packs = {};          // RTDB /packs 全量:key → pack
   let activePackId = null; // pack.id(含「.」)或 null(=內建 Yolia)
@@ -12,6 +12,25 @@
 
   window.addEventListener('beforeunload', (e) => {
     if (dirty) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  // ── 事件委派(data-act)────────────────────────────────────────────────────
+  // #workshop-root 從頁面載入就存在(panel.html),在此裝一次即可,不必等 load()。
+  // 用意:避免字串參數塞進 inline onclick 造成引號逃逸(XSS);key/id/name 一律走
+  // dataset 讀取,不再拼字串進 HTML 屬性以外的 JS 上下文。
+  root()?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const { act, key, id, name } = btn.dataset;
+    // data-act 派發表(Task 9 將於此擴充動畫幀編輯器等真正實作)
+    switch (act) {
+      case 'activate':          activate(id); break;
+      case 'activate-builtin':  activate(null); break;
+      case 'edit':              edit(key); break;
+      case 'remove':            remove(key); break;
+      case 'edit-anim':         window.Workshop._editAnim(name); break;
+      case 'remove-anim':       removeAnim(name); break;
+    }
   });
 
   // ── 檔案/圖片工具 ─────────────────────────────────────────────────────────
@@ -73,9 +92,9 @@
           </div>
           ${isActive
             ? '<span style="color:#f472b6;font-size:12px">● 啟用中</span>'
-            : `<button class="btn btn-secondary btn-small" onclick="Workshop._activate('${esc(p.id)}')">啟用</button>`}
-          <button class="btn btn-secondary btn-small" onclick="Workshop._edit('${key}')">編輯</button>
-          <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" onclick="Workshop._remove('${key}')">刪除</button>
+            : `<button class="btn btn-secondary btn-small" data-act="activate" data-id="${esc(p.id)}">啟用</button>`}
+          <button class="btn btn-secondary btn-small" data-act="edit" data-key="${esc(key)}">編輯</button>
+          <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" data-act="remove" data-key="${esc(key)}">刪除</button>
         </div>`;
     }).join('');
 
@@ -85,7 +104,7 @@
         <div style="display:flex;align-items:center;gap:10px;background:#0d111a;border:1px solid ${activePackId ? '#2d3748' : '#f472b6'};border-radius:8px;padding:12px;margin-bottom:10px">
           <div style="flex:1"><b>內建 Yolia</b> <span style="color:#64748b;font-size:12px">預設角色,不可刪除</span></div>
           ${activePackId
-            ? '<button class="btn btn-secondary btn-small" onclick="Workshop._activate(null)">啟用</button>'
+            ? '<button class="btn btn-secondary btn-small" data-act="activate-builtin">啟用</button>'
             : '<span style="color:#f472b6;font-size:12px">● 啟用中</span>'}
         </div>
         ${cards}
@@ -162,18 +181,18 @@
       <div style="display:flex;align-items:center;gap:10px;background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:10px;margin-bottom:8px">
         <img src="${a.srcs[0]}" style="width:36px;height:36px;image-rendering:pixelated;background:#1a1d27;border-radius:4px">
         <div style="flex:1"><b>${esc(name)}</b> <span style="color:#64748b;font-size:12px">${a.srcs.length} 幀 · ${a.ms ?? 150}ms · ${a.loop ? '循環' : '單次'}</span></div>
-        <button class="btn btn-secondary btn-small" onclick="Workshop._editAnim('${esc(name)}')">編輯</button>
-        <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" onclick="Workshop._removeAnim('${esc(name)}')">刪除</button>
+        <button class="btn btn-secondary btn-small" data-act="edit-anim" data-name="${esc(name)}">編輯</button>
+        <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" data-act="remove-anim" data-name="${esc(name)}">刪除</button>
       </div>`).join('');
 
     root().innerHTML = `
       <div class="card">
         <h3>${w.base === 'builtin' ? '擴充包(疊加在內建 Yolia 上)' : '換角包(整隻角色,必含 idle)'}</h3>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px">
-          <label style="color:#94a3b8;font-size:12px">包 ID(作者.包名,全小寫)<input id="wk-id" value="${esc(w.id)}" style="width:100%"></label>
-          <label style="color:#94a3b8;font-size:12px">名稱<input id="wk-name" value="${esc(w.name)}" style="width:100%"></label>
-          <label style="color:#94a3b8;font-size:12px">作者<input id="wk-author" value="${esc(w.author)}" style="width:100%"></label>
-          <label style="color:#94a3b8;font-size:12px">授權<select id="wk-license" style="width:100%">
+          <label style="color:#94a3b8;font-size:12px">包 ID(作者.包名,全小寫)<input id="wk-id" value="${esc(w.id)}" style="width:100%" oninput="Workshop._touch()"></label>
+          <label style="color:#94a3b8;font-size:12px">名稱<input id="wk-name" value="${esc(w.name)}" style="width:100%" oninput="Workshop._touch()"></label>
+          <label style="color:#94a3b8;font-size:12px">作者<input id="wk-author" value="${esc(w.author)}" style="width:100%" oninput="Workshop._touch()"></label>
+          <label style="color:#94a3b8;font-size:12px">授權<select id="wk-license" style="width:100%" oninput="Workshop._touch()">
             ${['CC0-1.0', 'CC-BY-4.0', 'CC-BY-NC-4.0', 'custom'].map(l => `<option${l === w.license ? ' selected' : ''}>${l}</option>`).join('')}
           </select></label>
         </div>
@@ -349,6 +368,7 @@
     _importJson: importJson, _importSheet: importSheet, _importFrames: importFrames,
     _reslice: reslice, _addAnim: addAnim, _removeAnim: removeAnim,
     _save: save, _cancel: cancel,
+    _touch: () => { dirty = true; },
     _editAnim: () => showToast('幀編輯器尚未就緒(下一任務)', true), // Task 9 覆蓋
   };
 })();
