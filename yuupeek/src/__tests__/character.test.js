@@ -131,4 +131,20 @@ describe('setAnimations srcs support', () => {
     char.applyUpdate({ value: 0, state: 'hurt', animOnly: true });
     expect(char.getCurrentState()).toBe('hurt');
   });
+
+  test('def 為 null 時移除該狀態(停用角色包清殘留)', () => {
+    const char = makeChar();
+    char.setAnimations({ hurt: { srcs: ['data:image/png;base64,AAA'], ms: 50, loop: false } });
+    char.setAnimations({ hurt: null });
+    // 移除後播放 hurt:引擎查無此狀態,幀來源回退 idle;300ms(僅 1 幀時足以播畢)不會結束
+    // idle 的 10 幀序列,狀態應停留在 hurt(與「未知狀態」行為一致,不炸)
+    expect(() => char.applyUpdate({ value: 0, state: 'hurt', animOnly: true })).not.toThrow();
+    jest.advanceTimersByTime(300);
+    expect(char.getCurrentState()).toBe('hurt');
+  });
+
+  test('移除不存在的狀態不炸', () => {
+    const char = makeChar();
+    expect(() => char.setAnimations({ ghost: null })).not.toThrow();
+  });
 });

@@ -328,6 +328,7 @@ function createCharacter({
     },
     setAnimations(cfg) {
       Object.entries(cfg).forEach(([state, def]) => {
+        if (def === null) { delete ANIMATIONS[state]; return; }   // 顯式移除(角色包停用時清除殘留狀態)
         if (Array.isArray(def?.srcs)) {                        // 完整 URL(data URL 或 https)直通
           ANIMATIONS[state] = { srcs: def.srcs, loop: !!def.loop, ms: def.ms };
           cacheFrames(def.srcs);

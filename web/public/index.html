@@ -351,12 +351,18 @@
 
     let currentPackKey = null;   // 啟用中角色包的 RTDB key(id 的「.」換「_」);null=無
     let packAnimations = null;   // packToAnimations 結果;null=無啟用包
+    let prevPackStates = [];     // 上一次套用的 pack 狀態名(停用/切換時清除殘留用)
 
-    // 套用順序:內建 DEFAULT + config/animations 打底,啟用中的包疊上去
-    // (擴充包=只疊自己的動作;換角包=packToAnimations 已把已知狀態映射到包的 idle)
+    // 套用順序:先清掉舊包引入、且新基底蓋不掉的殘留狀態,再以內建 DEFAULT + config/animations
+    // 打底,最後把啟用中的包疊上去
     function applyAllAnimations(config) {
-      char.setAnimations({ ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) });
+      const baseline = { ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) };
+      const packKeys = packAnimations ? Object.keys(packAnimations) : [];
+      const stale = prevPackStates.filter(s => !(s in baseline) && !packKeys.includes(s));
+      if (stale.length) char.setAnimations(Object.fromEntries(stale.map(s => [s, null])));
+      char.setAnimations(baseline);
       if (packAnimations) char.setAnimations(packAnimations);
+      prevPackStates = packKeys;
     }
 
     db.ref('config').on('value', (snap) => {
