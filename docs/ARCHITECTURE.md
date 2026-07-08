@@ -84,8 +84,9 @@ RTDB /config ──(on('value') 整節點訂閱, index.html 約 L351)──▶ o
   DEFAULT_ANIMATIONS 同值、少 watch_excited，作為 config 載入前／載入失敗時的 fallback）；
   **runtime 覆蓋入口 = `setAnimations(cfg)`（L329–338）**，
   接受 `{ 狀態名: {folder, frames, ms, loop} }`，可新增任意新狀態名。
-- 已知限制：`setAnimations` 只會組 `assetBase` 相對路徑，**不支援完整 URL / data URL**
-  （角色包功能需要動這裡——見 docs/specs/character-pack-format.md）。
+- `setAnimations` 支援兩種格式：`{folder, frames[]}`（assetBase 相對路徑）與
+  `{srcs[]}`（完整 URL/data URL，2026-07-07 加，角色包用；規格見
+  docs/specs/character-pack-format.md）；值為 `null` 時移除該狀態（角色包停用時清殘留用）。
 - 畫布 128×139（`DISPLAY_W/H`），`drawFrame` 把整張 PNG 拉伸繪滿畫布（L174–179）。
 - 位置行為（追隨狀態移動、跳躍連擊、閒晃 wander）都在此檔，與動畫格式無關。
 - `watch_excited` 狀態證明「純 config 新增動畫」已可行：它不在 character.js 內建表，
@@ -108,7 +109,11 @@ RTDB /config ──(on('value') 整節點訂閱, index.html 約 L351)──▶ o
 │    { id:"c_xxxx", trigger:"command",  match:string|string[], animation, yolia_see, cost?, response }
 │  ]
 ├─ animations: { <狀態名>: {folder, frames[], ms, loop} }   （覆蓋/新增動畫）
-└─ greetingAnimations: [ {frames[], ms, weight} ]           （wave 加權隨機變體；panel 無編輯 UI）
+├─ greetingAnimations: [ {frames[], ms, weight} ]           （wave 加權隨機變體；panel 無編輯 UI）
+└─ activePackId: string|null    （啟用中角色包 id;null/缺省=內建角色）
+
+/packs/<packId 的「.」換「_」>    .read: 公開   .write: 僅 ADMIN_EMAIL
+    = 完整 .yolia.json 內容（Character Pack v1,規格 docs/specs/character-pack-format.md）
 
 /state    規則保留但未使用（.read: true, .write: false）
 $other    一律拒絕（.read/.write: false）←新增頂層節點必須改 rules

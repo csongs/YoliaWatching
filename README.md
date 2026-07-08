@@ -228,3 +228,9 @@ Push 到 main 自動觸發 GitHub Actions 部署。
 手動觸發：Actions → Deploy to Firebase → Run workflow。
 
 共用檔案修改後（`character.js`、`panel.html`、`chatProcessor.js`），CI 的 `sync.js` 會自動同步，不需要手動複製。
+
+## 粉絲投稿:幫角色加新動作
+
+粉絲可以畫 spritesheet 投稿新動作(透過任何場外管道交給實況主),實況主在
+控制面板「角色工房」匯入並綁定指令。格式要求見
+[docs/fan-submission-guide.md](docs/fan-submission-guide.md)。

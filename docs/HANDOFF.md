@@ -4,7 +4,13 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-07，制度建立 session）
+## 目前狀態（2026-07-09，Task 10 文件更新）
+
+- 角色工坊 Phase 1 + 擴充包(base:"builtin")已實作:packFormat.js(含測試)、
+  character.js srcs、/packs rules、overlay activePackId、panel 角色工房分頁+workshop.js、
+  粉絲投稿指南。已驗證:npm test(packFormat+character 綠)、桌面版降級、test-ui 沙盒。
+  未驗證:雲端 e2e(需部署後手動:匯入 sample sheet → 啟用 → onMessage 觸發)。
+  設計:docs/designs/fan-extension-pack.md、ADR-003。
 
 | # | 交付項 | 檔案 | 狀態 |
 |---|--------|------|------|
