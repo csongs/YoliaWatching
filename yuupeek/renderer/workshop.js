@@ -321,6 +321,7 @@
   function removeAnim(name) {
     if (!confirm(`刪除動畫「${name}」?`)) return;
     delete working.animations[name];
+    if (name === editingAnim) { stopPreview(); editingAnim = null; }
     dirty = true;
     renderEditor();
   }
@@ -382,7 +383,7 @@
     const ctx = canvas.getContext('2d');
     let i = 0;
     const tick = () => {
-      const a = working.animations[editingAnim];
+      const a = working?.animations?.[editingAnim];
       if (!a?.srcs.length) return;
       const img = new Image();
       img.onload = () => { ctx.clearRect(0, 0, 96, 96); ctx.drawImage(img, 0, 0, 96, 96); };
@@ -398,13 +399,20 @@
     if (!Number.isFinite(ms) || ms < 1 || ms > 10000) { showToast('ms 需為 1–10000', true); return; }
     working.animations[editingAnim].ms = ms;
     dirty = true;
-    startPreview();
+    renderEditor();
+    renderFrameEditor();
   }
-  function setLoop(v) { working.animations[editingAnim].loop = v; dirty = true; }
+  function setLoop(v) {
+    working.animations[editingAnim].loop = v;
+    dirty = true;
+    renderEditor();
+    renderFrameEditor();
+  }
   function withSel(fn) {
     const a = working.animations[editingAnim];
     if (selectedFrame < 0 || selectedFrame >= a.srcs.length) { showToast('先點選一個幀', true); return; }
-    fn(a.srcs);
+    const changed = fn(a.srcs);
+    if (changed === false) return;
     dirty = true;
     renderEditor();
     renderFrameEditor();
@@ -412,20 +420,20 @@
   function moveFrame(dir) {
     withSel((srcs) => {
       const j = selectedFrame + dir;
-      if (j < 0 || j >= srcs.length) return;
+      if (j < 0 || j >= srcs.length) return false;
       [srcs[selectedFrame], srcs[j]] = [srcs[j], srcs[selectedFrame]];
       selectedFrame = j;
     });
   }
   function dupFrame() {
     withSel((srcs) => {
-      if (srcs.length >= 32) { showToast('已達單一動畫 32 幀上限', true); return; }
+      if (srcs.length >= 32) { showToast('已達單一動畫 32 幀上限', true); return false; }
       srcs.splice(selectedFrame + 1, 0, srcs[selectedFrame]); // data URL 字串共享,無額外成本
     });
   }
   function delFrame() {
     withSel((srcs) => {
-      if (srcs.length <= 1) { showToast('至少要留一幀', true); return; }
+      if (srcs.length <= 1) { showToast('至少要留一幀', true); return false; }
       srcs.splice(selectedFrame, 1);
       selectedFrame = Math.min(selectedFrame, srcs.length - 1);
     });
@@ -459,6 +467,7 @@
       dirty = false;
       showToast('已儲存角色包');
       if (working.id !== activePackId && confirm('立即啟用這個角色包?')) await activate(working.id);
+      stopPreview(); editingAnim = null;
       working = null;
       renderPackList();
     } catch (e) {
@@ -468,6 +477,7 @@
 
   function cancel() {
     if (dirty && !confirm('有未儲存的變更,確定離開?')) return;
+    stopPreview(); editingAnim = null;
     working = null;
     wizard = null;
     renderPackList();
