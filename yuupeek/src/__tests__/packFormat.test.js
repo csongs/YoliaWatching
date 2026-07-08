@@ -1,4 +1,4 @@
-const { validatePack } = require('../packFormat');
+const { validatePack, packToAnimations } = require('../packFormat');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -106,5 +106,33 @@ describe('validatePack', () => {
   test('非物件輸入不炸', () => {
     expect(validatePack(null).ok).toBe(false);
     expect(validatePack('{}').ok).toBe(false);
+  });
+});
+
+describe('packToAnimations', () => {
+  test('擴充包:原樣輸出,不補 idle、不映射已知狀態', () => {
+    const r = packToAnimations(extPack());
+    expect(Object.keys(r)).toEqual(['hurt']);
+    expect(r.hurt).toEqual({ srcs: [PNG, PNG], ms: 125, loop: false });
+  });
+
+  test('換角包:已知狀態缺漏一律映射到包的 idle', () => {
+    const r = packToAnimations(fullPack());
+    for (const s of ['idle', 'peek', 'cheer', 'cry', 'eat', 'jump', 'wave', 'run_left', 'run_right', 'watch_excited']) {
+      expect(r[s].srcs).toEqual([PNG]);
+    }
+  });
+
+  test('換角包:自有動畫保留,全新狀態名直接註冊', () => {
+    const p = fullPack();
+    p.animations.attack = { srcs: [PNG, PNG], ms: 100, loop: false };
+    const r = packToAnimations(p);
+    expect(r.attack.srcs).toHaveLength(2);
+    expect(r.peek.srcs).toEqual(p.animations.idle.srcs); // 映射
+  });
+
+  test('loop 缺省時輸出 false(布林化)', () => {
+    const p = extPack({ animations: { hurt: { srcs: [PNG] } } });
+    expect(packToAnimations(p).hurt.loop).toBe(false);
   });
 });

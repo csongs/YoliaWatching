@@ -87,5 +87,19 @@
     return { ok: !errors.length, errors };
   }
 
-  return { validatePack, KNOWN_STATES };
+  // 規格 §5:擴充包(base:"builtin")原樣輸出(overlay 疊在內建之上);
+  // 換角包=引擎已知狀態缺漏一律映射到包的 idle(不混搭內建圖)。
+  function packToAnimations(pack) {
+    const out = {};
+    for (const [name, a] of Object.entries(pack.animations ?? {})) {
+      out[name] = { srcs: a.srcs, ms: a.ms, loop: !!a.loop };
+    }
+    if (pack.base === 'builtin') return out;
+    for (const s of KNOWN_STATES) {
+      if (!out[s]) out[s] = { srcs: out.idle.srcs, ms: out.idle.ms, loop: out.idle.loop };
+    }
+    return out;
+  }
+
+  return { validatePack, packToAnimations, KNOWN_STATES };
 });
