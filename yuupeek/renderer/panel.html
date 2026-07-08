@@ -111,6 +111,7 @@
   <div class="tab active" onclick="showTab('guide')">安裝說明</div>
   <div class="tab local-only" onclick="showTab('status')">模組狀態</div>
   <div class="tab" onclick="showTab('pet')">桌寵設定</div>
+  <div class="tab" onclick="showTab('workshop')">角色工房</div>
   <div class="tab" onclick="showTab('settings')">設定</div>
   <span style="margin-left:auto;display:flex;align-items:center;gap:12px;padding:0 16px;white-space:nowrap">
     <span id="logout-btn" style="display:none;cursor:pointer;color:#94a3b8;font-size:12px" onclick="firebase.auth().signOut()">登出</span>
@@ -222,6 +223,15 @@
     </div>
   </div>
 
+</div>
+
+<!-- ── 角色工房 ── -->
+<div id="workshop" class="panel">
+  <div class="card" id="workshop-desktop-note" style="display:none">
+    <h3>角色工房</h3>
+    <p style="color:#64748b">此功能目前僅雲端版支援。</p>
+  </div>
+  <div id="workshop-root"></div>
 </div>
 
 <!-- ── 模組狀態 ── -->
@@ -353,6 +363,10 @@
     document.getElementById('app-root').style.display = 'none';
   }
 
+  if (!IS_WEB) {
+    document.getElementById('workshop-desktop-note').style.display = '';
+  }
+
   function doLogin() {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
@@ -387,7 +401,7 @@
   let apiReady = false;
 
   // ── Tab switching ──────────────────────────────────────────────────────────
-  const TAB_IDS = ['guide', 'status', 'pet', 'settings'];
+  const TAB_IDS = ['guide', 'status', 'pet', 'workshop', 'settings'];
   let hasAutoCheckedUpdate = false;
 
   function showTab(id) {
@@ -396,6 +410,7 @@
     if (!apiReady) return;
     if (id === 'status') refreshStatus();
     if (id === 'pet') loadPetConfig();
+    if (id === 'workshop') window.Workshop?.load?.();
     if (id === 'settings') {
       loadEnv();
       loadConfig();
@@ -819,6 +834,8 @@
       await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js');
+      await loadScript('/packFormat.js');
+      await loadScript('/workshop.js');
       firebase.initializeApp(FIREBASE_CONFIG);
       const db = firebase.database();
 
@@ -848,7 +865,23 @@
           if (body.scale        !== undefined) updates['obs/scale']    = body.scale;
           return db.ref('config').update(updates).then(() => ({ ok: true }));
         },
-        getAnimations: () => db.ref('config/animations').once('value').then(s => ({ animations: s.val() ?? {} })),
+        getAnimations: () => Promise.all([
+          db.ref('config/animations').once('value'),
+          db.ref('config/activePackId').once('value'),
+        ]).then(([animSnap, idSnap]) => {
+          const animations = { ...(animSnap.val() ?? {}) };
+          const id = idSnap.val();
+          if (!id) return { animations };
+          return db.ref('packs/' + String(id).replace(/\./g, '_')).once('value').then(ps => {
+            Object.assign(animations, ps.val()?.animations ?? {});
+            return { animations };
+          });
+        }),
+        getPacks:        () => db.ref('packs').once('value').then(s => s.val() ?? {}),
+        savePack:        (pack) => db.ref('packs/' + String(pack.id).replace(/\./g, '_')).set(pack).then(() => ({ ok: true })),
+        deletePack:      (key) => db.ref('packs/' + key).remove().then(() => ({ ok: true })),
+        getActivePackId: () => db.ref('config/activePackId').once('value').then(s => s.val() ?? null),
+        setActivePack:   (idOrNull) => db.ref('config/activePackId').set(idOrNull).then(() => ({ ok: true })),
         getEnv: () => db.ref('config').once('value').then(s => {
           const c = s.val() ?? {};
           return { TWITCH_OAUTH: c.twitchOauth ?? '', YOUTUBE_API_KEY: c.youtubeApiKey ?? '', SOOP_API_KEY: c.soopApiKey ?? '' };
@@ -908,6 +941,11 @@
         openUserData:        () => post('/panel/api/open-userdata', {}),
         openConfig:          () => post('/panel/api/open-config', {}),
         getDefaultPetConfig: () => fetch('/panel/api/default-pet-config').then(r => r.json()),
+        getPacks:        () => Promise.resolve({}),
+        savePack:        () => Promise.reject(new Error('僅雲端版支援')),
+        deletePack:      () => Promise.reject(new Error('僅雲端版支援')),
+        getActivePackId: () => Promise.resolve(null),
+        setActivePack:   () => Promise.reject(new Error('僅雲端版支援')),
       };
     }
 
