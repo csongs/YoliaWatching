@@ -18,7 +18,7 @@
   - 剩餘已知後續:編輯器開著時移除另一個動畫,殘留孤兒 preview interval(yuupeek/renderer/workshop.js)。
   - 剩餘已知後續:renderEditor 在 ms/loop 變更時會還原未儲存的 manifest 輸入(yuupeek/renderer/workshop.js)。
   - 剩餘已知後續:PackFormat 可考慮匯出 isValidStateName,去重 addAnim 內建的 regex(yuupeek/renderer/workshop.js)。
-  - 剩餘已知後續:validatePack 的 srcs 字元集可再收緊,作為縱深防禦(yuupeek/packFormat.js)。
+  - 剩餘已知後續:validatePack 的 srcs 字元集可再收緊,作為縱深防禦(yuupeek/src/packFormat.js)。
   - 剩餘已知後續:4MB 上限目前用 UTF-16 字串長度當代理值,非精確位元組數。
   - 編輯啟用中的包現在即時生效(overlay 改為訂閱啟用中的 /packs 節點,見 web/public/index.html)。
 
