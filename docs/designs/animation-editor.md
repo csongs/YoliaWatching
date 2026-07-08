@@ -2,6 +2,8 @@
 
 > 狀態：設計稿（2026-07-07），尚未實作。資料格式一律以 docs/specs/character-pack-format.md 為準；
 > 本檔只設計 UI 流程與實作切分。實作前讀 PLAYBOOK §3、§8C。
+> 增補（2026-07-07）：擴充包（base:"builtin"，粉絲幫內建角色加動作）的 UI 增量與 Phase 1
+> 工單修訂見 docs/designs/fan-extension-pack.md（以該檔為準）＋ ADR-003。
 
 ## 0. 範圍決策
 

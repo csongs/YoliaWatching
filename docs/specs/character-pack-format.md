@@ -36,7 +36,10 @@
     "prompt": "...",                 //   生成用的 prompt(方便回鍋重生成)
     "assetIds": ["..."]              //   外部服務的 asset id
   },
-  "animations": {                    // 必填。至少要有 "idle"
+  "base": "builtin",                 // 選填(2026-07-07 增,ADR-003)。"builtin"=擴充包:動畫疊在
+                                     //   內建角色之上,不要求含 idle,包內沒有的狀態維持內建動畫。
+                                     //   缺省=整隻換角包(下述原規則)。存在但非 "builtin" → 拒絕匯入
+  "animations": {                    // 必填。整隻換角包至少要有 "idle";擴充包(base:"builtin")免此要求
     "idle": {
       "srcs": ["data:image/png;base64,...", "..."],  // 必填。data URL 或 https URL 陣列,即播放順序
       "ms": 125,                     // 選填,預設 150。每幀毫秒
@@ -115,11 +118,20 @@ setAnimations(cfg) {
 實作 packToAnimations 的已知狀態映射時,以上**全部**要涵蓋;日後新增預設互動,記得回來更新本清單。
 
 規則(實作在 packFormat.js 的 `packToAnimations(pack)`,**不准實作在 character.js 裡**):
+
+整隻換角包(無 `base` 欄位):
 1. pack 必含 `idle`,否則驗證失敗、拒絕匯入。
 2. 引擎已知狀態若 pack 沒提供 → **一律映射到 pack 的 `idle`**(整隻角色風格一致),
    不回退內建 Yolia 圖(混搭兩隻角色的圖會很怪)。
 3. pack 提供的全新狀態名(如 `attack`)直接註冊,panel 下拉選單會自動出現
-  (【事實】panel 的 STATE_OPTIONS 來自 getAnimations 的 keys,panel.html 約 L663)。
+  (【事實】panel 的 STATE_OPTIONS 來自 getAnimations 的 keys,panel.html 約 L663;
+   ⚠ web 模式 getAnimations 只讀 `config/animations`,pack 狀態要進下拉需 panel 另讀
+   啟用中的 pack——見 docs/designs/fan-extension-pack.md)。
+
+擴充包(`base: "builtin"`,2026-07-07 增,ADR-003):
+4. **不做**已知狀態映射:packToAnimations 原樣輸出 pack 的 animations,由 overlay 疊在
+   「內建 DEFAULT + config/animations」之上(引擎 ANIMATIONS 表本來就逐狀態合併)。
+5. 不要求 `idle`;混搭是刻意的——擴充包的典型用途是「粉絲幫現有角色畫新動作」。
 
 ## 6. 匯入來源(匯入器支援的三種輸入)
 
@@ -163,8 +175,11 @@ loop 判斷:spritecook **沒有** loop 欄位(【事實】API 無此欄位)。�
 逐條檢查,回傳 `{ ok, errors: string[] }`(errors 為繁中人話,會直接顯示在 UI):
 1. `yoliaPack === 1`(>1 → 「此角色包需要新版本的 YoliaWatching」)
 2. `id` 符合 `^[a-z0-9-]+\.[a-z0-9-]+$`;name/version/author/license 非空字串
-3. `animations` 至少含 `idle`;每個動畫:srcs 是非空字串陣列、每項是 `data:image/` 或
-   `https://` 開頭;ms(若有)是 1–10000 的數字;loop(若有)是布林
+3. `animations` 非空;**無 `base` 欄位時必含 `idle`**(擴充包免);每個動畫:srcs 是非空
+   字串陣列、每項是 `data:image/` 或 `https://` 開頭;ms(若有)是 1–10000 的數字;
+   loop(若有)是布林
+3a. `base`(若有)必須恰為 `"builtin"`,其他值 → 「此角色包需要新版本的 YoliaWatching」
+   (為未來 base 取值擴充保留空間)
 4. 狀態名符合 `^[a-z][a-z0-9_]*$`
 5. 尺寸上限(§2)
 6. `defaultInteractions`(若有):每項 trigger ∈ {threshold,keyword,command} 且**不含 id**;
