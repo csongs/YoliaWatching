@@ -179,7 +179,7 @@
     const w = working;
     const rows = Object.entries(w.animations).map(([name, a]) => `
       <div style="display:flex;align-items:center;gap:10px;background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:10px;margin-bottom:8px">
-        <img src="${a.srcs[0]}" style="width:36px;height:36px;image-rendering:pixelated;background:#1a1d27;border-radius:4px">
+        <img src="${esc(a.srcs[0])}" style="width:36px;height:36px;image-rendering:pixelated;background:#1a1d27;border-radius:4px">
         <div style="flex:1"><b>${esc(name)}</b> <span style="color:#64748b;font-size:12px">${a.srcs.length} 幀 · ${a.ms ?? 150}ms · ${a.loop ? '循環' : '單次'}</span></div>
         <button class="btn btn-secondary btn-small" data-act="edit-anim" data-name="${esc(name)}">編輯</button>
         <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" data-act="remove-anim" data-name="${esc(name)}">刪除</button>
