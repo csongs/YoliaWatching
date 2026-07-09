@@ -355,16 +355,17 @@
     let latestConfig = {};       // 最新一份 config(供 pack on('value') 回呼延後觸發時使用,避免用到舊 closure)
     let packRef = null;          // 目前訂閱中的 /packs/<key> ref(切換/停用時 off())
 
-    // 套用順序:先清掉舊包引入、且新基底蓋不掉的殘留狀態,再以內建 DEFAULT + config/animations
-    // 打底,最後把啟用中的包疊上去
+    // 套用順序與殘留清除交給 packFormat 的 buildAnimationsUpdate:
+    // broadcast = 內建 DEFAULT + config/animations 打底、啟用中的包疊上、
+    // 舊包引入且新集合蓋不掉的殘留鍵設 null(引擎 setAnimations 會刪除)
     function applyAllAnimations(config) {
-      const baseline = { ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) };
-      const packKeys = packAnimations ? Object.keys(packAnimations) : [];
-      const stale = prevPackStates.filter(s => !(s in baseline) && !packKeys.includes(s));
-      if (stale.length) char.setAnimations(Object.fromEntries(stale.map(s => [s, null])));
-      char.setAnimations(baseline);
-      if (packAnimations) char.setAnimations(packAnimations);
-      prevPackStates = packKeys;
+      const u = PackFormat.buildAnimationsUpdate(
+        { ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) },
+        packAnimations,
+        prevPackStates
+      );
+      prevPackStates = u.packStates;
+      char.setAnimations(u.broadcast);
     }
 
     db.ref('config').on('value', (snap) => {
