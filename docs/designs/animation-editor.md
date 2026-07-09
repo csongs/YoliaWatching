@@ -11,6 +11,7 @@
   不開獨立頁面（理由見 ADR-001 決策 3）。
 - v1 **僅支援 web 模式**：桌面模式下分頁顯示「此功能目前僅雲端版支援」。
   （panel.html 是共用檔，桌面模式必須優雅降級，不可報錯。判斷用現有的 `IS_WEB` 旗標。）
+  → 2026-07-10 起桌面版亦支援（ADR-004），降級提示已移除。
 - 邏輯全部放模組（packFormat.js 等），panel 內嵌 script 只做 DOM 接線——這是 ADR-001
   留的「未來可拆」退路，也是可測試性的前提。
 
@@ -104,6 +105,7 @@ Phase 2（各自獨立小工單）：
 - defaultInteractions 套用 UI（§1 ④；packFormat.js 的 applyDefaultInteractions 已在 Phase 1 寫好）
 - 匯出 .yolia.json（Blob 下載，市集的前置）
 - 桌面版支援評估（pack 存 %APPDATA%？obsServer 加 routes？先寫 ADR 再動）
+  → 已評估採納：ADR-004（2026-07-10，packs.json＋obsServer routes＋getAnimations 合併廣播）
 
 ## 6. 風險與相容性（按審查範本）
 
