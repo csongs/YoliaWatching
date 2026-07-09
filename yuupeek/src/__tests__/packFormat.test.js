@@ -1,4 +1,4 @@
-const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions } = require('../packFormat');
+const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate } = require('../packFormat');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -198,5 +198,47 @@ describe('applyDefaultInteractions', () => {
     const { added } = applyDefaultInteractions(pack, [], genId);
     expect(added).toHaveLength(1);
     expect(added[0].id).toBe('t_test');
+  });
+});
+
+describe('buildAnimationsUpdate(桌面版合併/清殘留,ADR-004)', () => {
+  const base = { idle: { srcs: [PNG], loop: true }, wave: { srcs: [PNG], loop: false } };
+
+  test('啟用擴充包:snapshot 含包動畫,packStates 回報包鍵', () => {
+    const r = buildAnimationsUpdate(base, { hurt: { srcs: [PNG], loop: false } }, []);
+    expect(Object.keys(r.snapshot)).toEqual(['idle', 'wave', 'hurt']);
+    expect(r.broadcast.hurt).toEqual({ srcs: [PNG], loop: false });
+    expect(r.packStates).toEqual(['hurt']);
+  });
+
+  test('停用:上一包的自訂狀態在 broadcast 設 null,snapshot 不含', () => {
+    const r = buildAnimationsUpdate(base, null, ['hurt']);
+    expect(r.snapshot.hurt).toBeUndefined();
+    expect('hurt' in r.snapshot).toBe(false);
+    expect(r.broadcast.hurt).toBeNull();
+    expect(r.packStates).toEqual([]);
+  });
+
+  test('切換包:舊包獨有鍵清除,新包鍵保留', () => {
+    const r = buildAnimationsUpdate(base, { dance: { srcs: [PNG], loop: true } }, ['hurt']);
+    expect(r.broadcast.hurt).toBeNull();
+    expect(r.broadcast.dance).toBeTruthy();
+    expect(r.packStates).toEqual(['dance']);
+  });
+
+  test('上一包覆蓋過內建鍵:停用後回內建值,不設 null', () => {
+    const r = buildAnimationsUpdate(base, null, ['wave']);
+    expect(r.broadcast.wave).toEqual(base.wave);
+  });
+
+  test('prototype 屬性名(constructor)也能正確清除', () => {
+    const r = buildAnimationsUpdate(base, null, ['constructor']);
+    expect(r.broadcast.constructor).toBeNull();
+  });
+
+  test('無包無殘留:snapshot 與 broadcast 相同,等於 base', () => {
+    const r = buildAnimationsUpdate(base, null, []);
+    expect(r.snapshot).toEqual(base);
+    expect(r.broadcast).toEqual(base);
   });
 });

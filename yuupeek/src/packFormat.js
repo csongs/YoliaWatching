@@ -140,5 +140,18 @@
     return { merged, added, skipped };
   }
 
-  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, KNOWN_STATES };
+  // ADR-004:桌面版(或任何呼叫端)的動畫合併與殘留清除。
+  // snapshot=無 null 的目前有效集合(給快照類讀取);broadcast=snapshot 加上
+  // 「上一包引入、新集合蓋不掉」的鍵設 null(給引擎 setAnimations 做刪除)。
+  function buildAnimationsUpdate(base, packAnims, prevPackStates) {
+    const snapshot = { ...base, ...(packAnims ?? {}) };
+    const packStates = packAnims ? Object.keys(packAnims) : [];
+    const broadcast = { ...snapshot };
+    for (const s of prevPackStates ?? []) {
+      if (!Object.prototype.hasOwnProperty.call(snapshot, s)) broadcast[s] = null;
+    }
+    return { snapshot, broadcast, packStates };
+  }
+
+  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, KNOWN_STATES };
 });
