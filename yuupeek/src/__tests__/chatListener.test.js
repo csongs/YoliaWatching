@@ -1,188 +1,95 @@
-const { applyCommand, buildGreetRe } = require('../chatListener');
+// chatListener 測試(2026-07-10 重寫,對齊 createChatListener API;舊版測重構前的
+// applyCommand/buildGreetRe,備份於 docs/backups/chatListener.test.js.2026-07-10.bak)。
+// 外部依賴全部 mock:tmi.js(Twitch)、googleapis(YouTube);SOOP 走 dynamic import,
+// 測試中 config.soop.enabled=false 使 startSoop 早退,不會真的 import。
+jest.mock('tmi.js', () => {
+  const instances = [];
+  class Client {
+    constructor(opts) { this.opts = opts; this.handlers = {}; instances.push(this); }
+    on(evt, cb) { this.handlers[evt] = cb; }
+    connect() { return Promise.resolve(); }
+    disconnect() { this.disconnected = true; }
+    readyState() { return 'OPEN'; }
+  }
+  return { Client, __instances: instances };
+});
+jest.mock('googleapis', () => ({ google: { youtube: jest.fn(() => ({})) } }));
 
-const commands = {
-  '!加油': { state: 'cheer', yolia_see: 10  },
-  '!哭':   { state: 'cry',   yolia_see: -15 },
-  '!跳':   { state: 'jump'                  },
-};
+const tmi = require('tmi.js');
+const { createChatListener } = require('../chatListener');
 
-function makeSm(yolia_see = 50) {
-  return {
-    yolia_see,
-    state: 'idle',
-    computeState() {
-      if (this.yolia_see >= 80) return 'cheer';
-      if (this.yolia_see >= 40) return 'peek';
-      return 'idle';
-    },
+function makeListener(interactions = [], smInit = { yolia_see: 0, state: 'idle' }) {
+  const config = {
+    twitch: { enabled: true, channel: 'tester' },
+    youtube: { enabled: false },
+    soop: { enabled: false },
+    interactions,
   };
+  const sm = { ...smInit };
+  const broadcasts = [];
+  const listener = createChatListener(config, sm, (p) => broadcasts.push(p));
+  return { listener, sm, broadcasts };
 }
 
-// ── non-command messages ───────────────────────────────────────────────────────
+function emitTwitch(text, username = '觀眾') {
+  const client = tmi.__instances[tmi.__instances.length - 1];
+  client.handlers['message'](null, { 'display-name': username }, text);
+}
 
-describe('non-command messages', () => {
-  test('increments yolia_see by 1', () => {
-    const sm = makeSm(50);
-    applyCommand(sm, commands, jest.fn(), 'hello');
-    expect(sm.yolia_see).toBe(51);
-  });
+beforeEach(() => { tmi.__instances.length = 0; jest.useFakeTimers(); });
+afterEach(() => { jest.clearAllTimers(); jest.useRealTimers(); });
 
-  test('broadcasts computed state (no animOnly)', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, 'hello');
-    expect(broadcast).toHaveBeenCalledWith({ value: 51, state: 'peek' });
-  });
-
-  test('clamps yolia_see at 100', () => {
-    const sm = makeSm(100);
-    applyCommand(sm, commands, jest.fn(), 'hello');
-    expect(sm.yolia_see).toBe(100);
-  });
+test('一般訊息:+1 並廣播 value/state', () => {
+  const { listener, sm, broadcasts } = makeListener();
+  listener.start();
+  emitTwitch('安安');
+  expect(sm.yolia_see).toBe(1);
+  expect(broadcasts[0]).toMatchObject({ value: 1, animOnly: false });
+  listener.stop();
 });
 
-// ── commands with state ────────────────────────────────────────────────────────
-
-describe('commands with state', () => {
-  test('broadcasts animOnly:true', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, '!加油');
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ animOnly: true }));
-  });
-
-  test('broadcast state is the command state, not computeState', () => {
-    const sm = makeSm(50); // computeState → peek
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, '!加油');
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ state: 'cheer' }));
-  });
-
-  test('sm.state reverts to computeState() immediately after broadcast', () => {
-    const sm = makeSm(50); // peek range
-    applyCommand(sm, commands, jest.fn(), '!加油');
-    expect(sm.state).toBe('peek');
-  });
-
-  test('includes speech with username', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, '!加油', 'Twitch', 'viewer123');
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ speech: 'viewer123: !加油' }));
-  });
-
-  test('includes speech without username', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, '!加油');
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ speech: '!加油' }));
-  });
-
-  test('applies yolia_see delta', () => {
-    const sm = makeSm(50);
-    applyCommand(sm, commands, jest.fn(), '!加油');
-    expect(sm.yolia_see).toBe(60);
-  });
-
-  test('clamps yolia_see at 100', () => {
-    const sm = makeSm(95);
-    applyCommand(sm, commands, jest.fn(), '!加油');
-    expect(sm.yolia_see).toBe(100);
-  });
-
-  test('clamps yolia_see at 0', () => {
-    const sm = makeSm(5);
-    applyCommand(sm, commands, jest.fn(), '!哭');
-    expect(sm.yolia_see).toBe(0);
-  });
-
-  test('command without yolia_see delta does not change value', () => {
-    const sm = makeSm(50);
-    applyCommand(sm, commands, jest.fn(), '!跳');
-    expect(sm.yolia_see).toBe(50);
-  });
+test('指令動畫:animOnly 廣播+3 秒後 resetState 廣播', () => {
+  const { listener, broadcasts } = makeListener([
+    { trigger: 'command', match: '!跳', animation: 'jump' },
+  ]);
+  listener.start();
+  emitTwitch('!跳');
+  expect(broadcasts[0]).toMatchObject({ state: 'jump', animOnly: true });
+  jest.advanceTimersByTime(3000);
+  expect(broadcasts[1]).toMatchObject({ state: 'idle' });
+  listener.stop();
 });
 
-// ── greeting detection ────────────────────────────────────────────────────────
-
-const greetRe = buildGreetRe(['安安', '午安', '早安', '晚安']);
-
-describe('greeting messages', () => {
-  test.each(['安安', '早安', '午安', '晚安'])('%s triggers wave animOnly broadcast', (greeting) => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, greeting, 'Twitch', 'viewer', greetRe);
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ state: 'wave', animOnly: true }));
-  });
-
-  test('speech uses greetResponse template: {user} {word}', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, '安安~', 'Twitch', 'viewer123', greetRe, '{user} {word}');
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ speech: 'viewer123 安安' }));
-  });
-
-  test('custom greetResponse template', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, '早安你好', 'Twitch', 'alice', greetRe, '{user}！{word}～');
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ speech: 'alice！早安～' }));
-  });
-
-  test('speech without username shows only matched word', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, '安安大家', 'Chat', '', greetRe, '{user} {word}');
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ speech: '安安' }));
-  });
-
-  test('greeting still increments yolia_see', () => {
-    const sm = makeSm(50);
-    applyCommand(sm, commands, jest.fn(), '安安', 'Chat', '', greetRe);
-    expect(sm.yolia_see).toBe(51);
-  });
-
-  test('non-greeting chat does not trigger wave', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, 'hello', 'Chat', '', greetRe);
-    expect(broadcast).not.toHaveBeenCalledWith(expect.objectContaining({ state: 'wave' }));
-  });
-
-  test('greetings disabled when greetRe is null', () => {
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, '安安', 'Chat', 'viewer', null);
-    expect(broadcast).not.toHaveBeenCalledWith(expect.objectContaining({ state: 'wave' }));
-  });
-
-  test('custom greetings list', () => {
-    const custom = buildGreetRe(['hello', 'hi']);
-    const sm = makeSm(50);
-    const broadcast = jest.fn();
-    applyCommand(sm, commands, broadcast, 'hello world', 'Chat', 'viewer', custom);
-    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ state: 'wave', animOnly: true }));
-  });
+test('cost 不足:costDenied 提示廣播+3 秒後回復廣播', () => {
+  const { listener, broadcasts } = makeListener([
+    { trigger: 'command', match: '!貴', animation: 'cheer', cost: 50 },
+  ]);
+  listener.start();
+  emitTwitch('!貴');
+  expect(broadcasts[0].speech).toContain('幽視值不足');
+  jest.advanceTimersByTime(3000);
+  expect(broadcasts).toHaveLength(2);
+  listener.stop();
 });
 
-// ── text matching ──────────────────────────────────────────────────────────────
+test('updateHandlers 後新指令生效', () => {
+  const { listener, broadcasts } = makeListener();
+  listener.start();
+  listener.updateHandlers([{ trigger: 'command', match: '!新', animation: 'cry' }]);
+  emitTwitch('!新');
+  expect(broadcasts[0]).toMatchObject({ state: 'cry', animOnly: true });
+  listener.stop();
+});
 
-describe('text matching', () => {
-  test('only first word matched (ignores trailing text)', () => {
-    const sm = makeSm(50);
-    applyCommand(sm, commands, jest.fn(), '!加油 一起加油！');
-    expect(sm.yolia_see).toBe(60);
+test('getStatus 形狀與 stop 斷線', () => {
+  const { listener } = makeListener();
+  listener.start();
+  const s = listener.getStatus();
+  expect(s).toMatchObject({
+    twitch:  { connected: true },
+    youtube: { live: false, error: null },
+    soop:    { connected: false },
   });
-
-  test('leading/trailing whitespace trimmed', () => {
-    const sm = makeSm(50);
-    applyCommand(sm, commands, jest.fn(), '  !加油  ');
-    expect(sm.yolia_see).toBe(60);
-  });
-
-  test('unknown command treated as non-command chat (+1)', () => {
-    const sm = makeSm(50);
-    applyCommand(sm, commands, jest.fn(), '!unknown');
-    expect(sm.yolia_see).toBe(51);
-  });
+  listener.stop();
+  expect(tmi.__instances[0].disconnected).toBe(true);
 });
