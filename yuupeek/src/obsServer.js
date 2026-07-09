@@ -241,6 +241,46 @@ function createObsServer(config, rootDir) {
       return;
     }
 
+    // ── Pack routes(ADR-004,桌面版角色工房)────────────────────────────────
+    if (req.url === '/panel/api/packs' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(panelHandlers?.getPacks?.() ?? {}));
+      return;
+    }
+
+    if (req.url === '/panel/api/packs' && req.method === 'POST') {
+      readBody(req).then(body => {
+        panelHandlers?.savePack?.(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
+    if (req.url === '/panel/api/packs/delete' && req.method === 'POST') {
+      readBody(req).then(body => {
+        panelHandlers?.deletePack?.(body.key);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
+    if (req.url === '/panel/api/active-pack' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ activePackId: panelHandlers?.getActivePackId?.() ?? null }));
+      return;
+    }
+
+    if (req.url === '/panel/api/active-pack' && req.method === 'POST') {
+      readBody(req).then(body => {
+        panelHandlers?.setActivePack?.(body.activePackId ?? null);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
     if (req.url === '/panel/api/metrics' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(panelHandlers?.getMetrics?.() ?? {}));
