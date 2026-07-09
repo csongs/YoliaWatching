@@ -33,6 +33,7 @@ require('dotenv').config({ path: path.join(userDataDir, '.env') });
 const { createStateMachine } = require('./src/stateMachine');
 const { createChatListener }  = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
+const { packToAnimations, buildAnimationsUpdate } = require('./src/packFormat');
 
 const DEFAULT_ANIMATIONS = {
   idle:      { folder: 'idle',          frames: [0,2,4,5,4,2,0,0,1,0], ms: 150,  loop: false },
@@ -64,6 +65,43 @@ let userAnimations = (() => {
   try { return JSON.parse(fs.readFileSync(animationsPath, 'utf8')); }
   catch { return {}; }
 })();
+
+// 角色包(ADR-004):整包存 packs.json,activePackId 存 config.json
+const packsPath = path.join(userDataDir, 'packs.json');
+let packs = (() => {
+  try { return JSON.parse(fs.readFileSync(packsPath, 'utf8')); }
+  catch { return {}; }
+})();
+let prevPackStates = [];   // 上一次廣播時啟用包的狀態鍵(清殘留用)
+
+const packKeyOf = (id) => String(id).replace(/\./g, '_');
+
+function activePackAnimations() {
+  const id = config.activePackId;
+  if (!id) return null;
+  const pack = packs[packKeyOf(id)];
+  if (!pack) return null;
+  try { return packToAnimations(pack); }
+  catch (e) { console.warn('[pack] 轉換失敗,忽略啟用中的包:', e.message); return null; }
+}
+
+function animationsUpdate() {
+  return buildAnimationsUpdate(
+    { ...DEFAULT_ANIMATIONS, ...userAnimations },
+    activePackAnimations(),
+    prevPackStates
+  );
+}
+
+function savePacksFile() {
+  fs.writeFileSync(packsPath, JSON.stringify(packs, null, 2), 'utf8');
+}
+
+function broadcastAnimations() {
+  const u = animationsUpdate();
+  prevPackStates = u.packStates;
+  obsServer?.broadcast({ setAnimations: u.broadcast });
+}
 
 let tray;
 const sm = createStateMachine(config);
@@ -202,8 +240,29 @@ if (config.modes?.obs) {
         chatListener = null;
       }
     },
+    getPacks: () => packs,
+    savePack: (pack) => {
+      packs[packKeyOf(pack.id)] = pack;
+      savePacksFile();
+      broadcastAnimations();   // 編輯的是啟用中的包 → 立即生效(對齊雲端 on() 訂閱行為)
+    },
+    deletePack: (key) => {
+      delete packs[key];
+      savePacksFile();
+      broadcastAnimations();
+    },
+    getActivePackId: () => config.activePackId ?? null,
+    setActivePack: (idOrNull) => {
+      const cfgPath = path.join(userDataDir, 'config.json');
+      const raw = readUserCfg(cfgPath);
+      if (idOrNull) raw.activePackId = idOrNull;
+      else delete raw.activePackId;
+      config.activePackId = idOrNull ?? undefined;
+      fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
+      broadcastAnimations();
+    },
     getAnimations: () => ({
-      animations: { ...DEFAULT_ANIMATIONS, ...userAnimations },
+      animations: animationsUpdate().snapshot,
       defaults:   DEFAULT_ANIMATIONS,
     }),
     saveAnimations: ({ animations: patch, greetingAnimations } = {}) => {
@@ -224,7 +283,7 @@ if (config.modes?.obs) {
         fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
         obsServer?.broadcast({ setWaveVariants: greetingAnimations });
       }
-      obsServer?.broadcast({ setAnimations: { ...DEFAULT_ANIMATIONS, ...userAnimations } });
+      broadcastAnimations();
     },
     getMetrics: () => {
       const winMap = {};

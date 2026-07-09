@@ -8,6 +8,10 @@ out/
 # Firebase CLI cache
 web/.firebase/
 
+# 桌面版本機資料（dev 模式 userDataDir=yuupeek/，會落在 repo 內）
+yuupeek/packs.json
+yuupeek/animations.json
+
 # 隱私設定（含 API key）
 web/public/firebase-config.js
 web/config-export.json
