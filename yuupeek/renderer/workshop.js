@@ -180,8 +180,11 @@
     }
   }
 
-  // ── ②③ 編輯器畫面(manifest + 動畫清單;幀編輯器在 Task 9 補上)────────────
+  // ── ②③ 編輯器畫面(manifest + 動畫清單)────────────────────────────────────
   function renderEditor() {
+    // 重繪會以 working 重建 manifest 輸入框——先把使用者打到一半的欄位收進 working,
+    // 否則任何動畫操作(加幀/調 ms)都會吃掉未儲存的輸入
+    if (document.getElementById('wk-id')) readManifest();
     const w = working;
     const rows = Object.entries(w.animations).map(([name, a]) => `
       <div style="display:flex;align-items:center;gap:10px;background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:10px;margin-bottom:8px">
@@ -225,6 +228,10 @@
           <button class="btn btn-secondary btn-small" onclick="Workshop._cancel()">返回列表</button>
         </div>
       </div>`;
+    // 單一重繪出口:編輯中的動畫還在就同步重掛幀編輯器(容器剛被重建),
+    // 不在了(被刪/離開)就停預覽計時器——避免孤兒 interval
+    if (editingAnim && w.animations[editingAnim]) renderFrameEditor();
+    else { editingAnim = null; stopPreview(); }
   }
 
   function readManifest() {
@@ -315,7 +322,7 @@
     const name = document.getElementById('wk-anim-name').value.trim();
     const ms   = parseInt(document.getElementById('wk-anim-ms').value, 10);
     const loop = document.getElementById('wk-anim-loop').checked;
-    if (!/^[a-z][a-z0-9_]*$/.test(name)) { showToast('狀態名限小寫英文開頭+小寫英數底線', true); return; }
+    if (!PackFormat.isValidStateName(name)) { showToast('狀態名限小寫英文開頭+小寫英數底線', true); return; }
     if (!wizard?.frames?.length) { showToast('沒有可加入的幀', true); return; }
     if (wizard.frames.length > 32) { showToast('單一動畫上限 32 幀,目前 ' + wizard.frames.length + ' 幀', true); return; }
     if (working.animations[name] && !confirm(`動畫「${name}」已存在,要覆蓋嗎?`)) return;
@@ -328,9 +335,8 @@
   function removeAnim(name) {
     if (!confirm(`刪除動畫「${name}」?`)) return;
     delete working.animations[name];
-    if (name === editingAnim) { stopPreview(); editingAnim = null; }
     dirty = true;
-    renderEditor();
+    renderEditor();   // 尾端統一處理:刪的是編輯中的動畫 → 停預覽;不是 → 幀編輯器重掛
   }
 
   // ── ③ 幀編輯器(animation-editor.md §3:獨立小畫布,不實例化 createCharacter)──
@@ -342,7 +348,6 @@
     editingAnim = name;
     selectedFrame = -1;
     renderEditor();
-    renderFrameEditor();
   }
 
   function stopPreview() {
@@ -407,13 +412,11 @@
     working.animations[editingAnim].ms = ms;
     dirty = true;
     renderEditor();
-    renderFrameEditor();
   }
   function setLoop(v) {
     working.animations[editingAnim].loop = v;
     dirty = true;
     renderEditor();
-    renderFrameEditor();
   }
   function withSel(fn) {
     const a = working.animations[editingAnim];
@@ -422,7 +425,6 @@
     if (changed === false) return;
     dirty = true;
     renderEditor();
-    renderFrameEditor();
   }
   function moveFrame(dir) {
     withSel((srcs) => {
@@ -445,7 +447,7 @@
       selectedFrame = Math.min(selectedFrame, srcs.length - 1);
     });
   }
-  function closeEditor() { editingAnim = null; stopPreview(); renderEditor(); }
+  function closeEditor() { editingAnim = null; renderEditor(); }
 
   // ── ④ 建議綁定套用(寫 config.interactions;不重造第二套互動編輯器)────────
   async function applyBindings() {
