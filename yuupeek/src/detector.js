@@ -1,3 +1,5 @@
+// ⚠ 尚未接線(桌面版藍圖功能:視窗標題偵測)。production 無任何 require,
+// 僅 detector.test.js 引用。勿當活程式碼修改;接線前先讀 docs/ARCHITECTURE.md §11。
 const { exec } = require('child_process');
 const { STREAM_KEYWORDS, BARON_KEYWORDS } = require('./config');
 
