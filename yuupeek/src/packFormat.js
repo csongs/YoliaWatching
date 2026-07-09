@@ -56,6 +56,9 @@
         if (!a.srcs.every(s => typeof s === 'string' && (s.startsWith('data:image/') || s.startsWith('https://')))) {
           errors.push('動畫「' + name + '」的幀圖必須是 data:image/ 或 https:// 開頭');
         }
+        if (a.srcs.some(s => typeof s === 'string' && /[\s"'<>\\]/.test(s))) {
+          errors.push('動畫「' + name + '」的幀圖網址含空白或引號等非法字元');
+        }
         if (a.ms !== undefined && !(typeof a.ms === 'number' && a.ms >= 1 && a.ms <= 10000)) {
           errors.push('動畫「' + name + '」的 ms 必須是 1–10000 的數字');
         }
@@ -77,7 +80,8 @@
     }
 
     try {
-      if (JSON.stringify(pack).length > MAX_PACK_BYTES) {
+      // 以 UTF-8 位元組計(TextEncoder 為 Node≥11 與所有現代瀏覽器的全域)
+      if (new TextEncoder().encode(JSON.stringify(pack)).length > MAX_PACK_BYTES) {
         errors.push('角色包超過上限 4 MB,請減少幀數或縮小圖片');
       }
     } catch (e) {
@@ -153,5 +157,10 @@
     return { snapshot, broadcast, packStates };
   }
 
-  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, KNOWN_STATES };
+  // 供 UI 層即時驗證狀態名(與 validatePack 用同一條 STATE_RE,避免規則分岔)
+  function isValidStateName(name) {
+    return typeof name === 'string' && STATE_RE.test(name);
+  }
+
+  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, isValidStateName, KNOWN_STATES };
 });

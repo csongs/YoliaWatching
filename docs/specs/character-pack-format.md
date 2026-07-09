@@ -176,12 +176,13 @@ loop 判斷:spritecook **沒有** loop 欄位(【事實】API 無此欄位)。�
 1. `yoliaPack === 1`(>1 → 「此角色包需要新版本的 YoliaWatching」)
 2. `id` 符合 `^[a-z0-9-]+\.[a-z0-9-]+$`;name/version/author/license 非空字串
 3. `animations` 非空;**無 `base` 欄位時必含 `idle`**(擴充包免);每個動畫:srcs 是非空
-   字串陣列、每項是 `data:image/` 或 `https://` 開頭;ms(若有)是 1–10000 的數字;
+   字串陣列、每項是 `data:image/` 或 `https://` 開頭,且**不得含空白、單雙引號、角括號、
+   反斜線**(2026-07-10 收緊;匯入層驗證,防注入縱深);ms(若有)是 1–10000 的數字;
    loop(若有)是布林
 3a. `base`(若有)必須恰為 `"builtin"`,其他值 → 「此角色包需要新版本的 YoliaWatching」
    (為未來 base 取值擴充保留空間)
 4. 狀態名符合 `^[a-z][a-z0-9_]*$`
-5. 尺寸上限(§2)
+5. 尺寸上限(§2;整包 4 MB 以 UTF-8 位元組計,2026-07-10 起用 TextEncoder 精確計算)
 6. `defaultInteractions`(若有):每項 trigger ∈ {threshold,keyword,command} 且**不含 id**;
    欄位形狀同 config.interactions
 7. 未知欄位:**忽略,不報錯**(向前相容:新版格式加欄位,舊版讀取端不炸)

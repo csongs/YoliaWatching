@@ -1,4 +1,4 @@
-const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate } = require('../packFormat');
+const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, isValidStateName } = require('../packFormat');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -240,5 +240,28 @@ describe('buildAnimationsUpdate(桌面版合併/清殘留,ADR-004)', () => {
     const r = buildAnimationsUpdate(base, null, []);
     expect(r.snapshot).toEqual(base);
     expect(r.broadcast).toEqual(base);
+  });
+});
+
+describe('isValidStateName', () => {
+  test('合法/非法狀態名', () => {
+    expect(isValidStateName('hurt')).toBe(true);
+    expect(isValidStateName('run_left2')).toBe(true);
+    expect(isValidStateName('Bad')).toBe(false);
+    expect(isValidStateName('1abc')).toBe(false);
+    expect(isValidStateName(null)).toBe(false);
+  });
+});
+
+describe('validatePack 追加規則(2026-07-10 收緊)', () => {
+  test('srcs 含引號/空白/角括號 → 拒絕', () => {
+    for (const bad of ['data:image/png;base64,x" onerror="x', 'data:image/png;base64,a b', 'https://x/<s>.png']) {
+      expect(validatePack(extPack({ animations: { hurt: { srcs: [bad] } } })).ok).toBe(false);
+    }
+  });
+
+  test('4MB 上限以 UTF-8 位元組計', () => {
+    const big = 'data:image/png;base64,' + 'A'.repeat(4 * 1024 * 1024);
+    expect(validatePack(extPack({ animations: { hurt: { srcs: [big] } } })).ok).toBe(false);
   });
 });
