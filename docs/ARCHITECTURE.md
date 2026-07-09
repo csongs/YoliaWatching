@@ -18,7 +18,7 @@
 | overlay | `web/public/index.html`（雲端版專屬檔） | `yuupeek/renderer/obs-overlay.html` |
 | 控制面板 | `/panel`（= 同步過去的 `panel.html`） | `http://localhost:3000/panel` |
 | 聊天連線 | overlay 頁面內（瀏覽器直連） | `yuupeek/src/chatListener.js`（Node，tmi.js + googleapis + soop-extension） |
-| 設定存放 | RTDB `/config` | 本機 `config.json` + `%APPDATA%\YoliaWatching\animations.json` |
+| 設定存放 | RTDB `/config` | 本機 `config.json` + `%APPDATA%\YoliaWatching\animations.json`；角色包存同目錄 `packs.json`（ADR-004；dev 模式=yuupeek/，已 gitignore） |
 | 版本發布 | push main → GitHub Actions 部署 | electron-builder → GitHub Releases（`npm run release`） |
 
 共用核心（isomorphic，單一源頭在 yuupeek/）：

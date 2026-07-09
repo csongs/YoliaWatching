@@ -4,7 +4,16 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-09，Task 10 文件更新）
+## 目前狀態（2026-07-10，桌面版角色工房支援）
+
+- 桌面版角色工房已支援（ADR-004）：packs 存 `<userDataDir>/packs.json`、activePackId 存
+  config.json、obsServer 加 5 條 `/panel/api/packs*`/`active-pack` 路由、panel 桌面 adapter
+  換 fetch 實作並載入共用 workshop.js/packFormat.js（obsServer 靜態服務直接供應）、
+  合併/清殘留邏輯=packFormat.js 新純函數 `buildAnimationsUpdate`（含測試）。
+  已驗證：npm test 63/63（僅既有 chatListener 基線紅字）、路由測試、sync.js。
+  未驗證：維護者 `npm start` 手動清單（見 docs/superpowers/plans/2026-07-10-desktop-pack-support.md Task 5）。
+
+## 前次狀態（2026-07-09，Task 10 文件更新）
 
 - 角色工坊 Phase 1 + 擴充包(base:"builtin")已實作:packFormat.js(含測試)、
   character.js srcs、/packs rules、overlay activePackId、panel 角色工房分頁+workshop.js、
