@@ -244,12 +244,14 @@ if (config.modes?.obs) {
     savePack: (pack) => {
       packs[packKeyOf(pack.id)] = pack;
       savePacksFile();
-      broadcastAnimations();   // 編輯的是啟用中的包 → 立即生效(對齊雲端 on() 訂閱行為)
+      // 只在動到啟用中的包時廣播(編輯啟用中的包立即生效,對齊雲端 on() 訂閱行為)
+      if (pack.id === config.activePackId) broadcastAnimations();
     },
     deletePack: (key) => {
+      const wasActive = config.activePackId && packKeyOf(config.activePackId) === key;
       delete packs[key];
       savePacksFile();
-      broadcastAnimations();
+      if (wasActive) broadcastAnimations();
     },
     getActivePackId: () => config.activePackId ?? null,
     setActivePack: (idOrNull) => {
