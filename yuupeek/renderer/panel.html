@@ -227,10 +227,6 @@
 
 <!-- ── 角色工房 ── -->
 <div id="workshop" class="panel">
-  <div class="card" id="workshop-desktop-note" style="display:none">
-    <h3>角色工房</h3>
-    <p style="color:#64748b">此功能目前僅雲端版支援。</p>
-  </div>
   <div id="workshop-root"></div>
 </div>
 
@@ -361,10 +357,6 @@
     document.head.appendChild(s);
     document.getElementById('guide-obs-url').textContent = location.origin + '/';
     document.getElementById('app-root').style.display = 'none';
-  }
-
-  if (!IS_WEB) {
-    document.getElementById('workshop-desktop-note').style.display = '';
   }
 
   function doLogin() {
@@ -941,12 +933,15 @@
         openUserData:        () => post('/panel/api/open-userdata', {}),
         openConfig:          () => post('/panel/api/open-config', {}),
         getDefaultPetConfig: () => fetch('/panel/api/default-pet-config').then(r => r.json()),
-        getPacks:        () => Promise.resolve({}),
-        savePack:        () => Promise.reject(new Error('僅雲端版支援')),
-        deletePack:      () => Promise.reject(new Error('僅雲端版支援')),
-        getActivePackId: () => Promise.resolve(null),
-        setActivePack:   () => Promise.reject(new Error('僅雲端版支援')),
+        getPacks:        () => fetch('/panel/api/packs').then(r => r.json()),
+        savePack:        (pack) => post('/panel/api/packs', pack),
+        deletePack:      (key) => post('/panel/api/packs/delete', { key }),
+        getActivePackId: () => fetch('/panel/api/active-pack').then(r => r.json()).then(d => d.activePackId ?? null),
+        setActivePack:   (idOrNull) => post('/panel/api/active-pack', { activePackId: idOrNull }),
       };
+      // 角色工房共用模組(ADR-004):obsServer 靜態服務直接供應源頭檔
+      await loadScript('/src/packFormat.js');
+      await loadScript('/renderer/workshop.js');
     }
 
     apiReady = true;
