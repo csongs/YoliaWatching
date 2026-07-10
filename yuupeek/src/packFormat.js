@@ -162,5 +162,15 @@
     return typeof name === 'string' && STATE_RE.test(name);
   }
 
-  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, isValidStateName, KNOWN_STATES };
+  // semver 欄位比較(市集更新判斷用):回傳 <0 / 0 / >0;缺段補 0,非數字段當 0
+  function compareVersions(a, b) {
+    const parse = (v) => String(v ?? '').split('.').map(n => parseInt(n, 10) || 0);
+    const pa = parse(a), pb = parse(b);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+    }
+    return 0;
+  }
+
+  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, isValidStateName, compareVersions, KNOWN_STATES };
 });

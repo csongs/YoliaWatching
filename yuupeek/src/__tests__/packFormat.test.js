@@ -1,4 +1,4 @@
-const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, isValidStateName } = require('../packFormat');
+const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, isValidStateName, compareVersions } = require('../packFormat');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -250,6 +250,19 @@ describe('isValidStateName', () => {
     expect(isValidStateName('Bad')).toBe(false);
     expect(isValidStateName('1abc')).toBe(false);
     expect(isValidStateName(null)).toBe(false);
+  });
+});
+
+describe('compareVersions(市集更新判斷)', () => {
+  test('semver 比較', () => {
+    expect(compareVersions('1.0.0', '1.0.0')).toBe(0);
+    expect(compareVersions('1.2.0', '1.10.0')).toBeLessThan(0);   // 數字比較,非字串
+    expect(compareVersions('2.0.0', '1.9.9')).toBeGreaterThan(0);
+    expect(compareVersions('1.0', '1.0.1')).toBeLessThan(0);      // 缺段補 0
+  });
+  test('非法輸入不炸,當 0 處理', () => {
+    expect(compareVersions('abc', '1.0.0')).toBeLessThan(0);
+    expect(compareVersions(undefined, undefined)).toBe(0);
   });
 });
 
