@@ -68,8 +68,8 @@ describe('pack routes (ADR-004)', () => {
       getPacks:        () => ({ a_b: { id: 'a.b' } }),
       savePack:        (p) => { calls.saved = p; },
       deletePack:      (k) => { calls.deleted = k; },
-      getActivePackId: () => 'a.b',
-      setActivePack:   (id) => { calls.activated = id; },
+      getActivePackIds: () => ['a.b', 'c.d'],
+      setActivePackIds: (ids) => { calls.activated = ids; },
     });
 
     expect((await fetchJson('GET', '/panel/api/packs')).json).toEqual({ a_b: { id: 'a.b' } });
@@ -80,14 +80,22 @@ describe('pack routes (ADR-004)', () => {
     await fetchJson('POST', '/panel/api/packs/delete', { key: 'a_b' });
     expect(calls.deleted).toBe('a_b');
 
-    expect((await fetchJson('GET', '/panel/api/active-pack')).json).toEqual({ activePackId: 'a.b' });
+    // GET 同時給陣列與舊單包欄位(=第一個)
+    expect((await fetchJson('GET', '/panel/api/active-pack')).json)
+      .toEqual({ activePackIds: ['a.b', 'c.d'], activePackId: 'a.b' });
 
+    await fetchJson('POST', '/panel/api/active-pack', { activePackIds: ['c.d'] });
+    expect(calls.activated).toEqual(['c.d']);
+
+    // 舊 body 形狀(單包)折成陣列;null=清空
+    await fetchJson('POST', '/panel/api/active-pack', { activePackId: 'a.b' });
+    expect(calls.activated).toEqual(['a.b']);
     await fetchJson('POST', '/panel/api/active-pack', { activePackId: null });
-    expect(calls.activated).toBeNull();
+    expect(calls.activated).toEqual([]);
   });
 
   test('無 panelHandlers 時 packs 路由回空值不炸', async () => {
     expect((await fetchJson('GET', '/panel/api/packs')).json).toEqual({});
-    expect((await fetchJson('GET', '/panel/api/active-pack')).json).toEqual({ activePackId: null });
+    expect((await fetchJson('GET', '/panel/api/active-pack')).json).toEqual({ activePackIds: [], activePackId: null });
   });
 });

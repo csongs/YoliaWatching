@@ -70,13 +70,16 @@
     = 整個 .yolia.json 內容原樣存入
 
 /config/activePackId = "author-name.pack-name" | null   ← 小欄位,放 config 內沒問題
+/config/activePackIds = string[]   ← 2026-07-11 勾選制新增(可選):同時啟用多包。
+                                      新讀取端以此為準;activePackId 同步寫第一個供舊 overlay 相容
 ```
 
 - **rules 必改**(PLAYBOOK §3 規則 3):`/packs` 設 `.read: true`、`.write: 同 config 的 admin 條件`。
-- overlay 行為:訂閱 `/config`(照舊)→ 發現 `activePackId` 變了 → `once('value')` 讀
-  `/packs/<key>` → 經 `packToAnimations()`(§5)轉成 setAnimations 設定 → 套用。
-  `activePackId` 為 null/undefined → 回復內建動畫(向後相容:舊資料庫沒有此欄位,行為不變)。
-- 解除安裝=刪 `/packs/<key>`;若它是 activePackId,同時把 activePackId 設 null。
+- overlay 行為(2026-07-11 勾選制):訂閱 `/config` → 依 `activePackIds`(缺省時折算
+  `[activePackId]`)對每個 key `on('value')` 訂閱 `/packs/<key>` → 全部經
+  `mergeActivePacks()`(換角包墊底、擴充依勾選順序疊後)→ setAnimations 套用。
+  清單為空 → 回復內建動畫(向後相容:舊資料庫沒有這些欄位,行為不變)。
+- 解除安裝=刪 `/packs/<key>`;同時把該 id 從 activePackIds 移除(activePackId 同步=新清單第一個)。
 
 ## 4. 引擎擴充(character.js 唯一必要改動)
 

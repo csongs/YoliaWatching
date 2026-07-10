@@ -110,7 +110,9 @@ RTDB /config ──(on('value') 整節點訂閱, index.html 約 L351)──▶ o
 │  ]
 ├─ animations: { <狀態名>: {folder, frames[], ms, loop} }   （覆蓋/新增動畫）
 ├─ greetingAnimations: [ {frames[], ms, weight} ]           （wave 加權隨機變體；panel 無編輯 UI）
-└─ activePackId: string|null    （啟用中角色包 id;null/缺省=內建角色）
+├─ activePackId: string|null    （舊單包欄位;勾選制後=activePackIds[0],供舊 overlay 相容）
+└─ activePackIds: string[]      （2026-07-11 勾選制:同時啟用的包 id 清單;缺省=只用內建。
+                                  合併順序由 packFormat.mergeActivePacks 統一:換角包墊底、擴充疊後）
 
 /packs/<packId 的「.」換「_」>    .read: 公開   .write: 僅 ADMIN_EMAIL
     = 完整 .yolia.json 內容（Character Pack v1,規格 docs/specs/character-pack-format.md）

@@ -33,7 +33,7 @@ require('dotenv').config({ path: path.join(userDataDir, '.env') });
 const { createStateMachine } = require('./src/stateMachine');
 const { createChatListener }  = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
-const { packToAnimations, buildAnimationsUpdate } = require('./src/packFormat');
+const { buildAnimationsUpdate, mergeActivePacks } = require('./src/packFormat');
 
 const DEFAULT_ANIMATIONS = {
   idle:      { folder: 'idle',          frames: [0,2,4,5,4,2,0,0,1,0], ms: 150,  loop: false },
@@ -66,7 +66,7 @@ let userAnimations = (() => {
   catch { return {}; }
 })();
 
-// 角色包(ADR-004):整包存 packs.json,activePackId 存 config.json
+// 角色包(ADR-004):整包存 packs.json,activePackIds 存 config.json(勾選制,可多包)
 const packsPath = path.join(userDataDir, 'packs.json');
 let packs = (() => {
   try { return JSON.parse(fs.readFileSync(packsPath, 'utf8')); }
@@ -76,13 +76,17 @@ let prevPackStates = [];   // 上一次廣播時啟用包的狀態鍵(清殘留�
 
 const packKeyOf = (id) => String(id).replace(/\./g, '_');
 
+// 勾選制(2026-07-11):activePackIds 陣列;讀舊 config 只有 activePackId 時視為單元素陣列
+function activePackIdsList() {
+  if (Array.isArray(config.activePackIds)) return config.activePackIds;
+  return config.activePackId ? [config.activePackId] : [];
+}
+
 function activePackAnimations() {
-  const id = config.activePackId;
-  if (!id) return null;
-  const pack = packs[packKeyOf(id)];
-  if (!pack) return null;
-  try { return packToAnimations(pack); }
-  catch (e) { console.warn('[pack] 轉換失敗,忽略啟用中的包:', e.message); return null; }
+  const list = activePackIdsList().map((id) => packs[packKeyOf(id)]).filter(Boolean);
+  const { animations, errors } = mergeActivePacks(list);
+  for (const err of errors) console.warn('[pack] 轉換失敗,忽略啟用中的包:', err.id, err.message);
+  return animations;
 }
 
 function animationsUpdate() {
@@ -245,25 +249,30 @@ if (config.modes?.obs) {
       packs[packKeyOf(pack.id)] = pack;
       savePacksFile();
       // 只在動到啟用中的包時廣播(編輯啟用中的包立即生效,對齊雲端 on() 訂閱行為)
-      if (pack.id === config.activePackId) broadcastAnimations();
+      if (activePackIdsList().includes(pack.id)) broadcastAnimations();
     },
     deletePack: (key) => {
-      const wasActive = config.activePackId && packKeyOf(config.activePackId) === key;
+      const wasActive = activePackIdsList().some((id) => packKeyOf(id) === key);
       delete packs[key];
       savePacksFile();
       if (wasActive) broadcastAnimations();
     },
-    getActivePackId: () => config.activePackId ?? null,
+    getActivePackIds: () => activePackIdsList(),
     playAnimation: (name) => {
       // 手動試播(layer4 設計 4b):animOnly 播一輪即回 baseState,不動幽視值
       obsServer?.broadcast({ value: sm.yolia_see, state: name, animOnly: true });
     },
-    setActivePack: (idOrNull) => {
+    setActivePackIds: (ids) => {
+      const list = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x);
       const cfgPath = path.join(userDataDir, 'config.json');
       const raw = readUserCfg(cfgPath);
-      if (idOrNull) raw.activePackId = idOrNull;
+      if (list.length) raw.activePackIds = list;
+      else delete raw.activePackIds;
+      // 舊欄位同步寫第一個(降版相容:舊版只認 activePackId,至少還能套到一個包)
+      if (list[0]) raw.activePackId = list[0];
       else delete raw.activePackId;
-      config.activePackId = idOrNull ?? undefined;
+      config.activePackIds = list.length ? list : undefined;
+      config.activePackId = list[0] ?? undefined;
       fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
       broadcastAnimations();
     },

@@ -157,6 +157,23 @@
     return { snapshot, broadcast, packStates };
   }
 
+  // 多包同時啟用(2026-07-11 勾選制):把勾選中的包合併成單一動畫集。
+  // 順序規約(呼叫端只要照勾選順序傳,排序在這裡統一做):
+  //   換角包排最前(packToAnimations 會填滿所有已知狀態,墊底當新基底),
+  //   擴充包依勾選順序疊後(後蓋前)——確保擴充動作永遠蓋得到換角包。
+  // 壞包(轉換丟例外)跳過並回報,不拖垮其他包。空清單回 animations:null(=只用內建)。
+  function mergeActivePacks(packList) {
+    const list = (packList ?? []).filter(Boolean);
+    const ordered = [...list.filter(p => p.base !== 'builtin'), ...list.filter(p => p.base === 'builtin')];
+    let animations = null;
+    const errors = [];
+    for (const p of ordered) {
+      try { animations = { ...(animations ?? {}), ...packToAnimations(p) }; }
+      catch (e) { errors.push({ id: p?.id, message: e?.message ?? String(e) }); }
+    }
+    return { animations, errors };
+  }
+
   // 供 UI 層即時驗證狀態名(與 validatePack 用同一條 STATE_RE,避免規則分岔)
   function isValidStateName(name) {
     return typeof name === 'string' && STATE_RE.test(name);
@@ -172,5 +189,5 @@
     return 0;
   }
 
-  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, isValidStateName, compareVersions, KNOWN_STATES };
+  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions, KNOWN_STATES };
 });

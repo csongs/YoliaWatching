@@ -6,7 +6,7 @@
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   let packs = {};          // RTDB /packs 全量:key → pack
-  let activePackId = null; // pack.id(含「.」)或 null(=內建 Yolia)
+  let activePackIds = [];  // 勾選中的包 id(勾選制:可多個;內建 Yolia 恆為基底)
   let working = null;      // 編輯中的包(記憶體工作副本;儲存才寫 RTDB)
   let dirty = false;
   let editingKey = null;   // edit() 進入時的原始 key;儲存時若 id 改指到別的既有 key 需覆蓋確認
@@ -25,8 +25,7 @@
     const { act, key, id, name } = btn.dataset;
     // data-act 派發表(Task 9 將於此擴充動畫幀編輯器等真正實作)
     switch (act) {
-      case 'activate':          activate(id); break;
-      case 'activate-builtin':  activate(null); break;
+      case 'toggle':            toggle(id, btn.checked); break;
       case 'edit':              edit(key); break;
       case 'export':            exportPack(key); break;
       case 'remove':            remove(key); break;
@@ -80,7 +79,7 @@
   async function load() {
     if (working) { renderEditor(); return; }   // 編輯到一半切回分頁:維持編輯畫面
     try {
-      [packs, activePackId] = await Promise.all([api.getPacks(), api.getActivePackId()]);
+      [packs, activePackIds] = await Promise.all([api.getPacks(), api.getActivePackIds()]);
     } catch (e) {
       showToast('載入角色包失敗', true);
       return;
@@ -100,17 +99,17 @@
   // ── ① 包清單 ─────────────────────────────────────────────────────────────
   function renderPackList() {
     const cards = Object.entries(packs).map(([key, p]) => {
-      const isActive = p.id === activePackId;
+      const isActive = activePackIds.includes(p.id);
       const type = p.base === 'builtin' ? '擴充包' : '換角包';
       const n = Object.keys(p.animations ?? {}).length;
       return `
         <div style="display:flex;align-items:center;gap:10px;background:#0d111a;border:1px solid ${isActive ? '#f472b6' : '#2d3748'};border-radius:8px;padding:12px;margin-bottom:10px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#94a3b8;font-size:12px">
+            <input type="checkbox" data-act="toggle" data-id="${esc(p.id)}"${isActive ? ' checked' : ''}> 啟用
+          </label>
           <div style="flex:1">
             <b>${esc(p.name)}</b> <span style="color:#64748b;font-size:12px">v${esc(p.version)} by ${esc(p.author)} · ${type} · ${n} 動畫</span>
           </div>
-          ${isActive
-            ? '<span style="color:#f472b6;font-size:12px">● 啟用中</span>'
-            : `<button class="btn btn-secondary btn-small" data-act="activate" data-id="${esc(p.id)}">啟用</button>`}
           <button class="btn btn-secondary btn-small" data-act="edit" data-key="${esc(key)}">編輯</button>
           <button class="btn btn-secondary btn-small" data-act="export" data-key="${esc(key)}">匯出</button>
           <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" data-act="remove" data-key="${esc(key)}">刪除</button>
@@ -129,11 +128,9 @@
       </div>
       <div class="card">
         <h3>我的角色包</h3>
-        <div style="display:flex;align-items:center;gap:10px;background:#0d111a;border:1px solid ${activePackId ? '#2d3748' : '#f472b6'};border-radius:8px;padding:12px;margin-bottom:10px">
-          <div style="flex:1"><b>內建 Yolia</b> <span style="color:#64748b;font-size:12px">預設角色,不可刪除</span></div>
-          ${activePackId
-            ? '<button class="btn btn-secondary btn-small" data-act="activate-builtin">啟用</button>'
-            : '<span style="color:#f472b6;font-size:12px">● 啟用中</span>'}
+        <p style="color:#64748b;font-size:12px;margin-bottom:10px">勾選要啟用的包,可同時勾多個;擴充包疊加在角色上,換角包一次只能啟用一個。</p>
+        <div style="display:flex;align-items:center;gap:10px;background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:12px;margin-bottom:10px">
+          <div style="flex:1"><b>內建 Yolia</b> <span style="color:#94a3b8;font-size:11px;background:#1e293b;border-radius:4px;padding:2px 6px;margin-left:4px">內建</span></div>
         </div>
         ${cards}
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
@@ -159,14 +156,25 @@
     showToast('已匯出 ' + p.id + '.yolia.json');
   }
 
-  async function activate(idOrNull) {
+  // 勾選/取消勾選一個包。換角包(整隻角色)一次只能勾一個:勾新的自動取消舊的
+  async function toggle(id, on) {
+    const isWhole = (pid) => packs[keyOf(pid)] && packs[keyOf(pid)].base !== 'builtin';
+    let ids = activePackIds.filter((x) => x !== id);
+    if (on) {
+      if (isWhole(id) && ids.some(isWhole)) {
+        ids = ids.filter((x) => !isWhole(x));
+        showToast('換角包一次只能啟用一個,已取消先前勾選的換角包');
+      }
+      ids.push(id);
+    }
     try {
-      await api.setActivePack(idOrNull);
-      activePackId = idOrNull;
-      renderPackList();
-      showToast(idOrNull ? '已啟用角色包' : '已切回內建 Yolia');
+      await api.setActivePackIds(ids);
+      activePackIds = ids;
+      showToast(on ? '已啟用' : '已停用');
+      await load();          // 重抓動畫清單(試播按鈕跟著變)
     } catch (e) {
-      showToast('啟用失敗:' + (e.message ?? e), true);
+      showToast('設定失敗:' + (e.message ?? e), true);
+      renderPackList();      // 失敗:勾勾畫回實際狀態
     }
   }
 
@@ -520,10 +528,11 @@
       dirty = false;
       editingKey = null;
       showToast('已儲存角色包');
-      if (working.id !== activePackId && confirm('立即啟用這個角色包?')) await activate(working.id);
+      const savedId = working.id;
       stopPreview(); editingAnim = null;
       working = null;
-      renderPackList();
+      if (!activePackIds.includes(savedId) && confirm('立即啟用這個角色包?')) await toggle(savedId, true);
+      else renderPackList();
     } catch (e) {
       showToast('儲存失敗:' + (e.message ?? e), true);
     }
@@ -550,7 +559,11 @@
     if (!confirm(`刪除角色包「${p.name}」?${hint}`)) return;
     try {
       await api.deletePack(key);
-      if (p.id === activePackId) { await api.setActivePack(null); activePackId = null; }
+      if (activePackIds.includes(p.id)) {
+        const ids = activePackIds.filter((x) => x !== p.id);
+        await api.setActivePackIds(ids);
+        activePackIds = ids;
+      }
       delete packs[key];
       renderPackList();
       showToast('已刪除');
@@ -561,7 +574,7 @@
 
   window.Workshop = {
     load,
-    _activate: activate, _create: create, _edit: edit, _remove: remove,
+    _toggle: toggle, _create: create, _edit: edit, _remove: remove,
     _importJson: importJson, _importSheet: importSheet, _importFrames: importFrames,
     _reslice: reslice, _addAnim: addAnim, _removeAnim: removeAnim,
     _save: save, _cancel: cancel,

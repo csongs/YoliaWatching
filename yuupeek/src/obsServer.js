@@ -267,8 +267,10 @@ function createObsServer(config, rootDir) {
     }
 
     if (req.url === '/panel/api/active-pack' && req.method === 'GET') {
+      const ids = panelHandlers?.getActivePackIds?.() ?? [];
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ activePackId: panelHandlers?.getActivePackId?.() ?? null }));
+      // activePackId 欄位保留=第一個(勾選制之前的單包介面,舊讀取端仍可用)
+      res.end(JSON.stringify({ activePackIds: ids, activePackId: ids[0] ?? null }));
       return;
     }
 
@@ -283,7 +285,11 @@ function createObsServer(config, rootDir) {
 
     if (req.url === '/panel/api/active-pack' && req.method === 'POST') {
       readBody(req).then(body => {
-        panelHandlers?.setActivePack?.(body.activePackId ?? null);
+        // 新介面收陣列;舊 body 只有 activePackId 時折成單元素陣列
+        const ids = Array.isArray(body.activePackIds)
+          ? body.activePackIds
+          : (body.activePackId ? [body.activePackId] : []);
+        panelHandlers?.setActivePackIds?.(ids);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       }).catch(() => { res.writeHead(500); res.end(); });

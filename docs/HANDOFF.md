@@ -4,7 +4,21 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-11，平台本機免登入測試模式）
+## 目前狀態（2026-07-11 二，角色包勾選制+市集試播）
+
+- **角色包改勾選制**(維護者 UI 回饋):工房清單內建只標「內建」徽章無操作鈕;
+  每個包一個啟用勾選框,**擴充包可同時勾多個**,換角包一次限一個(勾新的自動取消舊的)。
+- 資料格式(只加不改):`config.activePackIds: string[]` 新可選欄位;
+  `activePackId` 保留=清單第一個(舊 overlay 相容)。合併邏輯統一在
+  `packFormat.mergeActivePacks`(換角包墊底、擴充依勾選順序疊後,壞包跳過回報)。
+  touchpoints:main.js(config 讀寫+廣播)、obsServer active-pack 路由(收陣列,
+  相容舊單包 body)、web overlay(多 packRef 訂閱)、panel 兩個 adapter、workshop.js。
+- **市集試播**:卡片「試播」→ 抓包+validatePack → 卡片內小畫布循環播,可切動畫,
+  只播 data:image/ 幀(不對外站發請求);安裝後「立即啟用」改為附加到勾選清單。
+- 驗證:jest 8 suites/91 tests 全綠(+5 mergeActivePacks);node 假 DOM 驅動
+  workshop 勾選流程 7 項全過;市集渲染煙霧測試過。瀏覽器實測待維護者。
+
+## 前次狀態（2026-07-11，平台本機免登入測試模式）
 
 - 平台 repo 新增 `dev.js`(零依賴):`node dev.js` 同時端出三頁+假資料庫
   (RTDB 風格 REST 存 `.local-data.json`)。localhost 無 firebase-config.js 時

@@ -349,11 +349,21 @@
     let prevYtKey     = '';
     let prevSoopKey   = '';
 
-    let currentPackKey = null;   // 啟用中角色包的 RTDB key(id 的「.」換「_」);null=無
-    let packAnimations = null;   // packToAnimations 結果;null=無啟用包
-    let prevPackStates = [];     // 上一次套用的 pack 狀態名(停用/切換時清除殘留用)
-    let latestConfig = {};       // 最新一份 config(供 pack on('value') 回呼延後觸發時使用,避免用到舊 closure)
-    let packRef = null;          // 目前訂閱中的 /packs/<key> ref(切換/停用時 off())
+    // 勾選制(2026-07-11):可同時啟用多個包。currentPackIds 依 config 順序,
+    // 合併排序(換角包墊底、擴充疊後)交給 PackFormat.mergeActivePacks 統一做
+    let currentPackKeysStr = '';  // 訂閱中的 key 序列(含順序;變了才重排訂閱)
+    let currentPackIds = [];      // 勾選中的包 id(含「.」)
+    let packStore = {};           // key → pack(各包 on('value') 的最新值)
+    let packRefs = {};            // key → 訂閱中的 /packs/<key> ref
+    let prevPackStates = [];      // 上一次套用的 pack 狀態名(停用/切換時清除殘留用)
+    let latestConfig = {};        // 最新一份 config(供 pack on('value') 回呼延後觸發時使用,避免用到舊 closure)
+
+    function mergedPackAnimations() {
+      const list = currentPackIds.map((id) => packStore[String(id).replace(/\./g, '_')]).filter(Boolean);
+      const { animations, errors } = PackFormat.mergeActivePacks(list);
+      for (const err of errors) console.warn('[pack] 轉換失敗,忽略啟用中的包:', err.id, err.message);
+      return animations;
+    }
 
     // 套用順序與殘留清除交給 packFormat 的 buildAnimationsUpdate:
     // broadcast = 內建 DEFAULT + config/animations 打底、啟用中的包疊上、
@@ -361,7 +371,7 @@
     function applyAllAnimations(config) {
       const u = PackFormat.buildAnimationsUpdate(
         { ...DEFAULT_ANIMATIONS, ...(config.animations ?? {}) },
-        packAnimations,
+        mergedPackAnimations(),
         prevPackStates
       );
       prevPackStates = u.packStates;
@@ -375,22 +385,25 @@
       thresholds = (config.interactions ?? []).filter(i => i.trigger === 'threshold');
       handlers   = ChatProcessor.buildHandlers(config.interactions ?? []);
 
-      const packKey = config.activePackId ? String(config.activePackId).replace(/\./g, '_') : null;
-      if (packKey !== currentPackKey) {
-        currentPackKey = packKey;
-        packAnimations = null;                       // 停用/切換:先回打底狀態
-        packRef?.off(); packRef = null;              // 解除舊包訂閱
-        if (packKey) {
-          packRef = db.ref('packs/' + packKey);
-          packRef.on('value', (ps) => {              // on 而非 once:編輯啟用中的包即時生效
-            try {
-              const pack = ps.val();
-              if (!pack) { console.warn('[pack] 找不到角色包:', packKey); return; }
-              packAnimations = PackFormat.packToAnimations(pack);
-              applyAllAnimations(latestConfig);
-            } catch (e) {
-              console.warn('[pack] 載入失敗,維持現狀:', e);
-            }
+      // activePackIds 為主(勾選制);舊資料只有 activePackId → 折成單元素陣列
+      const packIds = Array.isArray(config.activePackIds)
+        ? config.activePackIds.filter((x) => typeof x === 'string' && x)
+        : (config.activePackId ? [config.activePackId] : []);
+      const packKeys = packIds.map((id) => String(id).replace(/\./g, '_'));
+      if (packKeys.join('|') !== currentPackKeysStr) {
+        currentPackKeysStr = packKeys.join('|');
+        currentPackIds = packIds;
+        for (const k of Object.keys(packRefs)) {         // 取消勾選的包:解除訂閱+清資料
+          if (!packKeys.includes(k)) { packRefs[k].off(); delete packRefs[k]; delete packStore[k]; }
+        }
+        for (const k of packKeys) {
+          if (packRefs[k]) continue;
+          packRefs[k] = db.ref('packs/' + k);
+          packRefs[k].on('value', (ps) => {              // on 而非 once:編輯啟用中的包即時生效
+            const pack = ps.val();
+            if (pack) packStore[k] = pack;
+            else { console.warn('[pack] 找不到角色包:', k); delete packStore[k]; }
+            applyAllAnimations(latestConfig);
           }, (e) => console.warn('[pack] 讀取失敗,維持現狀:', e));
         }
       }

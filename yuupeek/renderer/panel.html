@@ -865,26 +865,32 @@
           if (body.scale        !== undefined) updates['obs/scale']    = body.scale;
           return db.ref('config').update(updates).then(() => ({ ok: true }));
         },
-        getAnimations: () => Promise.all([
-          db.ref('config/animations').once('value'),
-          db.ref('config/activePackId').once('value'),
-        ]).then(([animSnap, idSnap]) => {
-          const animations = { ...(animSnap.val() ?? {}) };
-          const id = idSnap.val();
-          if (!id) return { animations };
-          return db.ref('packs/' + String(id).replace(/\./g, '_')).once('value').then(ps => {
-            Object.assign(animations, ps.val()?.animations ?? {});
-            return { animations };
-          });
+        getAnimations: () => db.ref('config').once('value').then(s => {
+          const c = s.val() ?? {};
+          const animations = { ...(c.animations ?? {}) };
+          const ids = Array.isArray(c.activePackIds) ? c.activePackIds : (c.activePackId ? [c.activePackId] : []);
+          if (!ids.length) return { animations };
+          return Promise.all(ids.map(id => db.ref('packs/' + String(id).replace(/\./g, '_')).once('value')))
+            .then(snaps => {
+              const merged = PackFormat.mergeActivePacks(snaps.map(ps => ps.val())).animations ?? {};
+              return { animations: Object.assign(animations, merged) };
+            });
         }),
         getPacks:        () => db.ref('packs').once('value').then(s => s.val() ?? {}),
         savePack:        (pack) => db.ref('packs/' + String(pack.id).replace(/\./g, '_')).set(pack).then(() => ({ ok: true })),
         deletePack:      (key) => db.ref('packs/' + key).remove().then(() => ({ ok: true })),
-        getActivePackId: () => db.ref('config/activePackId').once('value').then(s => s.val() ?? null),
+        getActivePackIds: () => db.ref('config').once('value').then(s => {
+          const c = s.val() ?? {};
+          return Array.isArray(c.activePackIds) ? c.activePackIds : (c.activePackId ? [c.activePackId] : []);
+        }),
         playAnimation:   (name) => db.ref('events/manualPlay')
                                      .set({ animation: name, nonce: Date.now() + '_' + Math.random().toString(36).slice(2) })
                                      .then(() => ({ ok: true })),
-        setActivePack:   (idOrNull) => db.ref('config/activePackId').set(idOrNull).then(() => ({ ok: true })),
+        // activePackId 舊欄位同步寫第一個:已部署的舊 overlay 只認單包,至少還能套到一個
+        setActivePackIds: (ids) => db.ref('config').update({
+          activePackIds: (Array.isArray(ids) && ids.length) ? ids : null,
+          activePackId:  (Array.isArray(ids) && ids[0]) || null,
+        }).then(() => ({ ok: true })),
         getEnv: () => db.ref('config').once('value').then(s => {
           const c = s.val() ?? {};
           return { TWITCH_OAUTH: c.twitchOauth ?? '', YOUTUBE_API_KEY: c.youtubeApiKey ?? '', SOOP_API_KEY: c.soopApiKey ?? '' };
@@ -947,8 +953,9 @@
         getPacks:        () => fetch('/panel/api/packs').then(r => r.json()),
         savePack:        (pack) => post('/panel/api/packs', pack),
         deletePack:      (key) => post('/panel/api/packs/delete', { key }),
-        getActivePackId: () => fetch('/panel/api/active-pack').then(r => r.json()).then(d => d.activePackId ?? null),
-        setActivePack:   (idOrNull) => post('/panel/api/active-pack', { activePackId: idOrNull }),
+        getActivePackIds: () => fetch('/panel/api/active-pack').then(r => r.json()).then(d =>
+          Array.isArray(d.activePackIds) ? d.activePackIds : (d.activePackId ? [d.activePackId] : [])),
+        setActivePackIds: (ids) => post('/panel/api/active-pack', { activePackIds: ids }),
         playAnimation:   (name) => post('/panel/api/play', { animation: name }),
       };
       // 角色工房/市集共用模組(ADR-004):obsServer 靜態服務直接供應源頭檔

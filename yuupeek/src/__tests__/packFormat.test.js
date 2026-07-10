@@ -1,4 +1,4 @@
-const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, isValidStateName, compareVersions } = require('../packFormat');
+const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions } = require('../packFormat');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -240,6 +240,46 @@ describe('buildAnimationsUpdate(桌面版合併/清殘留,ADR-004)', () => {
     const r = buildAnimationsUpdate(base, null, []);
     expect(r.snapshot).toEqual(base);
     expect(r.broadcast).toEqual(base);
+  });
+});
+
+describe('mergeActivePacks(多包勾選制,2026-07-11)', () => {
+  const PNG2 = 'data:image/png;base64,QQ==';
+
+  test('空清單/null → animations:null(只用內建)', () => {
+    expect(mergeActivePacks([]).animations).toBeNull();
+    expect(mergeActivePacks(null).animations).toBeNull();
+    expect(mergeActivePacks([null, undefined]).animations).toBeNull();
+  });
+
+  test('單一擴充包=packToAnimations 原行為', () => {
+    const r = mergeActivePacks([extPack()]);
+    expect(r.animations).toEqual(packToAnimations(extPack()));
+    expect(r.errors).toEqual([]);
+  });
+
+  test('兩個擴充包合併,同名動畫後蓋前', () => {
+    const a = extPack({ id: 'a.one', animations: { hurt: { srcs: [PNG], ms: 100, loop: false } } });
+    const b = extPack({ id: 'b.two', animations: { hurt: { srcs: [PNG2], ms: 200, loop: true }, dance: { srcs: [PNG2], ms: 150, loop: true } } });
+    const r = mergeActivePacks([a, b]);
+    expect(r.animations.hurt.srcs).toEqual([PNG2]);
+    expect(r.animations.dance).toBeTruthy();
+  });
+
+  test('換角包永遠墊底:就算勾在擴充包之後,擴充動作仍蓋得到', () => {
+    const ext = extPack({ animations: { idle: { srcs: [PNG2], ms: 99, loop: true } } });
+    const whole = fullPack();   // idle=PNG,並填滿已知狀態
+    const r = mergeActivePacks([ext, whole]);
+    expect(r.animations.idle.srcs).toEqual([PNG2]);   // 擴充蓋換角
+    expect(r.animations.wave).toBeTruthy();           // 換角包的已知狀態映射仍在
+  });
+
+  test('壞包跳過並回報,其他包不受影響', () => {
+    const bad = fullPack({ animations: { hurt: { srcs: [PNG] } } });  // 換角包缺 idle → packToAnimations 丟例外
+    const r = mergeActivePacks([bad, extPack()]);
+    expect(r.animations.hurt).toBeTruthy();
+    expect(r.errors.length).toBe(1);
+    expect(r.errors[0].id).toBe(bad.id);
   });
 });
 
