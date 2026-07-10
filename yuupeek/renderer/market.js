@@ -50,13 +50,16 @@
   //   陣列 = GitHub registry(每項自帶 packUrl)
   //   物件 = 中央平台 RTDB REST 的 /index.json(key→條目;packUrl 由 registry 根組出
   //          `<根>/packs/<key>.json`,即平台 /packs 節點的 REST 端點)
+  // 查詢字串要原樣帶到 packUrl——RTDB emulator 靠 ?ns=<namespace> 選資料庫,丟掉就 404
   function normalizeIndex(data, url) {
     if (Array.isArray(data)) return data;
     if (!data || typeof data !== 'object') return [];
-    const base = url.replace(/\/index\.json.*$/, '');
+    const m = String(url).match(/^(.*?)\/index\.json(\?.*)?$/);
+    const base = m ? m[1] : String(url).replace(/\/index\.json.*$/, '');
+    const qs = (m && m[2]) || '';
     return Object.entries(data).map(([key, it]) => ({
       ...it,
-      packUrl: it.packUrl ?? (base + '/packs/' + key + '.json'),
+      packUrl: it.packUrl ?? (base + '/packs/' + key + '.json' + qs),
     }));
   }
 
