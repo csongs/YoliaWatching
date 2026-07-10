@@ -4,7 +4,20 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-10 深夜二，中央市集平台 ADR-005）
+## 目前狀態（2026-07-11，平台本機免登入測試模式）
+
+- 平台 repo 新增 `dev.js`(零依賴):`node dev.js` 同時端出三頁+假資料庫
+  (RTDB 風格 REST 存 `.local-data.json`)。localhost 無 firebase-config.js 時
+  common.js 走 **MOCK 分支**:免登入固定為「本機測試員」(已核准 admin),
+  rules 不驗;panel 市集位址直接貼 `http://127.0.0.1:5000`。要測 rules/SSO
+  才用 emulator(config projectId 用 demo- 開頭觸發,需 Java)。
+- panel 市集位址改「貼什麼都盡量接」:index.json 原樣/資料庫根自動補/網站網址
+  自動探測 firebase-config.js(正式部署限定——hosting emulator 不套自訂標頭,
+  firebase-tools #3860);錯誤訊息導引抄首頁底部的 Registry URL。
+- 端到端驗證(2026-07-11,node 驅動 mock 分支):免登入→發布→瀏覽→
+  panel 貼網站網址解析→抓包→下架,7 項全過;主 repo 測試 86 全綠。
+
+## 前次狀態（2026-07-10 深夜二，中央市集平台 ADR-005）
 
 - 市集路線改版:GitHub registry → **中央 Firebase 平台**(維護者拍板,ADR-005;
   原 registry 骨架保留為自架備援)。新 repo `../YoliaWatching-market/`(已 git init):
