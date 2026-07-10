@@ -80,14 +80,19 @@
   async function load() {
     if (working) { renderEditor(); return; }   // 編輯到一半切回分頁:維持編輯畫面
     try {
-      let animData;
-      [packs, activePackId, animData] = await Promise.all([
-        api.getPacks(), api.getActivePackId(), api.getAnimations(),
-      ]);
-      animNames = Object.keys(animData.animations ?? animData ?? {});
+      [packs, activePackId] = await Promise.all([api.getPacks(), api.getActivePackId()]);
     } catch (e) {
       showToast('載入角色包失敗', true);
       return;
+    }
+    // 試播按鈕的動畫清單獨立抓:失敗只少掉試播卡,不拖垮整個包清單
+    try {
+      const animData = await api.getAnimations();
+      // run_left/run_right 是移動狀態(引擎走位移路徑,不走 playOnce),不放試播
+      animNames = Object.keys(animData.animations ?? animData ?? {})
+        .filter(n => n !== 'run_left' && n !== 'run_right');
+    } catch (e) {
+      animNames = [];
     }
     renderPackList();
   }
@@ -150,7 +155,7 @@
     a.href = URL.createObjectURL(blob);
     a.download = p.id + '.yolia.json';
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);   // 立即 revoke 可能中斷大檔下載
     showToast('已匯出 ' + p.id + '.yolia.json');
   }
 
