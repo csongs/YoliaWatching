@@ -2,6 +2,9 @@
 
 > 狀態：設計稿（2026-07-07）。階段一（prompt 指南）寫完即可用；階段二（平台內生成）
 > 動工前有一個必做的 CORS 驗證步驟。格式一律走 docs/specs/character-pack-format.md 的匯入器。
+> **註記（2026-07-10）**：維護者實務上已改用 Nano Banana 2 手動生成（教學見
+> docs/guides/ai-generation-nano-banana.md）。本檔階段二（平台內一鍵生成）**擱置**——
+> 原設計綁 spritecook API，若要復活需先對實際使用的生成服務做 API/CORS/金鑰查證 spike。
 
 ## 階段一：給使用者的 spritecook 操作指南＋prompt 範本（零開發，文件即產品）
 

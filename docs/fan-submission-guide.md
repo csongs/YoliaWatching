@@ -28,4 +28,10 @@
 
 控制面板 → 角色工房 → 「＋新增擴充包(為內建角色加動作)」或編輯既有擴充包 →
 「＋從 spritesheet 匯入」→ 確認切片 → 取狀態名 → 儲存並啟用 →
-到「桌寵設定」綁定指令。
+工房頂部「試播」看效果 → 到「桌寵設定」綁定指令。
+
+## 不會畫圖?用 AI 生成
+
+用 Nano Banana 2 等生成模型也能產出合規的 spritesheet,prompt 範本與流程見
+[docs/guides/ai-generation-nano-banana.md](guides/ai-generation-nano-banana.md)。
+注意授權:AI 生成素材的散布權取決於生成服務條款,投稿前自行確認。
