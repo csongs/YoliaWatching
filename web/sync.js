@@ -11,6 +11,7 @@ const FILES = [
   ['yuupeek/src/chatProcessor.js',  'web/public/chatProcessor.js'],
   ['yuupeek/src/packFormat.js',     'web/public/packFormat.js'],
   ['yuupeek/renderer/workshop.js',  'web/public/workshop.js'],
+  ['yuupeek/renderer/market.js',    'web/public/market.js'],
 ];
 
 for (const [src, dst] of FILES) {

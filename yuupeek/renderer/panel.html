@@ -112,6 +112,7 @@
   <div class="tab local-only" onclick="showTab('status')">模組狀態</div>
   <div class="tab" onclick="showTab('pet')">桌寵設定</div>
   <div class="tab" onclick="showTab('workshop')">角色工房</div>
+  <div class="tab" onclick="showTab('market')">市集</div>
   <div class="tab" onclick="showTab('settings')">設定</div>
   <span style="margin-left:auto;display:flex;align-items:center;gap:12px;padding:0 16px;white-space:nowrap">
     <span id="logout-btn" style="display:none;cursor:pointer;color:#94a3b8;font-size:12px" onclick="firebase.auth().signOut()">登出</span>
@@ -228,6 +229,11 @@
 <!-- ── 角色工房 ── -->
 <div id="workshop" class="panel">
   <div id="workshop-root"></div>
+</div>
+
+<!-- ── 市集 ── -->
+<div id="market" class="panel">
+  <div id="market-root"></div>
 </div>
 
 <!-- ── 模組狀態 ── -->
@@ -393,7 +399,7 @@
   let apiReady = false;
 
   // ── Tab switching ──────────────────────────────────────────────────────────
-  const TAB_IDS = ['guide', 'status', 'pet', 'workshop', 'settings'];
+  const TAB_IDS = ['guide', 'status', 'pet', 'workshop', 'market', 'settings'];
   let hasAutoCheckedUpdate = false;
 
   function showTab(id) {
@@ -403,6 +409,7 @@
     if (id === 'status') refreshStatus();
     if (id === 'pet') loadPetConfig();
     if (id === 'workshop') window.Workshop?.load?.();
+    if (id === 'market') window.Market?.load?.();
     if (id === 'settings') {
       loadEnv();
       loadConfig();
@@ -828,6 +835,7 @@
       await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js');
       await loadScript('/packFormat.js');
       await loadScript('/workshop.js');
+      await loadScript('/market.js');
       firebase.initializeApp(FIREBASE_CONFIG);
       const db = firebase.database();
 
@@ -943,9 +951,10 @@
         setActivePack:   (idOrNull) => post('/panel/api/active-pack', { activePackId: idOrNull }),
         playAnimation:   (name) => post('/panel/api/play', { animation: name }),
       };
-      // 角色工房共用模組(ADR-004):obsServer 靜態服務直接供應源頭檔
+      // 角色工房/市集共用模組(ADR-004):obsServer 靜態服務直接供應源頭檔
       await loadScript('/src/packFormat.js');
       await loadScript('/renderer/workshop.js');
+      await loadScript('/renderer/market.js');
     }
 
     apiReady = true;
