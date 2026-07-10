@@ -254,6 +254,10 @@ if (config.modes?.obs) {
       if (wasActive) broadcastAnimations();
     },
     getActivePackId: () => config.activePackId ?? null,
+    playAnimation: (name) => {
+      // 手動試播(layer4 設計 4b):animOnly 播一輪即回 baseState,不動幽視值
+      obsServer?.broadcast({ value: sm.yolia_see, state: name, animOnly: true });
+    },
     setActivePack: (idOrNull) => {
       const cfgPath = path.join(userDataDir, 'config.json');
       const raw = readUserCfg(cfgPath);

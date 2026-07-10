@@ -32,6 +32,11 @@
       case 'remove':            remove(key); break;
       case 'edit-anim':         window.Workshop._editAnim(name); break;
       case 'remove-anim':       removeAnim(name); break;
+      case 'play':
+        api.playAnimation(name)
+          .then(() => showToast('已試播 ' + name))
+          .catch((e) => showToast('試播失敗:' + (e.message ?? e), true));
+        break;
     }
   });
 
@@ -70,10 +75,16 @@
   }
 
   // ── 進入點 ────────────────────────────────────────────────────────────────
+  let animNames = [];   // 目前有效動畫名(試播按鈕用)
+
   async function load() {
     if (working) { renderEditor(); return; }   // 編輯到一半切回分頁:維持編輯畫面
     try {
-      [packs, activePackId] = await Promise.all([api.getPacks(), api.getActivePackId()]);
+      let animData;
+      [packs, activePackId, animData] = await Promise.all([
+        api.getPacks(), api.getActivePackId(), api.getAnimations(),
+      ]);
+      animNames = Object.keys(animData.animations ?? animData ?? {});
     } catch (e) {
       showToast('載入角色包失敗', true);
       return;
@@ -101,7 +112,16 @@
         </div>`;
     }).join('');
 
+    const playButtons = animNames.map(n =>
+      `<button class="btn btn-secondary btn-small" data-act="play" data-name="${esc(n)}">${esc(n)}</button>`
+    ).join('');
+
     root().innerHTML = `
+      <div class="card">
+        <h3>試播</h3>
+        <p style="color:#64748b;font-size:12px;margin-bottom:10px">在 overlay 上直接播放一次(不動幽視值)——驗證動畫效果用。</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${playButtons || '<span style="color:#64748b;font-size:13px">尚無動畫</span>'}</div>
+      </div>
       <div class="card">
         <h3>我的角色包</h3>
         <div style="display:flex;align-items:center;gap:10px;background:#0d111a;border:1px solid ${activePackId ? '#2d3748' : '#f472b6'};border-radius:8px;padding:12px;margin-bottom:10px">

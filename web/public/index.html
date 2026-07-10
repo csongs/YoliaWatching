@@ -423,6 +423,19 @@
       }
     });
 
+    // ── 手動試播(/events,layer4 設計 4b)────────────────────────────────────
+    // 首次快照只記 nonce 不觸發(overlay 重整不重播上一次事件);nonce 變更才播。
+    // animOnly:引擎 playOnce 播完自動回 baseState,循環動畫也只播一輪。
+    let lastEventNonce;   // undefined=尚未收過快照
+    db.ref('events').on('value', (snap) => {
+      const mp = (snap.val() ?? {}).manualPlay;
+      const first = lastEventNonce === undefined;
+      if (!first && mp?.nonce && mp.nonce !== lastEventNonce && mp.animation) {
+        char.applyUpdate({ value: sm.yolia_see, state: mp.animation, animOnly: true });
+      }
+      lastEventNonce = mp?.nonce ?? null;
+    });
+
     // ── Drag ──────────────────────────────────────────────────────────────────
     let dragStartX, dragStartY, dragStartRight, dragStartBottom;
 

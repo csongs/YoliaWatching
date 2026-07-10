@@ -272,6 +272,15 @@ function createObsServer(config, rootDir) {
       return;
     }
 
+    if (req.url === '/panel/api/play' && req.method === 'POST') {
+      readBody(req).then(body => {
+        panelHandlers?.playAnimation?.(body.animation);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }).catch(() => { res.writeHead(500); res.end(); });
+      return;
+    }
+
     if (req.url === '/panel/api/active-pack' && req.method === 'POST') {
       readBody(req).then(body => {
         panelHandlers?.setActivePack?.(body.activePackId ?? null);

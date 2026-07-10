@@ -873,6 +873,9 @@
         savePack:        (pack) => db.ref('packs/' + String(pack.id).replace(/\./g, '_')).set(pack).then(() => ({ ok: true })),
         deletePack:      (key) => db.ref('packs/' + key).remove().then(() => ({ ok: true })),
         getActivePackId: () => db.ref('config/activePackId').once('value').then(s => s.val() ?? null),
+        playAnimation:   (name) => db.ref('events/manualPlay')
+                                     .set({ animation: name, nonce: Date.now() + '_' + Math.random().toString(36).slice(2) })
+                                     .then(() => ({ ok: true })),
         setActivePack:   (idOrNull) => db.ref('config/activePackId').set(idOrNull).then(() => ({ ok: true })),
         getEnv: () => db.ref('config').once('value').then(s => {
           const c = s.val() ?? {};
@@ -938,6 +941,7 @@
         deletePack:      (key) => post('/panel/api/packs/delete', { key }),
         getActivePackId: () => fetch('/panel/api/active-pack').then(r => r.json()).then(d => d.activePackId ?? null),
         setActivePack:   (idOrNull) => post('/panel/api/active-pack', { activePackId: idOrNull }),
+        playAnimation:   (name) => post('/panel/api/play', { animation: name }),
       };
       // 角色工房共用模組(ADR-004):obsServer 靜態服務直接供應源頭檔
       await loadScript('/src/packFormat.js');
