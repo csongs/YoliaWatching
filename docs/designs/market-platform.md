@@ -24,8 +24,10 @@ rules 要點(全部宣告式,無伺服器):
 - `isAdmin = root.child('users/'+auth.uid+'/role').val() === 'admin'`
 - /users/$uid 建立:僅本人、status 必為 pending、role 必為 creator(自我申請);
   status/role/handle 變更:僅 admin。
-- /packs、/index 寫入:`(本人 approved 且 ownerUid==auth.uid 且 id 前綴==自己的 handle)` 或 admin;
-  `.validate` 限單包大小(與格式規格 4MB 一致)。
+- /packs、/index 寫入:`(本人 approved 且 ownerUid==auth.uid 且 RTDB key 前綴==handle_
+  且 id 前綴==handle. 且 author==handle)` 或 admin(key 綁 handle 防佔用他人命名空間,
+  2026-07-10 審查修正)。單包 4MB 上限由前端 validatePack 把關——
+  **RTDB rules 沒有位元組大小函數,rules 層不驗大小**;approved 帳號屬半信任,濫用即停權。
 - 首任 admin:維護者部署後在 Firebase console 手動把自己的 role 設 admin(一次性 bootstrap)。
 
 ## 2. 平台頁面(靜態,Hosting)
