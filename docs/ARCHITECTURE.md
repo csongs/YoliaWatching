@@ -157,11 +157,11 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 
 ## 10. 測試與本機開發
 
-- 測試：`cd yuupeek && npm test`（jest@30 + jsdom）。5 個測試檔在 `yuupeek/src/__tests__/`：
-  `character`、`chatListener`、`detector`、`obsServer`、`stateMachine`。
-  ⚠【事實，2026-07-07 實測】基線非全綠：`chatListener.test.js` 整個 suite 載入失敗
-  （require 舊 API `applyCommand`/`buildGreetRe`，chatListener.js 現在只 export `createChatListener`）
-  ——其餘 4 suite（22 tests）全過。另：chatProcessor.js 沒有專屬測試檔。
+- 測試：`cd yuupeek && npm test`（jest@30 + jsdom）。8 個測試檔在 `yuupeek/src/__tests__/`：
+  `character`、`chatListener`（2026-07-10 重寫，對齊 createChatListener API）、
+  `chatProcessor`（2026-07-10 建）、`detector`、`obsServer`、`packFormat`、
+  `stateMachine`、`syncManifest`（sync 清單守門）。
+  【事實，2026-07-10 實測】基線**全綠**（8 suites / 84 tests）。
 - 桌面版：`npm start`；角色沙盒本機測試：`npm run test-ui`（`yuupeek/test-server.js` 在
   port 3001 服務 test.html；沙盒讀不到 RTDB/animations.json 的自訂動畫，且必有兩種已知
   console 紅字——WS 重連與 pet-config 404，詳 PLAYBOOK §2）。
@@ -171,14 +171,14 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 
 | 項目 | 查證結論 | 出處 |
 |---|---|---|
-| `yuupeek/src/frames.js` | **dead code**：無任何 import。舊 spritesheet（1536×1872, cell 192×208）定位表，已被逐幀 PNG 取代。可刪，但刪前搜一次 `frames.js` 引用 | agent 盤點 + grep 無引用 |
-| `yuupeek/src/detector.js` | **production 未接線**：只有 `detector.test.js` 引用，main.js 沒有 require。功能（視窗標題偵測）在桌面版藍圖內但未啟用。留著，別當活程式碼改 | 同上 |
+| `yuupeek/src/frames.js` | **已刪除**（2026-07-10，刪前 grep 確認零引用；舊 spritesheet 定位表，git 歷史可挖） | 親自複核 |
+| `yuupeek/src/detector.js` | **production 未接線**：只有 `detector.test.js` 引用，main.js 沒有 require。功能（視窗標題偵測）在桌面版藍圖內但未啟用。留著，檔頭已加註記（2026-07-10） | 親自複核 |
 | `DEFAULT_ANIMATIONS` 鏡像 | `web/public/index.html` L57–68 與 `yuupeek/main.js` L37–48 各一份，**手動同步**。改預設動畫必須兩邊一起改 | 親自複核 |
-| `web/DEPLOY.md` | 過時：教的是 `FIREBASE_TOKEN`（login:ci），實際 CI 用 `FIREBASE_SERVICE_ACCOUNT`。以 README.md 為準 | 親自複核 |
+| `web/DEPLOY.md` | 已改為一頁式指向 README（2026-07-10；單一事實源，不再重複部署步驟） | 親自複核 |
 | SOOP 官方 API 模式 | `apiMode:"official"` 尚未實作（index.html 約 L249–251 直接 return） | 親自複核 |
 | greetingAnimations | 有 runtime 支援、無 panel 編輯 UI（雲端：直接改 RTDB；桌面：改 `%APPDATA%\YoliaWatching\config.json`——**不要**改安裝目錄的 default.config.json，那是隨程式更新的預設檔） | 親自複核＋審查修正 |
 | web 版 panel 無 saveAnimations | panel 的 web DataAdapter 只有 `getAnimations`（唯讀，供下拉選單；L851）。桌面版的寫入不在 panel adapter（L899 也是 GET），而在 `obsServer.js` L205 起（POST /panel/api/animations）＋ `main.js` 的 saveAnimations（約 L209–228）。**雲端版目前無法在 UI 編輯動畫** | 親自複核＋審查修正 |
-| chatListener.test.js 紅字 | 測試檔停在重構前舊 API，乾淨 checkout 上 `npm test` 即失敗（見 §10）。待重寫 | 2026-07-07 實測 |
+| chatListener.test.js 紅字 | **已修復**（2026-07-10 重寫對齊 createChatListener API；基線恢復全綠，見 §10） | 2026-07-10 實測 |
 
 ## 12. 給修改者的快速對照
 

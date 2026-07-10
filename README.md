@@ -65,7 +65,7 @@ Firebase 是 Google 的免費雲端服務，用來存放你的設定並提供 OB
 
 在你 Fork 的 repo 頁面：**Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-逐一新增以下 5 個 secret（名稱要完全一樣）：
+逐一新增以下 6 個 secret（名稱要完全一樣）：
 
 | Secret 名稱 | 填入的值 |
 |---|---|
@@ -199,7 +199,9 @@ npm start
 
 ---
 
-### 本機測試（雲端版 UI）
+### 本機測試（角色/動畫沙盒）
+
+test.html 角色沙盒頁（port 3001，不需聊天室；驗內建動畫與 character.js 改動）：
 
 ```bash
 cd yuupeek

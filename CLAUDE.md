@@ -28,9 +28,8 @@
    必須仍能運作（規則細節與範例見 PLAYBOOK §格式演進）。
 3. **新增 RTDB 頂層節點時，必須同時修改 `web/database.rules.json`**：
    rules 的 `$other` 預設拒絕一切讀寫——忘了加規則，新功能會整個讀不到資料且不報錯。
-4. **測試不得新增紅字**：`cd yuupeek && npm test`。已知紅字基線（2026-07-07）：
-   `chatListener.test.js` 整個 suite 載入失敗（它測的是重構前的舊 API，待重寫，見 HANDOFF 待辦）。
-   除它以外必須全綠；把它修好之後，請把本條改回「必須全綠」。
+4. **測試必須全綠**：`cd yuupeek && npm test`（2026-07-10 起基線 8 suites 全綠，
+   chatListener.test.js 已重寫；出現任何紅字＝改動不合格，回報中原文貼出錯誤）。
 5. **預設動畫有三份副本要一起評估**：`web/public/index.html` 與 `yuupeek/main.js` 的兩份
    `DEFAULT_ANIMATIONS`（手動鏡像，必須同改），加上 `character.js` L29–39 的內建表
    （config 載入前與載入失敗時的 fallback，同值但少 watch_excited）——改預設幀序時三處都要檢查。
@@ -50,9 +49,7 @@ cd yuupeek && npm run test-ui  # 角色/動畫沙盒頁 test.html（http://local
 
 ## 已知技術債（改到附近時處理，不要順手大改）
 
-- `web/DEPLOY.md` 內容過時（仍教 `FIREBASE_TOKEN`，實際 CI 已改用 `FIREBASE_SERVICE_ACCOUNT`；
-  正確流程以 README.md 為準）。
-- `detector.js`、`frames.js` 疑似 dead code——查證結論見 docs/ARCHITECTURE.md §技術債。
-- 測試基線有已知紅字（`chatListener.test.js`，見鐵律 4）；`chatProcessor.js` 尚無測試檔。
 - API keys（`youtubeApiKey` 等）存於公開可讀的 RTDB `/config`——架構上必然
   （overlay 無登入能力），緩解方式見 docs/ARCHITECTURE.md §安全模型。
+- `detector.js` 未接線（藍圖功能，檔頭有註記，勿當活程式碼改）。
+- 其餘小項見 docs/HANDOFF.md「剩餘已知後續」。

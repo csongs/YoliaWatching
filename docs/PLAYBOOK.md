@@ -13,9 +13,9 @@
 
 ## 1. 完工定義（DoD——全部打勾才算完成）
 
-- [ ] `cd yuupeek && npm test` **不得新增紅字**。已知紅字基線（2026-07-07）：`chatListener.test.js`
-      整個 suite 載入失敗（測舊 API；修復工單見 HANDOFF 待辦），其餘 4 個 suite 必須全綠。
-      出現基線以外的紅字 → 回報中原文貼出錯誤，不可含糊帶過。
+- [ ] `cd yuupeek && npm test` **必須全綠**（2026-07-10 起基線 8 suites 全綠，
+      chatListener.test.js 已重寫對齊 createChatListener API）。
+      出現任何紅字 → 回報中原文貼出錯誤，不可含糊帶過。
 - [ ] 改了共用檔（character.js / chatProcessor.js / panel.html）→ 執行 `cd yuupeek && npm run test-ui`，
       開 `http://localhost:3001`（角色沙盒頁 test.html），確認頁面載入、角色會動。
       【已知例外，不算失敗】此沙盒必然出現兩種 console 紅字：WebSocket 對 3001 的重連錯誤、
@@ -31,7 +31,7 @@
 
 | 要驗什麼 | 怎麼驗 | 通過標準 |
 |---|---|---|
-| 訊息處理邏輯 | `cd yuupeek && npm test`（jest，5 個測試檔在 yuupeek/src/__tests__/）。注意【事實】：chatProcessor.js **目前沒有專屬測試檔**（stateMachine 有，別搞混）——首次改動 chatProcessor 時先新建 `__tests__/chatProcessor.test.js` | 除已知紅字基線（DoD 第一條）外全綠 |
+| 訊息處理邏輯 | `cd yuupeek && npm test`（jest，8 個測試檔在 yuupeek/src/__tests__/，含 chatProcessor.test.js，2026-07-10 建） | 全綠（DoD 第一條） |
 | 角色動畫/行為 | `npm run test-ui` → http://localhost:3001（test.html 沙盒，不需聊天室）。注意：沙盒**吃不到** RTDB／animations.json 的自訂動畫（test-server 不提供），只能驗內建動畫與 character.js 程式改動 | 動畫播放正常；console 紅字僅限 DoD 列的兩種已知例外 |
 | 桌面版整體 | `cd yuupeek && npm start` → http://localhost:3000/panel | 面板可開、可存設定 |
 | 雲端 overlay | **沒有本機一鍵驗證**。方式：(a) 共用邏輯靠上面兩項；(b) 端到端＝部署到維護者自己的 Firebase 後開 `https://<id>.web.app` | 見下方「模擬聊天」 |
@@ -116,11 +116,9 @@ OBS 裡可能還開著**舊頁面**。所以任何時刻都可能出現「新程
 - ADR 規則：要推翻舊決策，寫新 ADR 並在舊 ADR 頂部加一行「已被 ADR-NNN 取代」，不刪舊檔。
 - docs/plans/ 是 2026-05 的歷史計畫，唯讀參考，不要更新它。
 - 已知過時文件（待修清單）：
-  - web/DEPLOY.md：FIREBASE_TOKEN → 實際是 FIREBASE_SERVICE_ACCOUNT。
   - yuupeek/README.md 的 interactions 範例：用了舊欄位 `keywords`/`command`/`state`，
     實際格式是 `match`/`animation`（以 panel 產生、chatProcessor 消費的為準）。
-  - 根 README.md 對 `npm run test-ui` 的描述（「雲端版 UI」）不準：實際是 test.html 角色沙盒。
-  - 根 README.md 步驟四寫「5 個 secret」但表格實列 6 個（含 ADMIN_EMAIL）——正確數字是 6。
+  （web/DEPLOY.md 與根 README.md 的過時內容已於 2026-07-10 修正。）
 
 ## 8. 常見任務食譜
 

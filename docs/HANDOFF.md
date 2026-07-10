@@ -4,7 +4,21 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-10，桌面版角色工房支援）
+## 目前狀態（2026-07-10 晚，小尾巴+技術債清理）
+
+- **測試基線恢復全綠**（8 suites / 84 tests）：chatListener.test.js 重寫（舊版備份於
+  docs/backups/）、新建 chatProcessor.test.js、新建 syncManifest.test.js（sync 清單守門:
+  HTML 引用的 js 漏登記 sync.js 即紅字）。CLAUDE.md 鐵律 4 已改回「必須全綠」。
+- 角色包小尾巴清畢：validatePack srcs 字元集收緊+4MB 精確位元組(spec §8 同步)、
+  web overlay 殘留清除改用 buildAnimationsUpdate(修 prototype-prop 邊界)、
+  工房編輯器單一重繪出口(孤兒計時器/manifest 還原修復)、isValidStateName 去重、
+  桌面版非啟用包不再廣播。
+- dead code:frames.js 已刪(grep 零引用)、detector.js 檔頭加未接線註記。
+- 文件:web/DEPLOY.md 改一頁式指向 README;README 修 test-ui 描述與 secrets 數量(6)。
+- 未驗證:工房 UI 修改僅靜態追蹤(無 DOM 測試框架);維護者桌面實測清單仍待跑
+  (見 docs/superpowers/plans/2026-07-10-desktop-pack-support.md Task 5)。
+
+## 前次狀態（2026-07-10，桌面版角色工房支援）
 
 - 桌面版角色工房已支援（ADR-004）：packs 存 `<userDataDir>/packs.json`、activePackId 存
   config.json、obsServer 加 5 條 `/panel/api/packs*`/`active-pack` 路由、panel 桌面 adapter
