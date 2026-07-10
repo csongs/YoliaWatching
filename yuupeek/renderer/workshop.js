@@ -28,6 +28,7 @@
       case 'activate':          activate(id); break;
       case 'activate-builtin':  activate(null); break;
       case 'edit':              edit(key); break;
+      case 'export':            exportPack(key); break;
       case 'remove':            remove(key); break;
       case 'edit-anim':         window.Workshop._editAnim(name); break;
       case 'remove-anim':       removeAnim(name); break;
@@ -95,6 +96,7 @@
             ? '<span style="color:#f472b6;font-size:12px">● 啟用中</span>'
             : `<button class="btn btn-secondary btn-small" data-act="activate" data-id="${esc(p.id)}">啟用</button>`}
           <button class="btn btn-secondary btn-small" data-act="edit" data-key="${esc(key)}">編輯</button>
+          <button class="btn btn-secondary btn-small" data-act="export" data-key="${esc(key)}">匯出</button>
           <button class="btn btn-secondary btn-small" style="color:#f87171;border-color:#f87171" data-act="remove" data-key="${esc(key)}">刪除</button>
         </div>`;
     }).join('');
@@ -115,6 +117,21 @@
           <button class="btn btn-secondary btn-small" onclick="Workshop._importJson()">匯入 .yolia.json</button>
         </div>
       </div>`;
+  }
+
+  // ── 匯出 .yolia.json(layer4 設計 4a)──────────────────────────────────────
+  function exportPack(key) {
+    const p = packs[key];
+    if (!p) return;
+    const v = PackFormat.validatePack(p);   // 庫內資料可能被場外改過,匯出前防呆
+    if (!v.ok) { showToast('此包驗證失敗,不匯出:' + v.errors[0], true); return; }
+    const blob = new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = p.id + '.yolia.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('已匯出 ' + p.id + '.yolia.json');
   }
 
   async function activate(idOrNull) {
