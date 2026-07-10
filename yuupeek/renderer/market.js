@@ -7,9 +7,11 @@
   const keyOf = (id) => String(id).replace(/\./g, '_');
 
   const URL_KEY = 'yolia.marketplaceUrl';
-  const DEFAULT_URL = 'https://cdn.jsdelivr.net/gh/csongs/YoliaWatching-packs@main/index.json';
+  // 無預設 registry(ADR-005:GitHub registry 路線已由中央平台取代,平台網址由
+  // 各自部署決定)——未設定時顯示設定提示,填平台的 index.json REST 位址
+  const DEFAULT_URL = '';
 
-  let index = null;      // registry index.json 內容(陣列)
+  let index = null;      // registry index 內容(正規化為陣列)
   let installed = {};    // 本地已安裝包:key → pack
 
   const registryUrl = () => localStorage.getItem(URL_KEY) || DEFAULT_URL;
@@ -26,6 +28,7 @@
 
   async function load(force) {
     if (index && !force) { render(); return; }
+    if (!registryUrl()) { renderUnconfigured(); return; }
     root().innerHTML = '<div class="card"><p style="color:#64748b">載入市集中…</p></div>';
     try {
       installed = await api.getPacks();
@@ -55,6 +58,16 @@
       ...it,
       packUrl: it.packUrl ?? (base + '/packs/' + key + '.json'),
     }));
+  }
+
+  function renderUnconfigured() {
+    root().innerHTML = `
+      <div class="card">
+        <h3>市集</h3>
+        <p style="color:#94a3b8;font-size:13px">尚未設定市集來源。填入市集平台的 index.json 位址
+        (平台瀏覽頁底部會顯示,形如 https://&lt;平台專案&gt;-default-rtdb.&lt;區域&gt;.firebasedatabase.app/index.json)。</p>
+        ${urlBox()}
+      </div>`;
   }
 
   function renderError(e) {

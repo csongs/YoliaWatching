@@ -1,8 +1,10 @@
 # ADR-005:市集改為中央 Firebase 平台(Google SSO+帳號審核制)
 
 - 狀態:已採納(2026-07-10,維護者拍板)
-- 取代:docs/designs/marketplace.md 的「GitHub registry」路線(該稿保留,PR 投稿流改為
-  自架備援選項;已建好的 ../YoliaWatching-packs 骨架保留,market.js 支援兩種 index 格式)
+- 取代:docs/designs/marketplace.md 的「GitHub registry」路線(該稿保留供參;
+  registry 骨架 ../YoliaWatching-packs 於 2026-07-10 經維護者確認後刪除,未曾 push。
+  market.js 仍支援陣列型 index 格式——自架 GitHub registry 的能力保留在讀取端,
+  需要時可從本 ADR 前身的 marketplace.md 重建)
 - 設計細節:docs/designs/market-platform.md
 
 ## 問題

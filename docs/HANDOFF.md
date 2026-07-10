@@ -27,10 +27,11 @@
 - **市集**：panel 新「市集」分頁（yuupeek/renderer/market.js，sync 已登記）：
   fetch index.json → 卡片 → 安裝（本地 validatePack 重驗＋id 比對）→ 問啟用；
   已安裝/可更新標記（packFormat.compareVersions）；registry URL 存 localStorage
-  （`yolia.marketplaceUrl`），預設 jsDelivr csongs/YoliaWatching-packs。
-- **registry 骨架**：`../YoliaWatching-packs/`（主 repo 外，已 git init 一個 commit）：
-  示範包＋validate.js（含自足性：禁外連圖）＋build-index.js＋CI workflow＋投稿規則 README。
-  **待維護者：到 GitHub 開 csongs/YoliaWatching-packs 並 push**。
+  （`yolia.marketplaceUrl`），**無預設值**——未設定時顯示設定提示（填中央平台的
+  index.json 位址，見 ADR-005）。
+- ~~registry 骨架~~：GitHub registry 路線被 ADR-005 中央平台取代，
+  `../YoliaWatching-packs/` 已於 2026-07-10 經維護者確認刪除（未曾 push）。
+  market.js 仍支援陣列型 index，自架 registry 可按 marketplace.md 重建。
 - **AI 教學**：docs/guides/ai-generation-nano-banana.md（Nano Banana 2 手動流程）；
   generation-pipeline.md 階段二擱置註記；粉絲指南已連結。
 - 未驗證：試播/市集 UI 為靜態追蹤；維護者桌面實測（試播按鈕、市集指本地假 index 裝
