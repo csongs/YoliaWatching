@@ -4,7 +4,21 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-10 深夜，layer4 批次：匯出/試播/市集/AI 教學）
+## 目前狀態（2026-07-10 深夜二，中央市集平台 ADR-005）
+
+- 市集路線改版:GitHub registry → **中央 Firebase 平台**(維護者拍板,ADR-005;
+  原 registry 骨架保留為自架備援)。新 repo `../YoliaWatching-market/`(已 git init):
+  瀏覽頁(卡片+試播)、創作者頁(Google SSO→申請→審核→PNG 上傳/切片/命名/試播/發布)、
+  管理頁(審帳號/停權/下架/增減 admin);rules 強制「id 前綴=handle」防冒名;
+  零伺服器,Spark $0。
+- 主 repo 唯一改動:market.js 的 `normalizeIndex`——同時吃 GitHub 陣列格式與
+  平台物件格式(packUrl 自動組 `<根>/packs/<key>.json`)。
+- **待維護者**:照 ../YoliaWatching-market/README.md 部署(建 Firebase 專案→填 config→
+  deploy→bootstrap 首任 admin);開 GitHub repo push;實測創作者流與管理流。
+- 未驗證:平台三頁全部未經瀏覽器實測(本環境無法);rules 權限矩陣需部署後手動驗
+  (README 已列驗收流程)。
+
+## 前次狀態（2026-07-10 深夜，layer4 批次：匯出/試播/市集/AI 教學）
 
 - **匯出**：工房包卡「匯出」鈕（validatePack 防呆 → Blob 下載 .yolia.json）。
 - **手動試播**：RTDB 新頂層節點 `/events`（rules 同改）；overlay 訂閱 nonce 觸發

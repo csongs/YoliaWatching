@@ -31,16 +31,30 @@
       installed = await api.getPacks();
     } catch (e) { installed = {}; }
     try {
-      const res = await fetch(registryUrl() + (registryUrl().includes('?') ? '&' : '?') + 't=' + Date.now());
+      const url = registryUrl();
+      const res = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now());
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      index = Array.isArray(data) ? data : [];
+      index = normalizeIndex(await res.json(), url);
     } catch (e) {
       index = null;
       renderError(e);
       return;
     }
     render();
+  }
+
+  // 兩種 index 格式都收(ADR-005):
+  //   陣列 = GitHub registry(每項自帶 packUrl)
+  //   物件 = 中央平台 RTDB REST 的 /index.json(key→條目;packUrl 由 registry 根組出
+  //          `<根>/packs/<key>.json`,即平台 /packs 節點的 REST 端點)
+  function normalizeIndex(data, url) {
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== 'object') return [];
+    const base = url.replace(/\/index\.json.*$/, '');
+    return Object.entries(data).map(([key, it]) => ({
+      ...it,
+      packUrl: it.packUrl ?? (base + '/packs/' + key + '.json'),
+    }));
   }
 
   function renderError(e) {
