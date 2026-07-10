@@ -44,8 +44,17 @@ rules 要點(全部宣告式,無伺服器):
 
 market.js 的 index 相容層:registry URL 回傳**陣列**(GitHub registry 格式)或
 **物件**(平台 /index.json REST 格式)都接受;物件時 `Object.values()` 並以
-`<registry 根>/packs/<key>.json` 組 packUrl。實況主把市集 URL 設成
-`https://<平台專案>-default-rtdb.<region>.firebasedatabase.app/index.json` 即接上平台。
+`<registry 根>/packs/<key>.json` 組 packUrl(index URL 的查詢字串原樣帶上——
+emulator 靠 `?ns=` 選庫)。
+
+市集位址欄**貼什麼都盡量接**(2026-07-11 對 emulator 實測,依序嘗試):
+1. 含 `/index.json` → 原樣抓(平台首頁底部顯示的 Registry URL;emulator 必走這條)。
+2. 資料庫根網址(可帶 `?ns=`)→ 補 `/index.json` 再抓。
+3. 平台**網站網址**(如 `https://xxx.web.app`)→ 抓站上部署的 `firebase-config.js`
+   挖 `databaseURL`。前提:平台 firebase.json 對該檔開 CORS(已設);
+   **hosting emulator 不套用自訂標頭**(firebase-tools issue #3860,查於 2026-07-11),
+   此路徑僅正式部署可用。
+全部失敗時顯示導引錯誤(教使用者去平台首頁底部抄 Registry URL)。
 
 ## 4. 風險
 

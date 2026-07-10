@@ -34,16 +34,54 @@
       installed = await api.getPacks();
     } catch (e) { installed = {}; }
     try {
-      const url = registryUrl();
-      const res = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now());
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      index = normalizeIndex(await res.json(), url);
+      const { url, data } = await resolveIndex(registryUrl());
+      index = normalizeIndex(data, url);
     } catch (e) {
       index = null;
       renderError(e);
       return;
     }
     render();
+  }
+
+  // 抓 JSON;非 2xx 或拿到 HTML 都丟錯,notIndex 標記「這裡不是資料端點」讓上層換路徑再試
+  async function fetchJson(url) {
+    const res = await fetch(url, { cache: 'no-store' });
+    const isHtml = (res.headers.get('content-type') ?? '').includes('html');
+    if (!res.ok || isHtml) {
+      const e = new Error(res.ok ? '回應是網頁不是 JSON' : 'HTTP ' + res.status);
+      e.notIndex = isHtml || res.status === 404;
+      throw e;
+    }
+    return res.json();
+  }
+
+  // 使用者貼什麼都盡量接(依序嘗試;實測 2026-07-10,詳 docs/designs/market-platform.md):
+  //   1. 含 /index.json → 原樣抓(平台首頁底部顯示的 Registry URL)
+  //   2. 資料庫根網址(可帶 ?ns=,emulator 用)→ 補 /index.json 再抓
+  //   3. 平台網站網址 → 抓站上部署的 firebase-config.js 挖 databaseURL
+  async function resolveIndex(input) {
+    let u = String(input).trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    if (/\/index\.json(\?|$)/.test(u)) return { url: u, data: await fetchJson(u) };
+    const qi = u.indexOf('?');
+    const guess = qi === -1 ? u + '/index.json'
+      : u.slice(0, qi).replace(/\/+$/, '') + '/index.json' + u.slice(qi);
+    try {
+      return { url: guess, data: await fetchJson(guess) };
+    } catch (e) {
+      if (!e.notIndex) throw e;                      // 連線失敗/權限錯:原樣回報
+    }
+    try {
+      const origin = new URL(u).origin;
+      const txt = await (await fetch(origin + '/firebase-config.js', { cache: 'no-store' })).text();
+      const m = txt.match(/databaseURL:\s*["']([^"']+)["']/);
+      if (m) {
+        const dbUrl = m[1].replace(/\/+$/, '') + '/index.json';
+        return { url: dbUrl, data: await fetchJson(dbUrl) };
+      }
+    } catch (e2) { /* 走下面的統一提示 */ }
+    throw new Error('這個位址找不到市集資料。貼平台網站網址(部署版可自動偵測),或開平台首頁把最下方的 Registry URL 整串複製過來(本機 emulator 必須用這串)');
   }
 
   // 兩種 index 格式都收(ADR-005):
@@ -67,8 +105,8 @@
     root().innerHTML = `
       <div class="card">
         <h3>市集</h3>
-        <p style="color:#94a3b8;font-size:13px">尚未設定市集來源。填入市集平台的 index.json 位址
-        (平台瀏覽頁底部會顯示,形如 https://&lt;平台專案&gt;-default-rtdb.&lt;區域&gt;.firebasedatabase.app/index.json)。</p>
+        <p style="color:#94a3b8;font-size:13px">尚未設定市集來源。直接貼市集平台的<b>網站網址</b>
+        (例如 https://xxx.web.app)即可;本機 emulator 測試則貼平台首頁最下方顯示的 Registry URL 整串。</p>
         ${urlBox()}
       </div>`;
   }
@@ -85,7 +123,7 @@
   function urlBox() {
     return `
       <div style="display:flex;gap:8px;align-items:end;margin-top:12px;flex-wrap:wrap">
-        <label style="color:#94a3b8;font-size:12px;flex:1;min-width:260px">Registry URL(本機測試可指向自己的 index.json)
+        <label style="color:#94a3b8;font-size:12px;flex:1;min-width:260px">市集位址(平台網站網址或 Registry URL 皆可)
           <input id="mk-url" value="${esc(registryUrl())}" style="width:100%"></label>
         <button class="btn btn-secondary btn-small" data-act="set-url">套用</button>
         <button class="btn btn-secondary btn-small" data-act="refresh">重新整理</button>
@@ -152,5 +190,5 @@
     }
   }
 
-  window.Market = { load };
+  window.Market = { load, _resolveIndex: resolveIndex, _normalizeIndex: normalizeIndex }; // 底線=測試掛鉤
 })();
