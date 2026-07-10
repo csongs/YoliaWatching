@@ -4,7 +4,25 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-10 晚，小尾巴+技術債清理）
+## 目前狀態（2026-07-10 深夜，layer4 批次：匯出/試播/市集/AI 教學）
+
+- **匯出**：工房包卡「匯出」鈕（validatePack 防呆 → Blob 下載 .yolia.json）。
+- **手動試播**：RTDB 新頂層節點 `/events`（rules 同改）；overlay 訂閱 nonce 觸發
+  animOnly 播放（首快照不觸發）；桌面走 `POST /panel/api/play` → WS 廣播；
+  工房頂部「試播」卡（getAnimations keys）。
+- **市集**：panel 新「市集」分頁（yuupeek/renderer/market.js，sync 已登記）：
+  fetch index.json → 卡片 → 安裝（本地 validatePack 重驗＋id 比對）→ 問啟用；
+  已安裝/可更新標記（packFormat.compareVersions）；registry URL 存 localStorage
+  （`yolia.marketplaceUrl`），預設 jsDelivr csongs/YoliaWatching-packs。
+- **registry 骨架**：`../YoliaWatching-packs/`（主 repo 外，已 git init 一個 commit）：
+  示範包＋validate.js（含自足性：禁外連圖）＋build-index.js＋CI workflow＋投稿規則 README。
+  **待維護者：到 GitHub 開 csongs/YoliaWatching-packs 並 push**。
+- **AI 教學**：docs/guides/ai-generation-nano-banana.md（Nano Banana 2 手動流程）；
+  generation-pipeline.md 階段二擱置註記；粉絲指南已連結。
+- 未驗證：試播/市集 UI 為靜態追蹤；維護者桌面實測（試播按鈕、市集指本地假 index 裝
+  demo 包、匯出再匯入迴圈）；雲端 e2e 照舊待部署。
+
+## 前次狀態（2026-07-10 晚，小尾巴+技術債清理）
 
 - **測試基線恢復全綠**（8 suites / 84 tests）：chatListener.test.js 重寫（舊版備份於
   docs/backups/）、新建 chatProcessor.test.js、新建 syncManifest.test.js（sync 清單守門:

@@ -115,6 +115,9 @@ RTDB /config ──(on('value') 整節點訂閱, index.html 約 L351)──▶ o
 /packs/<packId 的「.」換「_」>    .read: 公開   .write: 僅 ADMIN_EMAIL
     = 完整 .yolia.json 內容（Character Pack v1,規格 docs/specs/character-pack-format.md）
 
+/events   .read: 公開   .write: 僅 ADMIN_EMAIL   （2026-07-10 增,手動試播）
+└─ manualPlay: { animation, nonce }   （nonce 變更即播一次;事件不放 /config 免整包重推）
+
 /state    規則保留但未使用（.read: true, .write: false）
 $other    一律拒絕（.read/.write: false）←新增頂層節點必須改 rules
 ```
