@@ -11,7 +11,8 @@
 ## Global Constraints
 
 - **絕不 `git push`**;本機 commit 已授權,訊息尾加 `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`。分支 `feature/cleanup-batch`。
-- 每個任務後 `cd yuupeek && npm test` 不得新增紅字;**Task 8 完成後必須全綠(6/6 suites)**。
+- 每個任務後 `cd yuupeek && npm test` 不得新增紅字;**Task 8 完成後必須全綠**
+  (實際落點 8/8 suites:原 6 suite − 刪除的 frames 無 suite + 新增 syncManifest/chatProcessor)。
 - 改共用檔(panel.html/workshop.js/character.js/chatProcessor.js/packFormat.js)→ `cd web && node sync.js` 成功。
 - `web/public/index.html` 是雲端專屬檔可直接改;其他 web/public/ 副本不准改。
 - 格式演進:validatePack 收緊 srcs 字元集屬「匯入層驗證」,不影響既有已入庫資料的讀取(overlay 不驗證);spec §8 同步記載。
