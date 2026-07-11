@@ -274,6 +274,13 @@ function createObsServer(config, rootDir) {
       return;
     }
 
+    if (req.url === '/panel/api/youtube/check' && req.method === 'POST') {
+      const triggered = panelHandlers?.checkYouTubeLive?.() ?? false;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, triggered }));
+      return;
+    }
+
     if (req.url === '/panel/api/play' && req.method === 'POST') {
       readBody(req).then(body => {
         panelHandlers?.playAnimation?.(body.animation);

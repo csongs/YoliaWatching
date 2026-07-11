@@ -145,7 +145,9 @@
       <li>建立憑證 → <strong>API 金鑰</strong></li>
       <li>在「設定」頁填入 <code>YOUTUBE_API_KEY</code></li>
     </ol>
-    <div class="note">每日 10,000 quota 限制，直播中約 500–2,000 quota／小時</div>
+    <div class="note">每日 10,000 quota 限制，直播中約 500–2,000 quota／小時;
+      另外<strong>找直播的 search 每天只有獨立的 100 次</strong>,所以未開播時 15 分鐘才查一次——
+      剛開播請按「YouTube 設定」裡的「我開播了」立即偵測</div>
     <div class="note" style="margin-top:12px;background:#1f2937;border-left-color:#38bdf8;color:#c7d2fe">
       <strong>配額錯誤提示</strong>
       <ol style="margin-top:8px">
@@ -266,6 +268,13 @@
     <div class="form-group">
       <label>頻道 Handle</label>
       <input type="text" id="yt-channel" placeholder="@altheayolia" oninput="debouncedYtSave()">
+    </div>
+    <div class="form-group">
+      <button class="btn btn-secondary btn-small" onclick="checkYtLive()">我開播了(立即偵測直播)</button>
+      <div style="color:#64748b;font-size:12px;margin-top:6px">
+        平時每 15 分鐘自動找一次直播(YouTube 的 search 每天只給 100 次,查太密會爆);
+        剛開播不想等就按這顆。
+      </div>
     </div>
   </div>
 
@@ -650,6 +659,17 @@
   const debouncedSoopSave   = debounce(() => savePlatformConfig('soop'), 800);
   const debouncedEnvSave    = debounce(saveEnv, 1200);
 
+  // 「我開播了」:立即觸發一次 YouTube 直播偵測(平時 15 分鐘一次,省 search 配額)
+  async function checkYtLive() {
+    try {
+      const r = await api.checkYouTubeLive();
+      if (r?.triggered === false) showToast('無法觸發:YouTube 未啟用,或 API 配額已用盡(隔天重置)', true);
+      else showToast('已觸發直播偵測,已開播的話幾秒內會連上聊天室');
+    } catch (e) {
+      showToast('觸發失敗:' + (e.message ?? e), true);
+    }
+  }
+
   // ── Pet config tab ────────────────────────────────────────────────────────
   let STATE_OPTIONS = ['idle', 'peek', 'cheer', 'cry', 'eat', 'jump', 'run_left', 'run_right', 'wave'];
 
@@ -886,6 +906,10 @@
         playAnimation:   (name) => db.ref('events/manualPlay')
                                      .set({ animation: name, nonce: Date.now() + '_' + Math.random().toString(36).slice(2) })
                                      .then(() => ({ ok: true })),
+        // 「我開播了」:寫 nonce 事件,overlay 收到後立刻查一次直播(繞過 15 分鐘節流)
+        checkYouTubeLive: () => db.ref('events/checkLive')
+                                  .set({ nonce: Date.now() + '_' + Math.random().toString(36).slice(2) })
+                                  .then(() => ({ ok: true, triggered: true })),
         // activePackId 舊欄位同步寫第一個:已部署的舊 overlay 只認單包,至少還能套到一個
         setActivePackIds: (ids) => db.ref('config').update({
           activePackIds: (Array.isArray(ids) && ids.length) ? ids : null,
@@ -957,6 +981,7 @@
           Array.isArray(d.activePackIds) ? d.activePackIds : (d.activePackId ? [d.activePackId] : [])),
         setActivePackIds: (ids) => post('/panel/api/active-pack', { activePackIds: ids }),
         playAnimation:   (name) => post('/panel/api/play', { animation: name }),
+        checkYouTubeLive: () => post('/panel/api/youtube/check', {}),
       };
       // 角色工房/市集共用模組(ADR-004):obsServer 靜態服務直接供應源頭檔
       await loadScript('/src/packFormat.js');

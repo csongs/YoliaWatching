@@ -262,6 +262,8 @@ if (config.modes?.obs) {
       // 手動試播(layer4 設計 4b):animOnly 播一輪即回 baseState,不動幽視值
       obsServer?.broadcast({ value: sm.yolia_see, state: name, animOnly: true });
     },
+    // 「我開播了」:立即查一次 YouTube 直播(繞過 15 分鐘節流;配額爆掉時回 false)
+    checkYouTubeLive: () => chatListener?.checkYouTubeLiveNow?.() ?? false,
     setActivePackIds: (ids) => {
       const list = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x);
       const cfgPath = path.join(userDataDir, 'config.json');

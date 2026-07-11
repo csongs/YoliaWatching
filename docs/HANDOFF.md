@@ -4,7 +4,21 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-11 二，角色包勾選制+市集試播）
+## 目前狀態（2026-07-12，YouTube 直播偵測改 15 分鐘+「我開播了」）
+
+- 查證(2026-07-12,determine_quota_cost):**search.list 改為獨立每日 100 次上限**,
+  其他端點共用 10,000 units/天。桌面版原本未開播 30 秒搜一次=50 分鐘用光額度 → bug。
+- 桌面 chatListener:未開播改 15 分鐘查一次(LIVE_CHECK_INTERVAL_MS,與雲端一致),
+  暫時性狀況用 RETRY_INTERVAL_MS=30 秒;新增 `checkYouTubeLiveNow()`(清節流立即查,
+  配額爆掉回 false);輪詢迴圈加 ytBusy 防手動觸發造成雙迴圈。
+- 「我開播了」按鈕(panel「YouTube 設定」卡,兩模式):桌面 `POST /panel/api/youtube/check`;
+  雲端寫 `/events/checkLive` nonce → overlay 首快照抑制後觸發 `checkNow()`。
+- 雲端 overlay `startYouTube` 回傳值改 `{stop, checkNow}`(原本是 stop 函數)。
+- `liveChat/messages` 單價官方未列(【未查證】);長期選項 `liveChatMessages.streamList`
+  (官方建議,免輪詢)記入 backlog,暫不做。
+- 驗證:jest 92 tests 全綠(+1 時序測試:15 分鐘節流+手動觸發立即查)。
+
+## 前次狀態（2026-07-11 二，角色包勾選制+市集試播）
 
 - **角色包改勾選制**(維護者 UI 回饋):工房清單內建只標「內建」徽章無操作鈕;
   每個包一個啟用勾選框,**擴充包可同時勾多個**,換角包一次限一個(勾新的自動取消舊的)。

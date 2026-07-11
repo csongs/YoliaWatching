@@ -93,3 +93,36 @@ test('getStatus 形狀與 stop 斷線', () => {
   listener.stop();
   expect(tmi.__instances[0].disconnected).toBe(true);
 });
+
+test('YouTube 未開播:15 分鐘查一次,checkYouTubeLiveNow 立即再查', async () => {
+  const { google } = require('googleapis');
+  const searchList = jest.fn().mockResolvedValue({ data: { items: [] } });   // 一直沒開播
+  google.youtube.mockReturnValue({
+    search: { list: searchList },
+    videos: { list: jest.fn().mockResolvedValue({ data: { items: [] } }) },
+    liveChatMessages: { list: jest.fn() },
+  });
+  process.env.YOUTUBE_API_KEY = 'test-key';
+  const config = {
+    twitch: { enabled: false }, soop: { enabled: false }, interactions: [],
+    youtube: { enabled: true, channel: 'UCxxxx' },   // UC 開頭:不打 channels.list
+  };
+  const listener = createChatListener(config, { yolia_see: 0, state: 'idle' }, () => {});
+  listener.start();
+
+  await jest.advanceTimersByTimeAsync(0);
+  expect(searchList).toHaveBeenCalledTimes(1);        // 啟動即查一次
+
+  await jest.advanceTimersByTimeAsync(60_000);
+  expect(searchList).toHaveBeenCalledTimes(1);        // 一分鐘內不重查(舊版 30 秒會爆 search 配額)
+
+  expect(listener.checkYouTubeLiveNow()).toBe(true);  // 「我開播了」
+  await jest.advanceTimersByTimeAsync(0);
+  expect(searchList).toHaveBeenCalledTimes(2);        // 立即再查
+
+  await jest.advanceTimersByTimeAsync(15 * 60 * 1000);
+  expect(searchList).toHaveBeenCalledTimes(3);        // 例行 15 分鐘節奏
+
+  listener.stop();
+  delete process.env.YOUTUBE_API_KEY;
+});

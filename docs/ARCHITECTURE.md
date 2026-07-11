@@ -132,7 +132,7 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 | 平台 | 機制 | 位置 | 已知限制 |
 |---|---|---|---|
 | Twitch | 原生 WebSocket IRC，無 token 時匿名 `justinfan*`（唯讀即可收訊息） | 約 L113–154 | 斷線 5 秒重連；無 quota 問題 |
-| YouTube | Data API v3：`channels?forHandle` → `search?eventType=live`（search 一次 100 units【模型知識，未線上查證】）→ `videos` → `liveChat/messages` 依 `pollingIntervalMillis` 輪詢 | 約 L156–234 | 免費 quota 10,000 units/天（出處：README.md；官方數字未線上查證）；**收到 403/quota 即永久停止輪詢**（約 L224）——重啟條件很窄：重整頁面，或變更 youtube 的 enabled/channel/apiKey 三者之一（其他 config 欄位變更不會重啟，index.html 約 L368–374 以這三欄組 key 判斷）；未開播時每 15 分鐘查一次 |
+| YouTube | Data API v3：`channels?forHandle` → `search?eventType=live` → `videos` → `liveChat/messages` 依 `pollingIntervalMillis` 輪詢 | 約 L156–245 | quota 規則（developers.google.com/youtube/v3/determine_quota_cost，2026-07-12 查）：**search.list 獨立上限每天 100 次**，其他端點共用 10,000 units/天（channels/videos 各 1 unit；liveChat/messages 單價官方未列【未查證】）。未開播時每 15 分鐘查一次（桌面版 2026-07-12 起同步，原 30 秒會在 50 分鐘內用光 search 額度）；panel「YouTube 設定」的**「我開播了」鈕**可立即觸發偵測（雲端走 `/events/checkLive` nonce、桌面走 `POST /panel/api/youtube/check`）。**收到 403/quota 即永久停止輪詢**（約 L235）——重啟條件很窄：重整頁面，或變更 youtube 的 enabled/channel/apiKey 三者之一（其他 config 欄位變更不會重啟，以這三欄組 key 判斷） |
 | SOOP | 先 POST `player_live_api.php` 拿 CHDOMAIN/CHPT，再連 WebSocket 自訂封包協定 | 約 L236–338 | **live API 被 CORS 擋，瀏覽器內不可用**（程式碼自己印出「僅支援 Electron 版」，約 L323–325）；桌面版走 `soop-extension` npm 套件 |
 
 ## 8. 素材管線

@@ -60,7 +60,11 @@ function createChatListener(config, sm, broadcast) {
   let resolvedChanId = null;
   let notLiveLogged  = false;
   let lastSearchAt   = 0;
-  const SEARCH_INTERVAL_MS = 30_000;
+  // search.list 每日獨立上限 100 次(developers.google.com/youtube/v3/determine_quota_cost,
+  // 2026-07-12 查)——30 秒輪詢 50 分鐘就會用光一天的額度,故未開播時 15 分鐘查一次,
+  // 與雲端 overlay 一致;要立即偵測用面板「我開播了」(checkYouTubeLiveNow)。
+  const LIVE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+  const RETRY_INTERVAL_MS      = 30_000;   // 缺設定/暫時性狀況的重排間隔(不打 search)
   let youtubeClient  = null;
 
   async function resolveLiveVideoId(youtube) {
@@ -86,11 +90,11 @@ function createChatListener(config, sm, broadcast) {
   }
 
   async function fetchYouTubeMessages(pageToken) {
-    if (!config.youtube?.enabled || !config.youtube?.channel) return { pageToken, delayMs: SEARCH_INTERVAL_MS };
+    if (!config.youtube?.enabled || !config.youtube?.channel) return { pageToken, delayMs: RETRY_INTERVAL_MS };
     if (youtubePaused) return { pageToken, stop: true };
     if (!process.env.YOUTUBE_API_KEY) {
       console.error('[YouTube] YOUTUBE_API_KEY not set');
-      return { pageToken, delayMs: SEARCH_INTERVAL_MS };
+      return { pageToken, delayMs: RETRY_INTERVAL_MS };
     }
 
     if (!youtubeClient) youtubeClient = google.youtube({ version: 'v3', auth: process.env.YOUTUBE_API_KEY });
@@ -99,12 +103,12 @@ function createChatListener(config, sm, broadcast) {
     try {
       if (!liveVideoId) {
         const now = Date.now();
-        if (now - lastSearchAt < SEARCH_INTERVAL_MS) return { pageToken: null, delayMs: SEARCH_INTERVAL_MS - (now - lastSearchAt) };
+        if (now - lastSearchAt < LIVE_CHECK_INTERVAL_MS) return { pageToken: null, delayMs: LIVE_CHECK_INTERVAL_MS - (now - lastSearchAt) };
         lastSearchAt = now;
         liveVideoId  = await resolveLiveVideoId(youtube);
         if (!liveVideoId) {
-          if (!notLiveLogged) { console.log('[YouTube] no live stream found, will retry in 30s…'); notLiveLogged = true; }
-          return { pageToken: null, delayMs: SEARCH_INTERVAL_MS };
+          if (!notLiveLogged) { console.log('[YouTube] no live stream found, next check in 15 min (use panel「我開播了」to check now)'); notLiveLogged = true; }
+          return { pageToken: null, delayMs: LIVE_CHECK_INTERVAL_MS };
         }
         notLiveLogged = false;
       }
@@ -113,8 +117,8 @@ function createChatListener(config, sm, broadcast) {
       const chatId   = videoRes.data.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
       if (!chatId) {
         console.log('[YouTube] live stream ended, watching for next stream…');
-        liveVideoId = null; notLiveLogged = false; lastSearchAt = 0;
-        return { pageToken: null, delayMs: SEARCH_INTERVAL_MS };
+        liveVideoId = null; notLiveLogged = false; lastSearchAt = 0;   // 歸零:30 秒後立刻搜一次(接續開下一台),之後回 15 分鐘節奏
+        return { pageToken: null, delayMs: RETRY_INTERVAL_MS };
       }
       if (!pageToken) console.log(`[YouTube] connected to live chat ${chatId}`);
 
@@ -174,19 +178,24 @@ function createChatListener(config, sm, broadcast) {
   }
 
   let stopped = false;
+  let ytPageToken = null;
+  let ytBusy = false;   // 抓取進行中(手動觸發撞上時忽略,靠 lastSearchAt=0 讓該輪立即搜)
+
+  async function scheduleYt() {
+    if (stopped || ytBusy) return;
+    ytBusy = true;
+    const { pageToken, delayMs } = await fetchYouTubeMessages(ytPageToken);
+    ytPageToken = pageToken;
+    ytBusy = false;
+    if (!stopped) youtubeInterval = setTimeout(scheduleYt, delayMs ?? RETRY_INTERVAL_MS);
+  }
 
   return {
     start() {
       stopped = false;
       startTwitch();
       startSoop().catch(e => console.error('[SOOP]', e.message));
-      let ytPageToken = null;
-      const scheduleYt = async () => {
-        if (stopped) return;
-        const { pageToken, delayMs } = await fetchYouTubeMessages(ytPageToken);
-        ytPageToken = pageToken;
-        if (!stopped) youtubeInterval = setTimeout(scheduleYt, delayMs ?? SEARCH_INTERVAL_MS);
-      };
+      ytPageToken = null;
       youtubeInterval = setTimeout(scheduleYt, 0);
     },
     stop() {
@@ -194,6 +203,16 @@ function createChatListener(config, sm, broadcast) {
       twitchClient?.disconnect();
       if (youtubeInterval) clearTimeout(youtubeInterval);
       soopChat = null;
+    },
+    // 面板「我開播了」:清除找直播的節流,立刻查一次(不等 15 分鐘)。
+    // 配額已爆(youtubePaused)時查了也是白查,直接回 false 讓面板顯示原因。
+    checkYouTubeLiveNow() {
+      if (stopped || youtubePaused) return false;
+      lastSearchAt  = 0;
+      notLiveLogged = false;
+      if (youtubeInterval) clearTimeout(youtubeInterval);
+      youtubeInterval = setTimeout(scheduleYt, 0);
+      return true;
     },
     updateHandlers(interactions) {
       thresholds = (interactions ?? []).filter(i => i.trigger === 'threshold');
