@@ -1,0 +1,188 @@
+# ARCHITECTURE — 系統全貌（事實檔）
+
+> 本檔只記「已查證的事實」，每條附出處。架構「建議」一律放 docs/decisions/ 的 ADR，不放這裡。
+> 查證日期：2026-07-07。標「⚠ 未親自複核」者為 agent 掃描結果，使用前建議抽查。
+> 讀者指引：要改聊天邏輯→讀 §4、§7；要動動畫/素材→讀 §5、§8；要動 RTDB→讀 §6、§9；動部署→讀 §3。
+
+## 1. 一句話
+
+觀眾在 Twitch / YouTube / SOOP 聊天室發言 → overlay 網頁解析訊息 → 幽視值（yolia_see，0–100）
+與狀態機驅動 canvas 角色動畫 → 顯示在 OBS Browser Source 上。
+
+## 2. 兩個版本
+
+| | 雲端版（主力） | 桌面版（次要） |
+|---|---|---|
+| 位置 | `web/` | `yuupeek/` |
+| 執行環境 | 使用者自己的 Firebase 專案（Hosting + RTDB） | Electron，本機 HTTP server（port 3000） |
+| overlay | `web/public/index.html`（雲端版專屬檔） | `yuupeek/renderer/obs-overlay.html` |
+| 控制面板 | `/panel`（= 同步過去的 `panel.html`） | `http://localhost:3000/panel` |
+| 聊天連線 | overlay 頁面內（瀏覽器直連） | `yuupeek/src/chatListener.js`（Node，tmi.js + googleapis + soop-extension） |
+| 設定存放 | RTDB `/config` | 本機 `config.json` + `%APPDATA%\YoliaWatching\animations.json` |
+| 版本發布 | push main → GitHub Actions 部署 | electron-builder → GitHub Releases（`npm run release`） |
+
+共用核心（isomorphic，單一源頭在 yuupeek/）：
+- `yuupeek/renderer/character.js` — canvas 動畫引擎
+- `yuupeek/src/chatProcessor.js` — 訊息處理純函數
+- `yuupeek/renderer/panel.html` — 控制面板（內建 DataAdapter：web 模式走 Firebase，桌面模式走 localhost API；見 panel.html 的 `initApp()`，約 L816–916）
+
+## 3. 部署模型（雲端版）
+
+**每個使用者擁有自己的 Firebase 專案**——fork 本 repo → 填 6 個 GitHub Secrets → CI 部署。
+沒有任何中央伺服器；Spark 免費方案的 quota 是「每使用者各自一份」。
+
+流程（[.github/workflows/deploy.yml](../.github/workflows/deploy.yml)，push main 或手動觸發）：
+1. `web/gen-firebase-config.js` → 由 secrets 產生 `web/public/firebase-config.js`
+   （必填：`FIREBASE_PROJECT_ID`、`FIREBASE_API_KEY`、`FIREBASE_MESSAGING_SENDER_ID`、`FIREBASE_APP_ID`；
+   可選：`FIREBASE_AUTH_DOMAIN`、`FIREBASE_DATABASE_URL`、`FIREBASE_STORAGE_BUCKET`，缺省自動推導）
+2. `web/gen-database-rules.js` → 把 `ADMIN_EMAIL` secret 注入 `database.rules.json`
+3. `google-github-actions/auth@v2` 以 `FIREBASE_SERVICE_ACCOUNT` 認證
+4. `firebase deploy --only hosting,database` —— **此步會自動執行 firebase.json 的 predeploy**：
+   `node sync.js`（複製共用檔）→ `node gen-panel-email.js`（把 ADMIN_EMAIL 注入 panel.html 的 `ALLOWED_EMAILS`）
+
+⚠ **常見誤判**：`web/public/` 在 git 裡只有 `index.html` 和 `firebase-config.example.js`，
+`character.js`/`chatProcessor.js`/`panel.html`/`assets/` 都「不存在」——這是**正常的**。
+它們是 predeploy 產物，被 [.gitignore](../.gitignore) L15–19 刻意排除。
+不要據此判斷「線上版 404 癱瘓」或「CI 少了同步步驟」。（2026-07-07 曾有 agent 這樣誤判。）
+
+部署後 URL：`https://<PROJECT_ID>.web.app/`（overlay）、`/panel`（面板，cleanUrls 開啟）。
+Hosting headers：全站 `Cache-Control: no-cache`（[web/firebase.json](../web/firebase.json) L7–9）。
+
+## 4. 執行時資料流（雲端版）
+
+```
+Twitch IRC (wss://irc-ws.chat.twitch.tv:443, 匿名 justinfan 或 oauth)
+YouTube Data API v3 (輪詢)                                            ┐
+SOOP WebSocket (社群協定；live API 有 CORS，瀏覽器不可用 → 實質僅桌面版) ┘
+        │ 三個監聽器都跑在 overlay 頁面內（web/public/index.html）
+        ▼
+onMessage(text, username)                        index.html 約 L74
+        ▼
+ChatProcessor.processMessage(...)  → { yolia_see, state, animOnly, speech, costDenied, resetState }
+        ▼
+char.applyUpdate(...)              → canvas 動畫 + HUD + 對話泡泡
+
+RTDB /config ──(on('value') 整節點訂閱, index.html 約 L351)──▶ overlay 熱更新
+     ▲
+     └──(update()) panel.html（登入後）
+```
+
+- overlay 訂閱的是 **整個 `/config` 節點**：任何欄位變更都會整包重推。
+  → 大資料（如 base64 圖）**不可**放進 `/config`，否則每次改設定都重新下載全部。
+- 訊息處理邏輯（[chatProcessor.js](../yuupeek/src/chatProcessor.js)）：
+  先判指令（句首詞完全匹配，走 cost/幽視值增減/動畫/回應規則）；**非指令訊息一律先 +1 幽視值**
+  （含關鍵詞命中者——關鍵詞再疊加自己的 yolia_see 增減）。門檻（threshold）由 `computeState()`
+  把幽視值映射到狀態。
+
+## 5. 動畫引擎（character.js）
+
+- 動畫格式：`{ folder, frames: number[], ms?: number, loop: boolean }`
+  - 幀圖路徑 = `<assetBase>/<folder>/<index 兩位數補零>.png`（character.js `frames()` L24–27）
+  - `frames` 是**索引陣列**（可重複、可跳號，如 `[0,2,4,5,4,2,0]`），不是張數
+  - `ms` 缺省 150（`FRAME_MS`）；`loop:false` 播完回 baseState
+- 內建動畫寫死在 character.js L29–39（這張表實質是預設動畫的**第三份副本**：與兩份
+  DEFAULT_ANIMATIONS 同值、少 watch_excited，作為 config 載入前／載入失敗時的 fallback）；
+  **runtime 覆蓋入口 = `setAnimations(cfg)`（L329–338）**，
+  接受 `{ 狀態名: {folder, frames, ms, loop} }`，可新增任意新狀態名。
+- 已知限制：`setAnimations` 只會組 `assetBase` 相對路徑，**不支援完整 URL / data URL**
+  （角色包功能需要動這裡——見 docs/specs/character-pack-format.md）。
+- 畫布 128×139（`DISPLAY_W/H`），`drawFrame` 把整張 PNG 拉伸繪滿畫布（L174–179）。
+- 位置行為（追隨狀態移動、跳躍連擊、閒晃 wander）都在此檔，與動畫格式無關。
+- `watch_excited` 狀態證明「純 config 新增動畫」已可行：它不在 character.js 內建表，
+  只存在於兩份 `DEFAULT_ANIMATIONS` 鏡像（見 §11 鏡像地雷）。
+
+## 6. RTDB schema（現行，全部在 `/config` 下）
+
+```
+/config                         .read: 公開   .write: 僅 ADMIN_EMAIL（rules 層強制）
+├─ twitch:  { enabled, channel }
+├─ youtube: { enabled, channel }
+├─ soop:    { enabled, channel, apiMode: "community"|"official" }
+├─ twitchOauth: string          （選填；空 = 匿名連線）
+├─ youtubeApiKey: string
+├─ soopApiKey: string           （官方模式用；官方模式尚未實作）
+├─ obs: { scale: number }       （panel 預設 2）
+├─ interactions: [              （三種 trigger 共用一個陣列）
+│    { id:"t_xxxx", trigger:"threshold", min:number, state:string }
+│    { id:"k_xxxx", trigger:"keyword",  match:string|string[], animation, yolia_see, response }
+│    { id:"c_xxxx", trigger:"command",  match:string|string[], animation, yolia_see, cost?, response }
+│  ]
+├─ animations: { <狀態名>: {folder, frames[], ms, loop} }   （覆蓋/新增動畫）
+└─ greetingAnimations: [ {frames[], ms, weight} ]           （wave 加權隨機變體；panel 無編輯 UI）
+
+/state    規則保留但未使用（.read: true, .write: false）
+$other    一律拒絕（.read/.write: false）←新增頂層節點必須改 rules
+```
+
+出處：[web/database.rules.json](../web/database.rules.json)、panel.html DataAdapter（約 L826–874）、
+index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../yuupeek/default.config.json)。
+
+## 7. 聊天平台接入細節（雲端版，全部在 index.html）
+
+| 平台 | 機制 | 位置 | 已知限制 |
+|---|---|---|---|
+| Twitch | 原生 WebSocket IRC，無 token 時匿名 `justinfan*`（唯讀即可收訊息） | 約 L113–154 | 斷線 5 秒重連；無 quota 問題 |
+| YouTube | Data API v3：`channels?forHandle` → `search?eventType=live`（search 一次 100 units【模型知識，未線上查證】）→ `videos` → `liveChat/messages` 依 `pollingIntervalMillis` 輪詢 | 約 L156–234 | 免費 quota 10,000 units/天（出處：README.md；官方數字未線上查證）；**收到 403/quota 即永久停止輪詢**（約 L224）——重啟條件很窄：重整頁面，或變更 youtube 的 enabled/channel/apiKey 三者之一（其他 config 欄位變更不會重啟，index.html 約 L368–374 以這三欄組 key 判斷）；未開播時每 15 分鐘查一次 |
+| SOOP | 先 POST `player_live_api.php` 拿 CHDOMAIN/CHPT，再連 WebSocket 自訂封包協定 | 約 L236–338 | **live API 被 CORS 擋，瀏覽器內不可用**（程式碼自己印出「僅支援 Electron 版」，約 L323–325）；桌面版走 `soop-extension` npm 套件 |
+
+## 8. 素材管線
+
+- 源頭：`yuupeek/assets/sprites/frames/<動作資料夾>/<NN>.png`；⚠ 未親自複核：81 個 PNG、共約 3.5 MB。
+- 部署：sync.js 把整個 `yuupeek/assets/` 複製到 `web/public/assets/`；
+  overlay 的 assetBase = `./assets/sprites/frames`（index.html 約 L103）。
+- 資料夾與狀態對照（動畫名 ≠ 資料夾名，如 peek→`review/`、eat→`cilantro/`）：見兩份 DEFAULT_ANIMATIONS。
+- `running/`、`waiting/` 資料夾未被任何動畫引用（⚠ 未親自複核）。
+- `tools/frame-preview.html` 是幀預覽工具。**在版控內**（Initial commit 即追蹤）；.gitignore L21–22
+  雖寫了 `tools/`，但 .gitignore 對已追蹤檔案無效——ignore 規則從未生效。要真排除得
+  `git rm --cached`，去留由維護者決定。
+
+## 9. 安全模型
+
+【事實】
+- RTDB rules：`/config` 全世界可讀；寫入需 `auth.token.email == ADMIN_EMAIL`（部署時注入）。
+- 因此 `youtubeApiKey`、`twitchOauth`、`soopApiKey` 是**公開可讀**的。
+  這是架構必然：overlay（OBS Browser Source）沒有登入能力，卻要自己輪詢 YouTube。
+- panel 的 `ALLOWED_EMAILS` 檢查是 client-side UX（擋畫面），真正的權限在 rules 層。
+- 登入方式：Email/Password + Google OAuth（panel.html 約 L356–373）。
+
+【風險與現行緩解】（緩解屬建議性質，執行前確認）
+- YouTube API key 洩漏 → 他人盜用 quota。緩解：使用者可在 Google Cloud Console 給 key 加
+  HTTP referrer 限制（限自己的 `*.web.app`）。README 尚未教這步（未查證 Google 現行 UI 路徑）。
+- twitchOauth 洩漏 → 可以該身分發言。緩解：留空即用匿名模式（功能不減，僅收訊息）。
+
+## 10. 測試與本機開發
+
+- 測試：`cd yuupeek && npm test`（jest@30 + jsdom）。5 個測試檔在 `yuupeek/src/__tests__/`：
+  `character`、`chatListener`、`detector`、`obsServer`、`stateMachine`。
+  ⚠【事實，2026-07-07 實測】基線非全綠：`chatListener.test.js` 整個 suite 載入失敗
+  （require 舊 API `applyCommand`/`buildGreetRe`，chatListener.js 現在只 export `createChatListener`）
+  ——其餘 4 suite（22 tests）全過。另：chatProcessor.js 沒有專屬測試檔。
+- 桌面版：`npm start`；角色沙盒本機測試：`npm run test-ui`（`yuupeek/test-server.js` 在
+  port 3001 服務 test.html；沙盒讀不到 RTDB/animations.json 的自訂動畫，且必有兩種已知
+  console 紅字——WS 重連與 pet-config 404，詳 PLAYBOOK §2）。
+- 雲端版沒有自動化測試（overlay/panel 的瀏覽器行為無 CI 驗證）。
+
+## 11. 技術債與地雷（2026-07-07 查證結論）
+
+| 項目 | 查證結論 | 出處 |
+|---|---|---|
+| `yuupeek/src/frames.js` | **dead code**：無任何 import。舊 spritesheet（1536×1872, cell 192×208）定位表，已被逐幀 PNG 取代。可刪，但刪前搜一次 `frames.js` 引用 | agent 盤點 + grep 無引用 |
+| `yuupeek/src/detector.js` | **production 未接線**：只有 `detector.test.js` 引用，main.js 沒有 require。功能（視窗標題偵測）在桌面版藍圖內但未啟用。留著，別當活程式碼改 | 同上 |
+| `DEFAULT_ANIMATIONS` 鏡像 | `web/public/index.html` L57–68 與 `yuupeek/main.js` L37–48 各一份，**手動同步**。改預設動畫必須兩邊一起改 | 親自複核 |
+| `web/DEPLOY.md` | 過時：教的是 `FIREBASE_TOKEN`（login:ci），實際 CI 用 `FIREBASE_SERVICE_ACCOUNT`。以 README.md 為準 | 親自複核 |
+| SOOP 官方 API 模式 | `apiMode:"official"` 尚未實作（index.html 約 L249–251 直接 return） | 親自複核 |
+| greetingAnimations | 有 runtime 支援、無 panel 編輯 UI（雲端：直接改 RTDB；桌面：改 `%APPDATA%\YoliaWatching\config.json`——**不要**改安裝目錄的 default.config.json，那是隨程式更新的預設檔） | 親自複核＋審查修正 |
+| web 版 panel 無 saveAnimations | panel 的 web DataAdapter 只有 `getAnimations`（唯讀，供下拉選單；L851）。桌面版的寫入不在 panel adapter（L899 也是 GET），而在 `obsServer.js` L205 起（POST /panel/api/animations）＋ `main.js` 的 saveAnimations（約 L209–228）。**雲端版目前無法在 UI 編輯動畫** | 親自複核＋審查修正 |
+| chatListener.test.js 紅字 | 測試檔停在重構前舊 API，乾淨 checkout 上 `npm test` 即失敗（見 §10）。待重寫 | 2026-07-07 實測 |
+
+## 12. 給修改者的快速對照
+
+| 想改什麼 | 動哪裡 | 別忘了 |
+|---|---|---|
+| 訊息→動畫的規則邏輯 | `yuupeek/src/chatProcessor.js` | 是共用檔；跑 `npm test` |
+| 角色動作/渲染 | `yuupeek/renderer/character.js` | 是共用檔；桌面版與雲端版都吃它 |
+| 面板 UI | `yuupeek/renderer/panel.html` | 是共用檔；web/桌面雙模式都要通（DataAdapter） |
+| 雲端 overlay（聊天監聽、Firebase 訂閱） | `web/public/index.html` | 雲端專屬檔，可直接改；DEFAULT_ANIMATIONS 有鏡像 |
+| RTDB 結構 | schema 見 §6 | 新頂層節點要改 `web/database.rules.json`；格式只加不改 |
+| 預設互動 | `yuupeek/default.config.json` | 桌面版預設；雲端版首次資料可用 `web/import-config.js` 匯入（用法未查證） |
+| 部署流程 | `.github/workflows/deploy.yml` + `web/firebase.json` predeploy | predeploy 也算部署步驟 |
