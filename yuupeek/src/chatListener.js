@@ -222,4 +222,16 @@ function createChatListener(config, sm, broadcast) {
   };
 }
 
-module.exports = { createChatListener };
+// 設定變更(或啟動)時決定要不要有監聽器:停掉舊的,三平台任一 enabled 就開新的,否則回 null。
+// 抽出來給 main.js 三個呼叫點(啟動時/saveConfig/saveEnv)共用,原本各自複製這 8 行邏輯。
+function restartChatListener(prev, config, sm, broadcast) {
+  prev?.stop();
+  if (config.twitch?.enabled || config.youtube?.enabled || config.soop?.enabled) {
+    const next = createChatListener(config, sm, broadcast);
+    next.start();
+    return next;
+  }
+  return null;
+}
+
+module.exports = { createChatListener, restartChatListener };

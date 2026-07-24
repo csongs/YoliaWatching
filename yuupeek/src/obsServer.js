@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
-const { resolveActivePackIds } = require('./packFormat');
+const { resolveActivePackIds, compareVersions } = require('./packFormat');
 
 const MIME = {
   '.html': 'text/html',
@@ -31,16 +31,6 @@ function parseEnvFile(content) {
 
 function formatEnvFile(data) {
   return Object.entries(data).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
-}
-
-function isNewer(tag, current) {
-  const a = tag.replace(/^v/, '').split('.').map(Number);
-  const b = current.replace(/^v/, '').split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    if ((a[i] || 0) > (b[i] || 0)) return true;
-    if ((a[i] || 0) < (b[i] || 0)) return false;
-  }
-  return false;
 }
 
 function createObsServer(config, rootDir) {
@@ -130,7 +120,7 @@ function createObsServer(config, rootDir) {
         .then(data => {
           const tag = data.tag_name ?? '';
           const latest = tag.replace(/^v/, '');
-          const hasUpdate = !!latest && isNewer(tag, current);
+          const hasUpdate = !!latest && compareVersions(latest, current) > 0;
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ current, latest, hasUpdate, url: data.html_url ?? '' }));
         })

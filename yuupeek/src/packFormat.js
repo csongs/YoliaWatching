@@ -124,6 +124,15 @@
     return name === 'idle' || name.startsWith('run_') || name.startsWith('walk');
   }
 
+  // 匯入精靈的 ms 預設(規格 §7):來源 A(spritesheet)fps 8=125、來源 B(逐幀圖,引擎預設)150
+  const DEFAULT_MS_SPRITESHEET = 125;
+  const DEFAULT_MS_PER_FRAME_FILES = 150;
+
+  // 來源 B(逐幀圖)按檔名自然排序(數字視為數值比較,而非逐字元比較,如 "2.png" < "10.png")
+  function compareNatural(a, b) {
+    return String(a).localeCompare(String(b), undefined, { numeric: true });
+  }
+
   // 規格 §2 defaultInteractions:同 match 已存在則跳過並回報;id 由呼叫端 generateId 現生成
   function applyDefaultInteractions(packInteractions, existing, generateId) {
     const existingMatches = new Set();
@@ -177,6 +186,34 @@
   // 供 UI 層即時驗證狀態名(與 validatePack 用同一條 STATE_RE,避免規則分岔)
   function isValidStateName(name) {
     return typeof name === 'string' && STATE_RE.test(name);
+  }
+
+  // ── 幀編輯器的三個操作(動畫編輯器規格 §3;v1 不做拖拽排序)────────────────────
+  // 純函數:吃 srcs 陣列吐新陣列,不動原陣列。ok:false 且無 error=邊界外靜默略過
+  // (呼叫端不提示,如移動已在陣列頭/尾);ok:false 且有 error=違反上下限,呼叫端提示。
+
+  function moveFrame(srcs, index, dir) {
+    const j = index + dir;
+    if (j < 0 || j >= srcs.length) return { ok: false };
+    const next = srcs.slice();
+    [next[index], next[j]] = [next[j], next[index]];
+    return { ok: true, srcs: next, index: j };
+  }
+
+  function duplicateFrame(srcs, index) {
+    if (srcs.length >= MAX_FRAMES_PER_ANIM) {
+      return { ok: false, error: '已達單一動畫 ' + MAX_FRAMES_PER_ANIM + ' 幀上限' };
+    }
+    const next = srcs.slice();
+    next.splice(index + 1, 0, next[index]);   // data URL 字串共享,無額外成本
+    return { ok: true, srcs: next, index };
+  }
+
+  function deleteFrame(srcs, index) {
+    if (srcs.length <= 1) return { ok: false, error: '至少要留一幀' };
+    const next = srcs.slice();
+    next.splice(index, 1);
+    return { ok: true, srcs: next, index: Math.min(index, next.length - 1) };
   }
 
   // pack id 含「.」(作者.包名),RTDB 路徑/檔案 key 不能有「.」,一律轉底線存取
@@ -274,5 +311,7 @@
     buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions, KNOWN_STATES,
     packKeyOf, resolveActivePackIds, packIdsCompatFields, selectPack,
     guessIndexUrl, extractIndexUrlFromFirebaseConfig, normalizeIndex,
+    moveFrame, duplicateFrame, deleteFrame, MAX_FRAMES_PER_ANIM,
+    DEFAULT_MS_SPRITESHEET, DEFAULT_MS_PER_FRAME_FILES, compareNatural,
   };
 });

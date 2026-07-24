@@ -410,8 +410,13 @@
   // ── Tab switching ──────────────────────────────────────────────────────────
   const TAB_IDS = ['guide', 'status', 'pet', 'workshop', 'market', 'settings'];
   let hasAutoCheckedUpdate = false;
+  let currentTab = null;
+  // 分頁自己若持有計時器(工房幀預覽/市集試播),離開時要叫停,否則留在背景空轉
+  const TAB_UNLOAD = { workshop: () => window.Workshop?.unload?.(), market: () => window.Market?.unload?.() };
 
   function showTab(id) {
+    if (currentTab && currentTab !== id) TAB_UNLOAD[currentTab]?.();
+    currentTab = id;
     document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_IDS[i] === id));
     document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === id));
     if (!apiReady) return;
@@ -862,7 +867,7 @@
       api = {
         getConfig: () => db.ref('config').once('value').then(s => {
           const c = s.val() ?? {};
-          return { twitch: c.twitch ?? {}, youtube: c.youtube ?? {} };
+          return { twitch: c.twitch ?? {}, youtube: c.youtube ?? {}, soop: c.soop ?? {} };
         }),
         saveConfig: (body) => {
           const updates = {};

@@ -31,7 +31,7 @@ if (app.isPackaged) {
 require('dotenv').config({ path: path.join(userDataDir, '.env') });
 
 const { createStateMachine } = require('./src/stateMachine');
-const { createChatListener }  = require('./src/chatListener');
+const { restartChatListener } = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
 const { createPackStore }     = require('./src/packStore');
 const { buildAnimationsUpdate, resolveActivePackIds, packIdsCompatFields, packKeyOf } = require('./src/packFormat');
@@ -208,25 +208,13 @@ if (config.modes?.obs) {
       }
       fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
       // Hot-reload chat listener with updated config
-      chatListener?.stop();
-      if (config.twitch?.enabled || config.youtube?.enabled || config.soop?.enabled) {
-        chatListener = createChatListener(config, sm, broadcastState);
-        chatListener.start();
-      } else {
-        chatListener = null;
-      }
+      chatListener = restartChatListener(chatListener, config, sm, broadcastState);
     },
     saveEnv: ({ TWITCH_OAUTH, YOUTUBE_API_KEY, SOOP_API_KEY } = {}) => {
       if (TWITCH_OAUTH    !== undefined) process.env.TWITCH_OAUTH    = TWITCH_OAUTH;
       if (YOUTUBE_API_KEY !== undefined) process.env.YOUTUBE_API_KEY = YOUTUBE_API_KEY;
       if (SOOP_API_KEY    !== undefined) process.env.SOOP_API_KEY    = SOOP_API_KEY;
-      chatListener?.stop();
-      if (config.twitch?.enabled || config.youtube?.enabled || config.soop?.enabled) {
-        chatListener = createChatListener(config, sm, broadcastState);
-        chatListener.start();
-      } else {
-        chatListener = null;
-      }
+      chatListener = restartChatListener(chatListener, config, sm, broadcastState);
     },
     getPacks: () => packStore.getAll(),
     savePack: (pack) => {
@@ -326,11 +314,7 @@ if (config.modes?.obs) {
 }
 
 // ── Chat listener ─────────────────────────────────────────────────────────────
-let chatListener = null;
-if (config.twitch?.enabled || config.youtube?.enabled || config.soop?.enabled) {
-  chatListener = createChatListener(config, sm, broadcastState);
-  chatListener.start();
-}
+let chatListener = restartChatListener(null, config, sm, broadcastState);
 
 
 app.whenReady().then(() => {

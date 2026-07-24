@@ -16,7 +16,7 @@ jest.mock('tmi.js', () => {
 jest.mock('googleapis', () => ({ google: { youtube: jest.fn(() => ({})) } }));
 
 const tmi = require('tmi.js');
-const { createChatListener } = require('../chatListener');
+const { createChatListener, restartChatListener } = require('../chatListener');
 
 function makeListener(interactions = [], smInit = { yolia_see: 0, state: 'idle' }) {
   const config = {
@@ -125,4 +125,32 @@ test('YouTube 未開播:15 分鐘查一次,checkYouTubeLiveNow 立即再查', as
 
   listener.stop();
   delete process.env.YOUTUBE_API_KEY;
+});
+
+describe('restartChatListener(main.js 三個呼叫點共用的重啟決策)', () => {
+  const sm = { yolia_see: 0, state: 'idle' };
+  const broadcast = () => {};
+
+  test('三平台皆停用:回傳 null,不建立監聽器', () => {
+    const config = { twitch: { enabled: false }, youtube: { enabled: false }, soop: { enabled: false } };
+    expect(restartChatListener(null, config, sm, broadcast)).toBeNull();
+  });
+
+  test('任一平台啟用:回傳新的已啟動監聽器', () => {
+    const config = { twitch: { enabled: true, channel: 'tester' }, youtube: { enabled: false }, soop: { enabled: false } };
+    const listener = restartChatListener(null, config, sm, broadcast);
+    expect(listener).not.toBeNull();
+    expect(tmi.__instances.length).toBe(1);
+    listener.stop();
+  });
+
+  test('傳入舊監聽器:先停舊的,再視新設定決定要不要建新的', () => {
+    const enabledCfg  = { twitch: { enabled: true, channel: 'tester' }, youtube: { enabled: false }, soop: { enabled: false } };
+    const disabledCfg = { twitch: { enabled: false }, youtube: { enabled: false }, soop: { enabled: false } };
+    const first = restartChatListener(null, enabledCfg, sm, broadcast);
+    const firstTwitchClient = tmi.__instances[tmi.__instances.length - 1];
+    const second = restartChatListener(first, disabledCfg, sm, broadcast);
+    expect(firstTwitchClient.disconnected).toBe(true);   // 舊的被 stop()
+    expect(second).toBeNull();                           // 新設定三平台皆停用
+  });
 });

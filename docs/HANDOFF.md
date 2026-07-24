@@ -4,7 +4,82 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-25，架構審查後的四項收斂重構）
+## 目前狀態（2026-07-25 四，架構審查第四輪——panel.html 整體覆核）
+
+- 起因:同一次 session 第四輪。`panel.html`(995 行)是全 repo 歷史異動次數最高的檔案
+  (31 次),前三輪只動過其中特定機制(pack DataAdapter 方法、分頁切換 unload 掛鉤),
+  沒整份看過。這輪排除已審過的部分,專看 panel.html 自己的地盤:兩份 DataAdapter、
+  狀態分頁、桌寵設定分頁、系統設定分頁、initApp/showTab 外殼。
+- **修好一個真的 bug**:雲端版(web)DataAdapter 的 `getConfig()` 原本只回
+  `{twitch, youtube}`,漏了 `soop`——但同一個 adapter 的 `saveConfig()` 有正確寫入
+  `soop/enabled`/`soop/channel`/`soop/apiMode`(panel.html:878-880),桌面版
+  `main.js:getConfig`(135-139)也回三個平台。讀寫不對稱的結果:雲端版使用者存好
+  SOOP 設定、重新整理設定分頁後,畫面顯示 SOOP 未啟用/頻道空白(其實 RTDB 裡資料是對的),
+  這時候若使用者再碰任一 SOOP 欄位存檔,會用空白值覆蓋掉 DB 裡本來正確的資料。
+  修法:`getConfig` 補一行 `soop: c.soop ?? {}`(panel.html:870)。
+  `loadConfig()` 讀取端(542-551)本來就正確處理 `data.soop?.*`,只是從沒收到過資料。
+- **誠實結論:這輪沒有第二個候選**。除了上面這個 bug,狀態分頁的輪詢、桌寵設定分頁的
+  debounce/id 產生、initApp/showTab 外殼都套過 deletion test,現有形狀已經是問題允許
+  的最簡形狀,沒有勉強湊候選。
+- 驗證:panel.html 內嵌 script 過語法解析;`cd yuupeek && npm test` 10 suites /
+  144 tests 全綠(此修正沒動任何 yuupeek/src/ 下的邏輯,測試數不變)。
+  **UI 手動驗證仍待維護者**:雲端版存 SOOP 設定→重新整理設定分頁→欄位應該還在。
+
+## 前次狀態（2026-07-25 三，架構審查第三輪——main.js 剩餘 panelHandlers）
+
+- 起因:同一次 session 第三輪,依全歷史檔案異動次數排序(`git log --pretty=format: --name-only
+  | sort | uniq -c | sort -rn`),下一個沒動過的熱點是 main.js(29 次)與 obsServer.js(17 次)。
+  直接回頭覆核前次狀態留的待辦(configStore/broadcastPolicy/listenerLifecycle 三塊)。
+- **listenerLifecycle ✅ 做了**:`yuupeek/src/chatListener.js` 新增
+  `restartChatListener(prev, config, sm, broadcast)`,收斂 main.js 三處(`saveConfig`/
+  `saveEnv`/啟動時)逐字或近逐字複製的「stop 舊的→三平台任一 enabled 就 create+start,
+  否則設 null」邏輯。函數放在已經有 `chatListener.test.js` 測試安全網、無 electron 依賴
+  的檔案裡,main.js 本身仍然不能跑測試也沒關係。
+- **isNewer/compareVersions ✅ 順手做了**(第一輪就標記過的舊債):`obsServer.js` 的
+  app 版本比較改呼叫 `packFormat.compareVersions`,刪掉自己重新發明的 `isNewer`。
+  `compareVersions` 本身沒改(維持只吃無前綴 semver 字串的既有契約),'v' 前綴的剝除
+  留在 obsServer.js 做(那是 GitHub tag 格式的特性,不是通用版本比較規則)。
+- **configStore ❌ 覆核後判定不值得做——結論已定案,之後的審查不用再提**:
+  `saveConfig`/`savePetConfig` 的 patch 邏輯確實有重複的讀檔→局部覆寫→寫回骨架,
+  但每個分支都同時要碰 `sm`(狀態機)、`chatListener`(熱重載)、`obsServer`(broadcast)
+  三個共享可變狀態——抽成獨立模組要嘛把這三個依賴一起注入(deletion test 沒過:
+  複雜度只是從 main.js 的頂層閉包搬到另一個 factory 的閉包,沒有真的變少),要嘛切一半
+  留一半(製造新 seam 卻沒有真的變深)。**broadcastPolicy ❌ 同樣不值得**:round 1/2
+  已經把真正的邏輯(`buildAnimationsUpdate`、pack 合併)搬進 packFormat.js,main.js
+  剩下的只是呼叫 `obsServer.broadcast(...)` 的膠水,deletion test 直接失敗——已經沒有
+  複雜度可集中。若真要動,值得做的是更小的 `patchJsonFile(path, patcher)` 工具函數
+  (收斂讀-改-寫骨架本身),不是 configStore 那種模組級改動,且目前沒有急迫性。
+- 驗證:`cd yuupeek && npm test` 10 suites / 144 tests 全綠(chatListener.test.js
+  補了 restartChatListener 三個案例)。main.js/chatListener.js/obsServer.js 都過
+  `node --check`。main.js 仍因 require('electron') 無法在此沙盒環境跑起來驗證,
+  建議維護者本機 `npm start` 驗一次設定變更/停用重連/YouTube「我開播了」按鈕。
+
+## 前次狀態（2026-07-25 二，架構審查第二輪——角色工房幀編輯器/匯入精靈）
+
+- 起因:同一次 `/mattpocock-skills:improve-codebase-architecture` session,第二輪聚焦
+  `workshop.js`(579 行,超過自己的設計稿 docs/designs/animation-editor.md §6 訂的
+  ~300 行分拆門檻)裡上一輪沒動過的部分:幀編輯器與匯入精靈。3 個候選全做,第 4 個
+  (讓 .yolia.json 也能只匯入單一動畫貼進目前開著的包)判斷是新功能而非架構收斂,
+  沒做,留給維護者決定要不要排。
+- **真的 bug 修好了**:`Workshop`/`Market` 新增 `unload()`(呼叫既有的
+  `stopPreview`/`stopPreviewTimer`),`panel.html` 的 `showTab()` 現在會在切走
+  工房/市集分頁時呼叫。原本打開幀編輯器或市集試播後切到別的分頁,計時器會無限期留在
+  背景對隱藏 canvas 解碼/畫圈,直到手動切回去關掉——跟 commit 歷史上修過一次的
+  「幀編輯器預覽計時器生命週期」同一類問題,這次抓到的是 tab 切換這個新邊界。
+- `packFormat.js` 新增 `moveFrame`/`duplicateFrame`/`deleteFrame`(純函數,吃 srcs
+  陣列吐新陣列)與匯出 `MAX_FRAMES_PER_ANIM`:workshop.js 的幀移動/複製/刪除與 32 幀
+  上限原本整組活在 DOM 事件處理器裡,32 這個數字還手抄了兩份(一份跟 packFormat.js
+  內部常數重複、一份在 addAnim 的匯入上限檢查)。
+- `packFormat.js` 新增 `DEFAULT_MS_SPRITESHEET`(125)/`DEFAULT_MS_PER_FRAME_FILES`
+  (150)/`compareNatural`:匯入精靈原本把這兩條規格 §7 命名規則(來源 A/B 的 ms 預設、
+  逐幀圖按檔名自然排序)寫成散落的字面值與一行沒名字的 `localeCompare`,現在跟
+  `defaultLoop` 待遇一致,都是有名字的純函數。
+- 驗證:`cd yuupeek && npm test` 10 suites / 141 tests 全綠(packFormat.test.js
+  補了 moveFrame/duplicateFrame/deleteFrame/compareNatural/ms 常數的測試)。
+  workshop.js/market.js/panel.html 內嵌 script 都過 `node --check`/語法解析。
+  **UI 手動驗證仍待維護者**:幀編輯器移動/複製/刪除、切分頁後計時器確實停了。
+
+## 前次狀態（2026-07-25，架構審查後的四項收斂重構）
 
 - 起因:`/mattpocock-skills:improve-codebase-architecture` 掃過角色包/市集熱點與
   聊天監聽子系統,列出 4 個「重複邏輯收斂成單一 interface」的候選,維護者核准全做。
@@ -32,8 +107,9 @@
   listenerLifecycle 四塊;實際只做了 packStore 這塊——main.js 需要 `require('electron')`
   才能跑,這個 repo 目前沒有任何 main.js 的自動化測試,沒有安全網驗證更大範圍的拆分。
   packStore 這塊本身不依賴 electron(只用 fs),已補 `packStore.test.js`。
-  **剩下三塊(configStore/broadcastPolicy/listenerLifecycle)還沒拆**,建議之後真的要拆時
-  先跑 `/grilling` 談好新 interface 邊界,再動手(理由同上:main.js 無測試安全網)。
+  剩下三塊(configStore/broadcastPolicy/listenerLifecycle)還沒拆。
+  【2026-07-25 三後續】已覆核:listenerLifecycle 做了(見上方最新狀態);
+  configStore/broadcastPolicy 判定 deletion test 沒過,結論定案不再是待辦。
 - 驗證:`cd yuupeek && npm test` 10 suites / 131 tests 全綠(含新增的
   `youtubePollPolicy.test.js`、`packStore.test.js`,以及 `packFormat.test.js` 補的
   pack-selection/index-format 測試)。`main.js` 只能 `node --check` 語法檢查

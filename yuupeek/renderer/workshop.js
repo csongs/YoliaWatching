@@ -336,7 +336,7 @@
             <input id="wk-anim-name" list="wk-known-states" value="hurt" style="width:120px">
             <datalist id="wk-known-states">${knownOpts}</datalist></label>
           <label style="color:#94a3b8;font-size:12px">每幀 ms
-            <input id="wk-anim-ms" type="text" inputmode="numeric" value="125" style="width:60px"></label>
+            <input id="wk-anim-ms" type="text" inputmode="numeric" value="${PackFormat.DEFAULT_MS_SPRITESHEET}" style="width:60px"></label>
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:4px">
             <input id="wk-anim-loop" type="checkbox"> 循環</label>
           <button class="btn btn-small" onclick="Workshop._addAnim()">加入動畫</button>
@@ -353,12 +353,12 @@
     const files = await pickFiles('image/png', true);
     if (!files.length) return;
     if (files.some(f => f.type !== 'image/png')) { showToast('逐幀圖限 PNG', true); return; }
-    files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    files.sort((a, b) => PackFormat.compareNatural(a.name, b.name));
     const frames = [];
     for (const f of files) frames.push(await readAsDataURL(f));
     wizard = { frames };
-    renderWizard('—');                                 // 無 sheet,幀寬欄不適用
-    document.getElementById('wk-anim-ms').value = '150'; // 來源 B 預設 ms=150(規格 §7)
+    renderWizard('—');   // 無 sheet,幀寬欄不適用
+    document.getElementById('wk-anim-ms').value = String(PackFormat.DEFAULT_MS_PER_FRAME_FILES);
   }
 
   function addAnim() {
@@ -367,9 +367,12 @@
     const loop = document.getElementById('wk-anim-loop').checked;
     if (!PackFormat.isValidStateName(name)) { showToast('狀態名限小寫英文開頭+小寫英數底線', true); return; }
     if (!wizard?.frames?.length) { showToast('沒有可加入的幀', true); return; }
-    if (wizard.frames.length > 32) { showToast('單一動畫上限 32 幀,目前 ' + wizard.frames.length + ' 幀', true); return; }
+    if (wizard.frames.length > PackFormat.MAX_FRAMES_PER_ANIM) {
+      showToast('單一動畫上限 ' + PackFormat.MAX_FRAMES_PER_ANIM + ' 幀,目前 ' + wizard.frames.length + ' 幀', true);
+      return;
+    }
     if (working.animations[name] && !confirm(`動畫「${name}」已存在,要覆蓋嗎?`)) return;
-    working.animations[name] = { srcs: wizard.frames, ms: Number.isFinite(ms) ? ms : 125, loop };
+    working.animations[name] = { srcs: wizard.frames, ms: Number.isFinite(ms) ? ms : PackFormat.DEFAULT_MS_SPRITESHEET, loop };
     wizard = null;
     dirty = true;
     renderEditor();
@@ -461,35 +464,21 @@
     dirty = true;
     renderEditor();
   }
+  // 幀陣列的邊界/上下限規則收在 PackFormat.moveFrame/duplicateFrame/deleteFrame,
+  // 這裡只負責「選取哪個 index」與「套用結果到 working」的 DOM 職責
   function withSel(fn) {
     const a = working.animations[editingAnim];
     if (selectedFrame < 0 || selectedFrame >= a.srcs.length) { showToast('先點選一個幀', true); return; }
-    const changed = fn(a.srcs);
-    if (changed === false) return;
+    const r = fn(a.srcs, selectedFrame);
+    if (!r.ok) { if (r.error) showToast(r.error, true); return; }
+    a.srcs = r.srcs;
+    selectedFrame = r.index;
     dirty = true;
     renderEditor();
   }
-  function moveFrame(dir) {
-    withSel((srcs) => {
-      const j = selectedFrame + dir;
-      if (j < 0 || j >= srcs.length) return false;
-      [srcs[selectedFrame], srcs[j]] = [srcs[j], srcs[selectedFrame]];
-      selectedFrame = j;
-    });
-  }
-  function dupFrame() {
-    withSel((srcs) => {
-      if (srcs.length >= 32) { showToast('已達單一動畫 32 幀上限', true); return false; }
-      srcs.splice(selectedFrame + 1, 0, srcs[selectedFrame]); // data URL 字串共享,無額外成本
-    });
-  }
-  function delFrame() {
-    withSel((srcs) => {
-      if (srcs.length <= 1) { showToast('至少要留一幀', true); return false; }
-      srcs.splice(selectedFrame, 1);
-      selectedFrame = Math.min(selectedFrame, srcs.length - 1);
-    });
-  }
+  function moveFrame(dir) { withSel((srcs, i) => PackFormat.moveFrame(srcs, i, dir)); }
+  function dupFrame() { withSel((srcs, i) => PackFormat.duplicateFrame(srcs, i)); }
+  function delFrame() { withSel((srcs, i) => PackFormat.deleteFrame(srcs, i)); }
   function closeEditor() { editingAnim = null; renderEditor(); }
 
   // ── ④ 建議綁定套用(寫 config.interactions;不重造第二套互動編輯器)────────
@@ -565,8 +554,12 @@
     }
   }
 
+  // 分頁切走時呼叫(panel.html showTab 對稱掛鉤):停掉幀編輯器的預覽計時器,
+  // 避免切到別的分頁後,計時器繼續對著隱藏的 canvas 解碼/畫圖(見 HANDOFF)
+  function unload() { stopPreview(); }
+
   window.Workshop = {
-    load,
+    load, unload,
     _toggle: toggle, _create: create, _edit: edit, _remove: remove,
     _importJson: importJson, _importSheet: importSheet, _importFrames: importFrames,
     _reslice: reslice, _addAnim: addAnim, _removeAnim: removeAnim,

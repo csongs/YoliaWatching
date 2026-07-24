@@ -235,5 +235,9 @@
     }
   }
 
-  window.Market = { load, _resolveIndex: resolveIndex, _normalizeIndex: normalizeIndex }; // 底線=測試掛鉤
+  // 分頁切走時呼叫(panel.html showTab 對稱掛鉤):停掉試播計時器,避免切到別的
+  // 分頁後,計時器繼續對著隱藏的 canvas 解碼/畫圖(同 workshop.js 的 unload)
+  function unload() { stopPreviewTimer(); }
+
+  window.Market = { load, unload, _resolveIndex: resolveIndex, _normalizeIndex: normalizeIndex }; // 底線=測試掛鉤
 })();

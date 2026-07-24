@@ -1,4 +1,4 @@
-const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions, packKeyOf, resolveActivePackIds, packIdsCompatFields, selectPack, guessIndexUrl, extractIndexUrlFromFirebaseConfig, normalizeIndex } = require('../packFormat');
+const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions, packKeyOf, resolveActivePackIds, packIdsCompatFields, selectPack, guessIndexUrl, extractIndexUrlFromFirebaseConfig, normalizeIndex, moveFrame, duplicateFrame, deleteFrame, MAX_FRAMES_PER_ANIM, DEFAULT_MS_SPRITESHEET, DEFAULT_MS_PER_FRAME_FILES, compareNatural } = require('../packFormat');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -422,6 +422,54 @@ describe('normalizeIndex(市集 index 格式相容,ADR-005)', () => {
   });
   test('不是陣列也不是物件:空陣列', () => {
     expect(normalizeIndex(null, 'https://x/index.json')).toEqual([]);
+  });
+});
+
+describe('moveFrame(幀編輯器)', () => {
+  test('往右移:交換位置,index 跟著移動的幀走', () => {
+    expect(moveFrame(['a', 'b', 'c'], 0, 1)).toEqual({ ok: true, srcs: ['b', 'a', 'c'], index: 1 });
+  });
+  test('往左移', () => {
+    expect(moveFrame(['a', 'b', 'c'], 2, -1)).toEqual({ ok: true, srcs: ['a', 'c', 'b'], index: 1 });
+  });
+  test('已在陣列頭/尾:邊界外靜默略過(ok:false,無 error)', () => {
+    expect(moveFrame(['a', 'b'], 0, -1)).toEqual({ ok: false });
+    expect(moveFrame(['a', 'b'], 1, 1)).toEqual({ ok: false });
+  });
+  test('不動原陣列', () => {
+    const srcs = ['a', 'b'];
+    moveFrame(srcs, 0, 1);
+    expect(srcs).toEqual(['a', 'b']);
+  });
+});
+
+describe('duplicateFrame(幀編輯器)', () => {
+  test('複製選取的幀,插在其後', () => {
+    expect(duplicateFrame(['a', 'b'], 0)).toEqual({ ok: true, srcs: ['a', 'a', 'b'], index: 0 });
+  });
+  test('達到 MAX_FRAMES_PER_ANIM 上限:拒絕並回錯誤訊息', () => {
+    const srcs = Array(MAX_FRAMES_PER_ANIM).fill('x');
+    expect(duplicateFrame(srcs, 0)).toEqual({ ok: false, error: '已達單一動畫 ' + MAX_FRAMES_PER_ANIM + ' 幀上限' });
+  });
+});
+
+describe('deleteFrame(幀編輯器)', () => {
+  test('刪除選取的幀,index 夾到新陣列範圍內', () => {
+    expect(deleteFrame(['a', 'b', 'c'], 2)).toEqual({ ok: true, srcs: ['a', 'b'], index: 1 });
+  });
+  test('只剩一幀時拒絕刪除', () => {
+    expect(deleteFrame(['a'], 0)).toEqual({ ok: false, error: '至少要留一幀' });
+  });
+});
+
+describe('匯入精靈 ms 預設與自然排序', () => {
+  test('DEFAULT_MS_SPRITESHEET/DEFAULT_MS_PER_FRAME_FILES 符合規格 §7', () => {
+    expect(DEFAULT_MS_SPRITESHEET).toBe(125);
+    expect(DEFAULT_MS_PER_FRAME_FILES).toBe(150);
+  });
+  test('compareNatural:數字視為數值比較,不是逐字元比較', () => {
+    const names = ['frame10.png', 'frame2.png', 'frame1.png'];
+    expect([...names].sort(compareNatural)).toEqual(['frame1.png', 'frame2.png', 'frame10.png']);
   });
 });
 
