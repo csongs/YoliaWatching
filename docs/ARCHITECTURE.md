@@ -1,7 +1,10 @@
 # ARCHITECTURE — 系統全貌（事實檔）
 
 > 本檔只記「已查證的事實」，每條附出處。架構「建議」一律放 docs/decisions/ 的 ADR，不放這裡。
-> 查證日期：2026-07-07。標「⚠ 未親自複核」者為 agent 掃描結果，使用前建議抽查。
+> 首次查證：2026-07-07；2026-07-25 一次架構審查 session（7 輪）後全文複查一次，行號逐一
+> 重新核對（原行號因期間多次改動而漂移，已更新為當時實測值）。標「⚠ 未親自複核」者為
+> agent 掃描結果，使用前建議抽查。**行號一律標「約」——每次改動都可能讓行號漂移幾行，
+> 抓不到時用附近的函數名/註解關鍵字搜尋，不要照抄行號硬找。**
 > 讀者指引：要改聊天邏輯→讀 §4、§7；要動動畫/素材→讀 §5、§8；要動 RTDB→讀 §6、§9；動部署→讀 §3。
 
 ## 1. 一句話
@@ -29,7 +32,7 @@
   chatListener.js 與 index.html 各自手刻的重複邏輯收斂而來)
 - `yuupeek/src/defaultAnimations.js` — 預設動畫表(2026-07-25 收斂;main.js/index.html 直接引用,
   character.js 的內建 fallback 也從這裡衍生,不再各自手抄)
-- `yuupeek/renderer/panel.html` — 控制面板（內建 DataAdapter：web 模式走 Firebase，桌面模式走 localhost API；見 panel.html 的 `initApp()`，約 L816–916）
+- `yuupeek/renderer/panel.html` — 控制面板（內建 DataAdapter：web 模式走 Firebase，桌面模式走 localhost API；見 panel.html 的 `initApp()`，約 L856–992）
 
 桌面版專屬(electron 無關,可獨立單元測試)：
 - `yuupeek/src/packStore.js` — packs.json 讀寫+啟用中包合併(2026-07-25 從 main.js 拆出;
@@ -65,13 +68,16 @@ YouTube Data API v3 (輪詢)                                            ┐
 SOOP WebSocket (社群協定；live API 有 CORS，瀏覽器不可用 → 實質僅桌面版) ┘
         │ 三個監聽器都跑在 overlay 頁面內（web/public/index.html）
         ▼
-onMessage(text, username)                        index.html 約 L74
+onMessage(text, username)                        index.html 約 L67
         ▼
 ChatProcessor.processMessage(...)  → { yolia_see, state, animOnly, speech, costDenied, resetState }
         ▼
+ChatProcessor.planMessageEffects(r, yolia_see)   → { immediate, delayed }（2026-07-25 收斂,
+                                                     桌面 chatListener.js 共用同一份決策）
+        ▼
 char.applyUpdate(...)              → canvas 動畫 + HUD + 對話泡泡
 
-RTDB /config ──(on('value') 整節點訂閱, index.html 約 L351)──▶ overlay 熱更新
+RTDB /config ──(on('value') 整節點訂閱, index.html 約 L387)──▶ overlay 熱更新
      ▲
      └──(update()) panel.html（登入後）
 ```
@@ -132,22 +138,22 @@ RTDB /config ──(on('value') 整節點訂閱, index.html 約 L351)──▶ o
 $other    一律拒絕（.read/.write: false）←新增頂層節點必須改 rules
 ```
 
-出處：[web/database.rules.json](../web/database.rules.json)、panel.html DataAdapter（約 L826–874）、
-index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../yuupeek/default.config.json)。
+出處：[web/database.rules.json](../web/database.rules.json)、panel.html DataAdapter（約 L868–958）、
+index.html 訂閱處理（約 L387–437）、[yuupeek/default.config.json](../yuupeek/default.config.json)。
 
 ## 7. 聊天平台接入細節（雲端版，全部在 index.html）
 
 | 平台 | 機制 | 位置 | 已知限制 |
 |---|---|---|---|
-| Twitch | 原生 WebSocket IRC，無 token 時匿名 `justinfan*`（唯讀即可收訊息） | 約 L113–154 | 斷線 5 秒重連；無 quota 問題 |
-| YouTube | Data API v3：`channels?forHandle` → `search?eventType=live` → `videos` → `liveChat/messages` 依 `pollingIntervalMillis` 輪詢 | 約 L156–245 | quota 規則（developers.google.com/youtube/v3/determine_quota_cost，2026-07-12 查）：**search.list 獨立上限每天 100 次**，其他端點共用 10,000 units/天（channels/videos 各 1 unit；liveChat/messages 單價官方未列【未查證】）。未開播時每 15 分鐘查一次（桌面版 2026-07-12 起同步，原 30 秒會在 50 分鐘內用光 search 額度）；panel「YouTube 設定」的**「我開播了」鈕**可立即觸發偵測（雲端走 `/events/checkLive` nonce、桌面走 `POST /panel/api/youtube/check`）。**收到 403/quota 即永久停止輪詢**（約 L235）——重啟條件很窄：重整頁面，或變更 youtube 的 enabled/channel/apiKey 三者之一（其他 config 欄位變更不會重啟，以這三欄組 key 判斷） |
-| SOOP | 先 POST `player_live_api.php` 拿 CHDOMAIN/CHPT，再連 WebSocket 自訂封包協定 | 約 L236–338 | **live API 被 CORS 擋，瀏覽器內不可用**（程式碼自己印出「僅支援 Electron 版」，約 L323–325）；桌面版走 `soop-extension` npm 套件 |
+| Twitch | 原生 WebSocket IRC，無 token 時匿名 `justinfan*`（唯讀即可收訊息） | 約 L101–144 | 斷線 5 秒重連；無 quota 問題 |
+| YouTube | Data API v3：`channels?forHandle` → `search?eventType=live` → `videos` → `liveChat/messages` 依 `pollingIntervalMillis` 輪詢；找直播節奏/quota 判斷收在共用的 `youtubePollPolicy.js`（2026-07-25 收斂，桌面 chatListener.js 同一份） | 約 L145–242 | quota 規則（developers.google.com/youtube/v3/determine_quota_cost，2026-07-12 查）：**search.list 獨立上限每天 100 次**，其他端點共用 10,000 units/天（channels/videos 各 1 unit；liveChat/messages 單價官方未列【未查證】）。未開播時每 15 分鐘查一次（桌面版 2026-07-12 起同步，原 30 秒會在 50 分鐘內用光 search 額度）；panel「YouTube 設定」的**「我開播了」鈕**可立即觸發偵測（雲端走 `/events/checkLive` nonce、桌面走 `POST /panel/api/youtube/check`）。**收到 403/quota 即永久停止輪詢**（約 L222，`quotaStopped` 旗標）——重啟條件很窄：重整頁面，或變更 youtube 的 enabled/channel/apiKey 三者之一（其他 config 欄位變更不會重啟，以這三欄組 key 判斷） |
+| SOOP | 先 POST `player_live_api.php` 拿 CHDOMAIN/CHPT，再連 WebSocket 自訂封包協定 | 約 L243–346 | **live API 被 CORS 擋，瀏覽器內不可用**（程式碼自己印出「僅支援 Electron 版」，約 L330–331）；桌面版走 `soop-extension` npm 套件 |
 
 ## 8. 素材管線
 
 - 源頭：`yuupeek/assets/sprites/frames/<動作資料夾>/<NN>.png`；⚠ 未親自複核：81 個 PNG、共約 3.5 MB。
 - 部署：sync.js 把整個 `yuupeek/assets/` 複製到 `web/public/assets/`；
-  overlay 的 assetBase = `./assets/sprites/frames`（index.html 約 L103）。
+  overlay 的 assetBase = `./assets/sprites/frames`（index.html 約 L91）。
 - 資料夾與狀態對照（動畫名 ≠ 資料夾名，如 peek→`review/`、eat→`cilantro/`）：見 `defaultAnimations.js`。
 - `running/`、`waiting/` 資料夾未被任何動畫引用（⚠ 未親自複核）。
 - `tools/frame-preview.html` 是幀預覽工具。**在版控內**（Initial commit 即追蹤）；.gitignore L21–22
@@ -161,7 +167,7 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 - 因此 `youtubeApiKey`、`twitchOauth`、`soopApiKey` 是**公開可讀**的。
   這是架構必然：overlay（OBS Browser Source）沒有登入能力，卻要自己輪詢 YouTube。
 - panel 的 `ALLOWED_EMAILS` 檢查是 client-side UX（擋畫面），真正的權限在 rules 層。
-- 登入方式：Email/Password + Google OAuth（panel.html 約 L356–373）。
+- 登入方式：Email/Password + Google OAuth（panel.html 約 L377–395）。
 - 桌面版 obsServer（本機控制面板 API，含 config/pack 讀寫）**無任何驗證機制**——這是設計上
   可接受的（單使用者本機工具），但前提是只有本機能連得到。2026-07-25 查證修正：
   `httpServer.listen()` 原本沒指定 host，Node 預設綁所有網卡，同一 WiFi/區網的其他裝置
@@ -194,9 +200,9 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 | `yuupeek/src/detector.js` | **production 未接線**：只有 `detector.test.js` 引用，main.js 沒有 require。功能（視窗標題偵測）在桌面版藍圖內但未啟用。留著，檔頭已加註記（2026-07-10） | 親自複核 |
 | `DEFAULT_ANIMATIONS` 鏡像 | **已解決**（2026-07-25）：單一源頭收斂到 `yuupeek/src/defaultAnimations.js`（isomorphic，經 sync.js 同步），`main.js`/`index.html` 直接引用；`character.js` 內建 fallback 表改用 `frames()` 從呼叫端傳入的 `defaultAnimations` 選項衍生，不再手抄第三份 | 親自複核 |
 | `web/DEPLOY.md` | 已改為一頁式指向 README（2026-07-10；單一事實源，不再重複部署步驟） | 親自複核 |
-| SOOP 官方 API 模式 | `apiMode:"official"` 尚未實作（index.html 約 L249–251 直接 return） | 親自複核 |
+| SOOP 官方 API 模式 | `apiMode:"official"` 尚未實作（index.html 約 L256–257 直接 return；chatListener.js 同樣尚未實作） | 親自複核 |
 | greetingAnimations | 有 runtime 支援、無 panel 編輯 UI（雲端：直接改 RTDB；桌面：改 `%APPDATA%\YoliaWatching\config.json`——**不要**改安裝目錄的 default.config.json，那是隨程式更新的預設檔） | 親自複核＋審查修正 |
-| web 版 panel 無 saveAnimations | panel 的 web DataAdapter 只有 `getAnimations`（唯讀，供下拉選單；L851）。桌面版的寫入不在 panel adapter（L899 也是 GET），而在 `obsServer.js` L205 起（POST /panel/api/animations）＋ `main.js` 的 saveAnimations（約 L209–228）。**雲端版目前無法在 UI 編輯動畫** | 親自複核＋審查修正 |
+| panel 兩邊都無法編輯動畫 | panel 的 web/桌面 DataAdapter 都只有 `getAnimations`（唯讀，供下拉選單；web 約 L894、桌面約 L965，桌面那個也是 GET）。寫入路徑存在但 panel UI 兩邊都沒接：`obsServer.js` 約 L195 起（POST /panel/api/animations）＋ `main.js` 的 `saveAnimations`（約 L241–259）。**雲端版與桌面版目前都無法在 panel UI 編輯動畫**（原文只提雲端版，2026-07-25 複查發現桌面版同樣沒接，一併修正） | 親自複核＋審查修正 |
 | chatListener.test.js 紅字 | **已修復**（2026-07-10 重寫對齊 createChatListener API；基線恢復全綠，見 §10） | 2026-07-10 實測 |
 
 ## 12. 給修改者的快速對照
