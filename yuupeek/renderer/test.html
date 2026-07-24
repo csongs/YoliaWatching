@@ -147,6 +147,7 @@
 <div id="character"><canvas id="char-canvas"></canvas></div>
 
 <script src="/renderer/character.js"></script>
+<script src="/src/defaultAnimations.js"></script>
 <script>
   // ── Character ──────────────────────────────────────────────────────────────
   const canvas   = document.getElementById('char-canvas');
@@ -160,6 +161,7 @@
   const char = createCharacter({
     canvas, ctx, charEl, valEl, barFill, speechEl,
     assetBase: '/assets/sprites/frames',
+    defaultAnimations: DefaultAnimations.DEFAULT_ANIMATIONS,
     onUpdateHud({ posRight, posBottom, jumpOffset, canvasW, canvasH }) {
       const hudW = hudEl.offsetWidth || 100;
       hudEl.style.right  = (posRight + canvasW / 2 - hudW / 2) + 'px';

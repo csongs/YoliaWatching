@@ -35,19 +35,7 @@ const { restartChatListener } = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
 const { createPackStore }     = require('./src/packStore');
 const { buildAnimationsUpdate, resolveActivePackIds, packIdsCompatFields, packKeyOf } = require('./src/packFormat');
-
-const DEFAULT_ANIMATIONS = {
-  idle:      { folder: 'idle',          frames: [0,2,4,5,4,2,0,0,1,0], ms: 150,  loop: false },
-  peek:      { folder: 'review',        frames: [2,2,2,2,4,2,2,2,3,3,3], ms: 250, loop: false },
-  cheer:     { folder: 'cheer',         frames: [0,2,3,5,0,5], ms: 150,  loop: false },
-  cry:       { folder: 'cry',           frames: [0,7,7,7,0,1,1,1,0,0], ms: 150,  loop: false },
-  eat:       { folder: 'cilantro',      frames: [0,1,2,3,4,5,6,7,7], ms: 250,  loop: false },
-  jump:      { folder: 'jumping',       frames: [0,1,2,3], ms: 250,  loop: false },
-  run_left:  { folder: 'running-left',  frames: [0,3,4,5,7], ms: 150,  loop: true },
-  run_right: { folder: 'running-right', frames: [0,3,4,5,7], ms: 150,  loop: true },
-  wave:           { folder: 'waving',        frames: [0,1,2,3,2,1,0], ms: 200,  loop: false },
-  watch_excited:  { folder: 'watch-excited', frames: [0,0,0,1,2,1,2,1,2,3,3,3,3], ms: 300,  loop: false },
-};
+const { DEFAULT_ANIMATIONS }  = require('./src/defaultAnimations');
 
 const defaultConfig = JSON.parse(fs.readFileSync(path.join(appDir, 'default.config.json'), 'utf8'));
 const userConfig    = (() => {

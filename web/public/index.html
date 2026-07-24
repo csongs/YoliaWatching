@@ -50,24 +50,14 @@
   <script src="./chatProcessor.js"></script>
   <script src="./packFormat.js"></script>
   <script src="./youtubePollPolicy.js"></script>
+  <script src="./defaultAnimations.js"></script>
   <script src="./firebase-config.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
   <script>
-    // ── Default animations (mirrors main.js DEFAULT_ANIMATIONS) ──────────────
-    const DEFAULT_ANIMATIONS = {
-      idle:          { folder: 'idle',           frames: [0,2,4,5,4,2,0,0,1,0],          ms: 150, loop: false },
-      peek:          { folder: 'review',         frames: [2,2,2,2,4,2,2,2,3,3,3],        ms: 250, loop: false },
-      cheer:         { folder: 'cheer',          frames: [0,2,3,5,0,5],                  ms: 150, loop: false },
-      cry:           { folder: 'cry',            frames: [0,7,7,7,0,1,1,1,0,0],          ms: 150, loop: false },
-      eat:           { folder: 'cilantro',       frames: [0,1,2,3,4,5,6,7,7],            ms: 250, loop: false },
-      jump:          { folder: 'jumping',        frames: [0,1,2,3],                       ms: 250, loop: false },
-      run_left:      { folder: 'running-left',   frames: [0,3,4,5,7],                    ms: 150, loop: true  },
-      run_right:     { folder: 'running-right',  frames: [0,3,4,5,7],                    ms: 150, loop: true  },
-      wave:          { folder: 'waving',         frames: [0,1,2,3,2,1,0],                ms: 200, loop: false },
-      watch_excited: { folder: 'watch-excited',  frames: [0,0,0,1,2,1,2,1,2,3,3,3,3],   ms: 300, loop: false },
-    };
+    // 預設動畫表:單一源頭在 defaultAnimations.js(main.js 共用),不在此重複手抄
+    const DEFAULT_ANIMATIONS = DefaultAnimations.DEFAULT_ANIMATIONS;
 
     // ── State ─────────────────────────────────────────────────────────────────
     const sm = { yolia_see: 0 };
@@ -99,6 +89,7 @@
     const char = createCharacter({
       canvas, ctx, charEl, valEl, barFill, speechEl,
       assetBase: './assets/sprites/frames',
+      defaultAnimations: DEFAULT_ANIMATIONS,
       onUpdateHud({ posRight, posBottom, jumpOffset, canvasW, canvasH }) {
         const hudW = hudEl.offsetWidth || 100;
         hudEl.style.right  = (posRight + canvasW / 2 - hudW / 2) + 'px';

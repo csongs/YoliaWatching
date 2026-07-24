@@ -25,6 +25,7 @@ web/public/packFormat.js
 web/public/workshop.js
 web/public/market.js
 web/public/youtubePollPolicy.js
+web/public/defaultAnimations.js
 
 # AI session 工作檔（進度 ledger、任務簡報）
 .superpowers/

@@ -17,6 +17,7 @@ function createCharacter({
   canvas, ctx, charEl, valEl, barFill,
   speechEl = null,
   assetBase,
+  defaultAnimations = {},
   onUpdateHud,
   getIsDragging = () => false,
   waveVariants = null,
@@ -26,17 +27,13 @@ function createCharacter({
     return indices.map(i => `${assetBase}/${state}/${String(i).padStart(2, '0')}.png`);
   }
 
-  const ANIMATIONS = {
-    idle:      { srcs: frames('idle',          [0, 2, 4, 5, 4, 2, 0, 0, 1, 0]), loop: false },
-    peek:      { srcs: frames('review',        [2,2,2,2, 4,2,2,2, 3, 3, 3]), loop: false, ms: 250 },
-    cheer:     { srcs: frames('cheer',         [0,2,3,5,0,5]), loop: false },
-    cry:       { srcs: frames('cry',           [0,7,7,7,0,1,1,1,0,0]), loop: false },
-    eat:       { srcs: frames('cilantro',      [0,1,2,3,4,5,6,7,7]), loop: false, ms: 250 },
-    jump:      { srcs: frames('jumping',       [0,1,2,3]), loop: false , ms: 250},
-    wave:      { srcs: frames('waving',        [0,1,2,3,2,1,0]), loop: false, ms: 200 },
-    run_left:  { srcs: frames('running-left',  [0, 3, 4, 5, 7]), loop: true },
-    run_right: { srcs: frames('running-right', [0, 3, 4, 5, 7]), loop: true },
-  };
+  // 內建動畫表衍生自呼叫端傳入的 defaultAnimations(單一源頭見 src/defaultAnimations.js,
+  // main.js/index.html 共用同一份資料)——供 config 抵達前的初始渲染,以及完全沒有
+  // config 來源的情境(如 test.html 沙盒)使用。setAnimations() 之後可整個覆蓋/擴充。
+  const ANIMATIONS = {};
+  for (const [state, def] of Object.entries(defaultAnimations)) {
+    ANIMATIONS[state] = { srcs: frames(def.folder, def.frames), loop: !!def.loop, ms: def.ms };
+  }
 
   const RUN_STATES = new Set(['run_left', 'run_right']);
 

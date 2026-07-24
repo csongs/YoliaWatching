@@ -8,6 +8,8 @@ global.Image = class {
   set src(_) {}
 };
 
+const { DEFAULT_ANIMATIONS } = require('../defaultAnimations');
+
 const createCharacter = (() => {
   const script = require('fs').readFileSync(
     require('path').join(__dirname, '../../renderer/character.js'), 'utf8'
@@ -27,6 +29,7 @@ function makeChar(overrides = {}) {
     canvas, ctx, charEl, valEl, barFill,
     speechEl: null,
     assetBase: '/assets',
+    defaultAnimations: DEFAULT_ANIMATIONS,
     onUpdateHud: jest.fn(),
     ...overrides,
   });

@@ -27,6 +27,8 @@
 - `yuupeek/src/packFormat.js` — 角色包格式驗證/合併/市集 index 相容(規格 docs/specs/character-pack-format.md)
 - `yuupeek/src/youtubePollPolicy.js` — YouTube 找直播節奏/quota 錯誤判斷(2026-07-25 從
   chatListener.js 與 index.html 各自手刻的重複邏輯收斂而來)
+- `yuupeek/src/defaultAnimations.js` — 預設動畫表(2026-07-25 收斂;main.js/index.html 直接引用,
+  character.js 的內建 fallback 也從這裡衍生,不再各自手抄)
 - `yuupeek/renderer/panel.html` — 控制面板（內建 DataAdapter：web 模式走 Firebase，桌面模式走 localhost API；見 panel.html 的 `initApp()`，約 L816–916）
 
 桌面版專屬(electron 無關,可獨立單元測試)：
@@ -87,17 +89,16 @@ RTDB /config ──(on('value') 整節點訂閱, index.html 約 L351)──▶ o
   - 幀圖路徑 = `<assetBase>/<folder>/<index 兩位數補零>.png`（character.js `frames()` L24–27）
   - `frames` 是**索引陣列**（可重複、可跳號，如 `[0,2,4,5,4,2,0]`），不是張數
   - `ms` 缺省 150（`FRAME_MS`）；`loop:false` 播完回 baseState
-- 內建動畫寫死在 character.js L29–39（這張表實質是預設動畫的**第三份副本**：與兩份
-  DEFAULT_ANIMATIONS 同值、少 watch_excited，作為 config 載入前／載入失敗時的 fallback）；
-  **runtime 覆蓋入口 = `setAnimations(cfg)`（L329–338）**，
-  接受 `{ 狀態名: {folder, frames, ms, loop} }`，可新增任意新狀態名。
+- 內建 fallback 動畫表（config 載入前／載入失敗時用）在 `createCharacter()` 內建構，
+  由呼叫端傳入的 `defaultAnimations` 選項（單一源頭 `yuupeek/src/defaultAnimations.js`，
+  2026-07-25 收斂,見 §11）經 `frames()` 衍生，不是手抄表；
+  **runtime 覆蓋入口 = `setAnimations(cfg)`**，接受 `{ 狀態名: {folder, frames, ms, loop} }`，
+  可新增任意新狀態名。
 - `setAnimations` 支援兩種格式：`{folder, frames[]}`（assetBase 相對路徑）與
   `{srcs[]}`（完整 URL/data URL，2026-07-07 加，角色包用；規格見
   docs/specs/character-pack-format.md）；值為 `null` 時移除該狀態（角色包停用時清殘留用）。
-- 畫布 128×139（`DISPLAY_W/H`），`drawFrame` 把整張 PNG 拉伸繪滿畫布（L174–179）。
+- 畫布 128×139（`DISPLAY_W/H`），`drawFrame` 把整張 PNG 拉伸繪滿畫布。
 - 位置行為（追隨狀態移動、跳躍連擊、閒晃 wander）都在此檔，與動畫格式無關。
-- `watch_excited` 狀態證明「純 config 新增動畫」已可行：它不在 character.js 內建表，
-  只存在於兩份 `DEFAULT_ANIMATIONS` 鏡像（見 §11 鏡像地雷）。
 
 ## 6. RTDB schema（現行，全部在 `/config` 下）
 
@@ -147,7 +148,7 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 - 源頭：`yuupeek/assets/sprites/frames/<動作資料夾>/<NN>.png`；⚠ 未親自複核：81 個 PNG、共約 3.5 MB。
 - 部署：sync.js 把整個 `yuupeek/assets/` 複製到 `web/public/assets/`；
   overlay 的 assetBase = `./assets/sprites/frames`（index.html 約 L103）。
-- 資料夾與狀態對照（動畫名 ≠ 資料夾名，如 peek→`review/`、eat→`cilantro/`）：見兩份 DEFAULT_ANIMATIONS。
+- 資料夾與狀態對照（動畫名 ≠ 資料夾名，如 peek→`review/`、eat→`cilantro/`）：見 `defaultAnimations.js`。
 - `running/`、`waiting/` 資料夾未被任何動畫引用（⚠ 未親自複核）。
 - `tools/frame-preview.html` 是幀預覽工具。**在版控內**（Initial commit 即追蹤）；.gitignore L21–22
   雖寫了 `tools/`，但 .gitignore 對已追蹤檔案無效——ignore 規則從未生效。要真排除得
@@ -173,12 +174,12 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 
 ## 10. 測試與本機開發
 
-- 測試：`cd yuupeek && npm test`（jest@30 + jsdom）。10 個測試檔在 `yuupeek/src/__tests__/`：
+- 測試：`cd yuupeek && npm test`（jest@30 + jsdom）。11 個測試檔在 `yuupeek/src/__tests__/`：
   `character`、`chatListener`（2026-07-10 重寫，對齊 createChatListener API）、
-  `chatProcessor`（2026-07-10 建）、`detector`、`obsServer`、`packFormat`、
-  `packStore`（2026-07-25 新增，electron 無關）、`stateMachine`、
+  `chatProcessor`（2026-07-10 建）、`defaultAnimations`（2026-07-25 新增）、`detector`、
+  `obsServer`、`packFormat`、`packStore`（2026-07-25 新增，electron 無關）、`stateMachine`、
   `syncManifest`（sync 清單守門）、`youtubePollPolicy`（2026-07-25 新增）。
-  【事實，2026-07-25 實測】基線**全綠**（10 suites / 131 tests）。main.js 因
+  【事實，2026-07-25 實測】基線**全綠**（11 suites / 149 tests）。main.js 因
   `require('electron')` 無法在 jest 下跑，沒有對應測試檔（拆出去的 packStore.js 例外）。
 - 桌面版：`npm start`；角色沙盒本機測試：`npm run test-ui`（`yuupeek/test-server.js` 在
   port 3001 服務 test.html；沙盒讀不到 RTDB/animations.json 的自訂動畫，且必有兩種已知
@@ -191,7 +192,7 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 |---|---|---|
 | `yuupeek/src/frames.js` | **已刪除**（2026-07-10，刪前 grep 確認零引用；舊 spritesheet 定位表，git 歷史可挖） | 親自複核 |
 | `yuupeek/src/detector.js` | **production 未接線**：只有 `detector.test.js` 引用，main.js 沒有 require。功能（視窗標題偵測）在桌面版藍圖內但未啟用。留著，檔頭已加註記（2026-07-10） | 親自複核 |
-| `DEFAULT_ANIMATIONS` 鏡像 | `web/public/index.html` L57–68 與 `yuupeek/main.js` L37–48 各一份，**手動同步**。改預設動畫必須兩邊一起改 | 親自複核 |
+| `DEFAULT_ANIMATIONS` 鏡像 | **已解決**（2026-07-25）：單一源頭收斂到 `yuupeek/src/defaultAnimations.js`（isomorphic，經 sync.js 同步），`main.js`/`index.html` 直接引用；`character.js` 內建 fallback 表改用 `frames()` 從呼叫端傳入的 `defaultAnimations` 選項衍生，不再手抄第三份 | 親自複核 |
 | `web/DEPLOY.md` | 已改為一頁式指向 README（2026-07-10；單一事實源，不再重複部署步驟） | 親自複核 |
 | SOOP 官方 API 模式 | `apiMode:"official"` 尚未實作（index.html 約 L249–251 直接 return） | 親自複核 |
 | greetingAnimations | 有 runtime 支援、無 panel 編輯 UI（雲端：直接改 RTDB；桌面：改 `%APPDATA%\YoliaWatching\config.json`——**不要**改安裝目錄的 default.config.json，那是隨程式更新的預設檔） | 親自複核＋審查修正 |
@@ -205,7 +206,8 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 | 訊息→動畫的規則邏輯 | `yuupeek/src/chatProcessor.js` | 是共用檔；跑 `npm test` |
 | 角色動作/渲染 | `yuupeek/renderer/character.js` | 是共用檔；桌面版與雲端版都吃它 |
 | 面板 UI | `yuupeek/renderer/panel.html` | 是共用檔；web/桌面雙模式都要通（DataAdapter） |
-| 雲端 overlay（聊天監聽、Firebase 訂閱） | `web/public/index.html` | 雲端專屬檔，可直接改；DEFAULT_ANIMATIONS 有鏡像 |
+| 雲端 overlay（聊天監聽、Firebase 訂閱） | `web/public/index.html` | 雲端專屬檔，可直接改 |
+| 預設動畫幀序 | `yuupeek/src/defaultAnimations.js` | 單一源頭，改這裡即可，不必再到處找副本 |
 | RTDB 結構 | schema 見 §6 | 新頂層節點要改 `web/database.rules.json`；格式只加不改 |
 | 預設互動 | `yuupeek/default.config.json` | 桌面版預設；雲端版首次資料可用 `web/import-config.js` 匯入（用法未查證） |
 | 部署流程 | `.github/workflows/deploy.yml` + `web/firebase.json` predeploy | predeploy 也算部署步驟 |

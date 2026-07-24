@@ -4,6 +4,36 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
+## 目前狀態（2026-07-25 七，架構審查第五輪——收斂 DEFAULT_ANIMATIONS 三份副本）
+
+- 起因:同一次 session 第七次操作。前六輪都聚焦在 panel.html/main.js/obsServer.js/
+  pack-market 子系統這個熱點,這輪改查 CLAUDE.md 自己文件裡明寫的「鐵律 5」——
+  預設動畫有三份手抄副本(main.js、index.html 的兩份 `DEFAULT_ANIMATIONS`,加上
+  character.js 內建 fallback 表),這條規則本身就是「已知重複，改一處要記得改三處」
+  的警告,存在了很久卻沒人真的收斂過。查證後三份仍然都在,決定收斂。
+- 新增 `yuupeek/src/defaultAnimations.js`(isomorphic,經 sync.js 同步):唯一的
+  `DEFAULT_ANIMATIONS` 資料源頭。`main.js` 改 `require`,`web/public/index.html`
+  改載入 script 引用全域。
+- `character.js` 改造:`createCharacter()` 新增 `defaultAnimations` 選項,內建
+  fallback 表改成用既有的 `frames()` helper 從這個選項**衍生**,不再手寫第三份。
+  三個呼叫點(index.html、obs-overlay.html、test.html)都補上載入
+  `defaultAnimations.js` + 傳入這個選項;character.test.js 的 `makeChar()` fixture
+  也改用真正的共用資料,不再是測試專用假資料。
+- **順手修正一個小落差**:character.js 原本的內建表少了 `watch_excited`(ARCHITECTURE.md
+  舊版明確記過這件事),現在從共用資料衍生後自動補齊,三個平台的 fallback 行為完全一致。
+  合併前已逐一核對舊版 9 個手寫項目與共用資料的 folder/frames/ms/loop,確認衍生結果
+  與原本行為**完全相同**(ms 全部顯式帶入,原本靠 `?? FRAME_MS` 隱式預設的幾項現在
+  顯式寫 150,數值相同無感)。
+- 文件同步:CLAUDE.md 鐵律 5、ARCHITECTURE.md §2/§5/§8/§11/§12 都提到這個舊的
+  「三份副本」框架,已一併更新為「單一源頭」的現況描述;測試套件計數(11 suites/149
+  tests)也順便校正(舊文件卡在 10 suites/131 tests)。
+- 驗證:`cd yuupeek && npm test` 11 suites / 149 tests 全綠(新增
+  `defaultAnimations.test.js`,`character.test.js` 用真實共用資料重跑通過)。
+  main.js/defaultAnimations.js/character.js 過 `node --check`;index.html/
+  obs-overlay.html/test.html 內嵌 script 都過語法解析。**手動驗證仍待維護者**:
+  三個平台(雲端 overlay、桌面 overlay、test.html 沙盒)角色動畫應與改動前肉眼無異,
+  額外多一個 `watch_excited` 狀態在 config 到達前也能正常 fallback 播放。
+
 ## 目前狀態（2026-07-25 六，雲端/桌面功能對等盤點+文件過時清理）
 
 - 起因:維護者要求盤點雲端版與桌面版「功能」是否有差異(前幾輪只做了「程式碼重複」),

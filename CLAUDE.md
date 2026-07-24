@@ -28,11 +28,13 @@
    必須仍能運作（規則細節與範例見 PLAYBOOK §格式演進）。
 3. **新增 RTDB 頂層節點時，必須同時修改 `web/database.rules.json`**：
    rules 的 `$other` 預設拒絕一切讀寫——忘了加規則，新功能會整個讀不到資料且不報錯。
-4. **測試必須全綠**：`cd yuupeek && npm test`（2026-07-10 起基線 8 suites 全綠，
-   chatListener.test.js 已重寫；出現任何紅字＝改動不合格，回報中原文貼出錯誤）。
-5. **預設動畫有三份副本要一起評估**：`web/public/index.html` 與 `yuupeek/main.js` 的兩份
-   `DEFAULT_ANIMATIONS`（手動鏡像，必須同改），加上 `character.js` L29–39 的內建表
-   （config 載入前與載入失敗時的 fallback，同值但少 watch_excited）——改預設幀序時三處都要檢查。
+4. **測試必須全綠**：`cd yuupeek && npm test`（2026-07-25 起基線 11 suites 全綠；
+   出現任何紅字＝改動不合格，回報中原文貼出錯誤）。
+5. **預設動畫單一源頭在 `yuupeek/src/defaultAnimations.js`**（2026-07-25 收斂，isomorphic，
+   經 sync.js 複製到 web/public/）：`main.js`、`web/public/index.html` 直接引用；
+   `character.js` 的內建 fallback 表改用 `frames()` 從呼叫端傳入的 `defaultAnimations`
+   選項衍生，不再手抄——三個 `createCharacter()` 呼叫點（index.html、obs-overlay.html、
+   test.html）都要載入 `defaultAnimations.js` 並傳入這個選項。改預設幀序只改一處即可。
 6. **文件中的規格數字要標來源**：quota、方案限制、價格等，寫進 docs/ 時必須附
    來源（檔案路徑或 URL）與日期；查不到就明寫「未查證」，不可編造。
 
