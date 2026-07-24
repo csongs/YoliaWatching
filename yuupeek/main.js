@@ -295,22 +295,6 @@ if (config.modes?.obs) {
     const port = obsServer.port();
     console.log(`[OBS] http://localhost:${port}`);
   });
-  obsServer.onClientMessage((msg) => {
-    if (msg.cmd === 'feed') {
-      sm.yolia_see = Math.max(0, sm.yolia_see - 15);
-      win?.webContents.send('yolia-update', { value: sm.yolia_see, state: 'eat', animOnly: true });
-      obsServer.broadcast({ value: sm.yolia_see, state: 'eat', animOnly: true });
-      obsServer.setWelcomeData({ value: sm.yolia_see, state: 'eat', animOnly: true });
-      setTimeout(() => { sm.state = sm.computeState(); broadcastState(); }, 3000);
-    } else if (msg.cmd === 'punish') {
-      sm.punish();
-      broadcastState();
-    } else if (msg.cmd === 'setYoliaSee') {
-      sm.yolia_see = Math.max(0, Math.min(100, msg.value ?? 0));
-      sm.state     = sm.computeState();
-      broadcastState();
-    }
-  });
 }
 
 // ── Chat listener ─────────────────────────────────────────────────────────────

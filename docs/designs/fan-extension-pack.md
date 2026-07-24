@@ -1,6 +1,8 @@
 # 設計:粉絲投稿動作 → 角色工坊 Phase 1 + 擴充包
 
-> 狀態:設計稿(2026-07-07,維護者已核可設計,待實作)。
+> 狀態:設計稿(2026-07-07,維護者已核可設計)。**已實作**(角色工房/擴充包/桌面版
+> 支援全部落地,見 ADR-003、ADR-004);本檔保留作為設計理由紀錄,現況以
+> docs/ARCHITECTURE.md 為準。
 > 格式細節一律以 docs/specs/character-pack-format.md 為準(含 2026-07-07 的 `base` 欄位修訂);
 > 決策理由見 ADR-003;工坊 UI 佈局沿用 docs/designs/animation-editor.md,本檔只記**增量**與工單。
 > 範例素材:`yuupeek/assets/sprites/sample/00_hurt_sheet.png`(1712×214,單列 8 幀,

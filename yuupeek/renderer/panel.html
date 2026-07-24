@@ -336,7 +336,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card local-only">
     <h3>版本資訊</h3>
     <div class="row">目前版本：<strong id="current-version">—</strong></div>
     <div id="update-result" style="margin-top:10px;min-height:20px"></div>
@@ -429,7 +429,8 @@
       loadConfig();
       loadVersion();
       loadPaths();
-      if (!hasAutoCheckedUpdate) { hasAutoCheckedUpdate = true; checkUpdate(); }
+      // 更新檢查是桌面版發行流程的概念(比對 GitHub release);雲端版是 push main 即部署,無版本可比,卡片已 local-only 隱藏
+      if (!IS_WEB && !hasAutoCheckedUpdate) { hasAutoCheckedUpdate = true; checkUpdate(); }
     }
   }
 

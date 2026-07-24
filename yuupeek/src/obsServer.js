@@ -39,7 +39,6 @@ function createObsServer(config, rootDir) {
   let httpServer = null;
   let wss = null;
   let welcomeData = null;
-  let clientMsgHandler = null;
   let panelHandlers = null;
 
   const requestHandler = (req, res) => {
@@ -349,11 +348,9 @@ function createObsServer(config, rootDir) {
         wss = new WebSocket.Server({ server: httpServer });
         wss.on('connection', (client) => {
           if (welcomeData) client.send(JSON.stringify(welcomeData));
-          client.on('message', (data) => {
-            try { if (clientMsgHandler) clientMsgHandler(JSON.parse(data.toString())); } catch {}
-          });
         });
-        httpServer.listen(obsConfig.port ?? 3000, resolve);
+        // 只綁 127.0.0.1:本機控制面板/pack 讀寫全無驗證,不該讓同一 WiFi/區網其他裝置連到
+        httpServer.listen(obsConfig.port ?? 3000, '127.0.0.1', resolve);
       });
     },
     stop() {
@@ -373,9 +370,6 @@ function createObsServer(config, rootDir) {
     },
     setWelcomeData(data) {
       welcomeData = data;
-    },
-    onClientMessage(handler) {
-      clientMsgHandler = handler;
     },
     setPanelHandlers(handlers) {
       panelHandlers = handlers;

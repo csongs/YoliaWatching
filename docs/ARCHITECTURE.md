@@ -161,6 +161,10 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
   這是架構必然：overlay（OBS Browser Source）沒有登入能力，卻要自己輪詢 YouTube。
 - panel 的 `ALLOWED_EMAILS` 檢查是 client-side UX（擋畫面），真正的權限在 rules 層。
 - 登入方式：Email/Password + Google OAuth（panel.html 約 L356–373）。
+- 桌面版 obsServer（本機控制面板 API，含 config/pack 讀寫）**無任何驗證機制**——這是設計上
+  可接受的（單使用者本機工具），但前提是只有本機能連得到。2026-07-25 查證修正：
+  `httpServer.listen()` 原本沒指定 host，Node 預設綁所有網卡，同一 WiFi/區網的其他裝置
+  可以連到這個無驗證的 API；已改成明綁 `127.0.0.1`（obsServer.js `start()`）。
 
 【風險與現行緩解】（緩解屬建議性質，執行前確認）
 - YouTube API key 洩漏 → 他人盜用 quota。緩解：使用者可在 Google Cloud Console 給 key 加

@@ -4,6 +4,58 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
+## 目前狀態（2026-07-25 六，雲端/桌面功能對等盤點+文件過時清理）
+
+- 起因:維護者要求盤點雲端版與桌面版「功能」是否有差異(前幾輪只做了「程式碼重複」),
+  並順便清掉過時文件。盤點結論:SOOP(CORS 擋瀏覽器,實質僅桌面版)、角色工房/市集
+  (ADR-004 雙模式全支援)、greeting animations(雙邊都沒編輯 UI)這幾項文件記載正確,
+  不是落差。真正找到 3 個問題:
+- **修好:雲端版「檢查更新」卡片是誤導性 UI**——`checkUpdate()` 硬編碼
+  `hasUpdate:false`,雲端版沒有「發行版本」概念(push main 即部署,不是下載安裝),
+  卻永遠顯示「已是最新版本」。改成 `local-only`(比照設定檔位置等桌面專屬卡片隱藏),
+  自動檢查呼叫也加 `!IS_WEB` 判斷,不再對雲端版使用者發無意義的 GitHub API 請求。
+- **修好:main.js 有一段真的死代碼,而且有 bug**——`obsServer.onClientMessage` 註冊的
+  `feed`/`punish`/`setYoliaSee` handler 引用了從未宣告的 `win` 變數(commit 81ae70f
+  移除 Electron 透明覆蓋層「pet mode」視窗時漏刪的殘留),而且全 repo 找不到任何地方
+  會送出這幾個 WebSocket 訊息(`renderer/`、`web/public/` 都查過)——不只沒用,一旦真的
+  觸發 `feed` 分支會直接 `ReferenceError`。已整段刪除,連同 obsServer.js 裡完全沒有
+  其他呼叫端的 `onClientMessage`/`clientMsgHandler` 機制與 `client.on('message', ...)`
+  接收邏輯一併移除。
+- **修好:桌面版本機伺服器沒有限定只聽 localhost**——`obsServer.js` 的
+  `httpServer.listen(port, resolve)` 沒指定 host,Node 預設綁所有網卡;桌面版控制面板
+  API(config/pack 讀寫、API key)完全沒有驗證機制,理論上同一 WiFi/區網的其他裝置
+  連得到。已明綁 `127.0.0.1`。ARCHITECTURE.md §9 已補記這條事實。
+- **文件清理**:`docs/designs/animation-editor.md`、`docs/designs/fan-extension-pack.md`、
+  `docs/specs/character-pack-format.md` 三份的狀態橫幅都還寫「尚未實作/待實作」,但
+  角色工房/擴充包/桌面版支援早就全部做完並經過好幾輪重構——橫幅改成標記「已實作」,
+  指向 ARCHITECTURE.md 為現況來源,本檔內容保留作設計理由紀錄(不重寫內文,只修狀態宣告)。
+  其餘 design/spec 文件(market-platform.md、marketplace.md、generation-pipeline.md)
+  狀態橫幅查過,沒有同類問題。
+- 驗證:`cd yuupeek && npm test` 10 suites / 147 tests 全綠(此輪修正沒新增測試案例,
+  純刪除死代碼+改一行 host 綁定+改 CSS class,行為由既有測試間接覆蓋)。main.js/
+  obsServer.js/panel.html 都過語法檢查。**手動驗證仍待維護者**:桌面版 `npm start`
+  後確認 overlay/panel 仍能連上(綁 127.0.0.1 後行為應不變,因為 `localhost` 本來就
+  解析到 127.0.0.1);雲端版設定分頁應該看不到「版本資訊」卡片。
+
+## 目前狀態（2026-07-25 五，收斂訊息套用時機的重複邏輯）
+
+- 起因:維護者問「app 跟 web 還有沒有分離 code 做同一件事的 case」,盤點後找到一個——
+  `chatProcessor.processMessage()` 雖然雙邊共用,但外層「何時套用、要不要延遲 3 秒回復」
+  這段決策桌面版(`chatListener.js` 的 `processMessage`)與雲端版(`index.html` 的
+  `onMessage`)各自手刻一份,形狀一樣,只有最終 sink 不同(桌面 broadcast 走 WebSocket,
+  雲端直接呼叫同頁 `char.applyUpdate`)。
+- `chatProcessor.js` 新增 `planMessageEffects(r, yolia_see)`(純函數):回傳
+  `{ immediate, delayed }`,呼叫端只需把 patch 丟給自己的 sink。桌面版額外保留
+  `sm.state` 持久化(供 `getStatus()` 等讀取)這個桌面特有的副作用,雲端版沒有對應需求
+  (`sm` 只追蹤 `yolia_see`)。
+- 驗證前先查證這不只是程式碼重複,也不是行為分歧:`costDenied:true` 時 chatProcessor
+  保證 `animOnly` 恆為 `false`,桌面原本省略這個欄位、雲端原本明寫 `false`,兩者結果
+  相同,合併後不影響行為。
+- 驗證:`cd yuupeek && npm test` 10 suites / 147 tests 全綠(chatProcessor.test.js
+  補了 planMessageEffects 三案例)。chatProcessor.js/chatListener.js/index.html
+  都過語法檢查。**UI 手動驗證仍待維護者**:cost 不足提示 3 秒後消失、指令動畫播完回
+  idle,雙版本行為應與改動前一致。
+
 ## 目前狀態（2026-07-25 四，架構審查第四輪——panel.html 整體覆核）
 
 - 起因:同一次 session 第四輪。`panel.html`(995 行)是全 repo 歷史異動次數最高的檔案
