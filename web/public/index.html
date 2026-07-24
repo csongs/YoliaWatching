@@ -49,6 +49,7 @@
   <script src="./character.js"></script>
   <script src="./chatProcessor.js"></script>
   <script src="./packFormat.js"></script>
+  <script src="./youtubePollPolicy.js"></script>
   <script src="./firebase-config.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -155,23 +156,24 @@
     }
 
     // ── YouTube ───────────────────────────────────────────────────────────────
+    // 找直播節奏/quota 判斷收斂在 youtubePollPolicy.js(桌面版 chatListener.js 共用同一份純函數)
     const YT_BASE = 'https://www.googleapis.com/youtube/v3';
-    const LIVE_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 不開播時 15 分鐘查一次（省 quota）
-    const RETRY_INTERVAL_MS      = 30_000;          // 錯誤重試間隔
+    const { LIVE_CHECK_INTERVAL_MS, RETRY_INTERVAL_MS } = YoutubePollPolicy;
 
     async function ytFetch(path, params, apiKey) {
       const url = new URL(`${YT_BASE}${path}`);
       url.searchParams.set('key', apiKey);
       for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`YouTube API ${res.status}`);
+      if (!res.ok) throw Object.assign(new Error(`YouTube API ${res.status}`), { status: res.status });
       return res.json();
     }
 
     function startYouTube(channel, apiKey) {
-      let stopped     = false;
-      let busy        = false;   // poll 進行中(手動觸發撞上時忽略,靠 lastSearchAt=0 讓該輪立即搜)
-      let timer       = null;
+      let stopped      = false;
+      let quotaStopped = false;  // 配額超限後永久停止(比照桌面版 youtubePaused),checkNow 也不再重打
+      let busy         = false;   // poll 進行中(手動觸發撞上時忽略,靠 lastSearchAt=0 讓該輪立即搜)
+      let timer        = null;
       let channelId   = channel.startsWith('UC') ? channel : null;
       let liveVideoId = null;
       let chatId      = null;
@@ -185,7 +187,7 @@
       }
 
       async function poll() {
-        if (stopped || busy) return;
+        if (stopped || busy || quotaStopped) return;
         busy = true;
         try { await pollOnce(); } finally { busy = false; }
       }
@@ -197,7 +199,8 @@
 
           if (!liveVideoId) {
             const now = Date.now();
-            if (now - lastSearchAt < LIVE_CHECK_INTERVAL_MS) { timer = setTimeout(poll, LIVE_CHECK_INTERVAL_MS - (now - lastSearchAt)); return; }
+            const check = YoutubePollPolicy.shouldCheckLiveNow(now, lastSearchAt, LIVE_CHECK_INTERVAL_MS);
+            if (!check.ready) { timer = setTimeout(poll, check.delayMs); return; }
             lastSearchAt = now;
             const search = await ytFetch('/search', { part: 'id', channelId, eventType: 'live', type: 'video', maxResults: 1 }, apiKey);
             liveVideoId  = search.items?.[0]?.id?.videoId ?? null;
@@ -228,7 +231,8 @@
           timer = setTimeout(poll, chat.pollingIntervalMillis ?? 5000);
         } catch (e) {
           console.error('[YouTube]', e.message);
-          if (e.message.includes('403') || e.message.includes('quota')) {
+          if (YoutubePollPolicy.classifyYoutubeError({ status: e.status, message: e.message }).quota) {
+            quotaStopped = true;
             console.error('[YouTube] 配額超限，停止輪詢'); return;
           }
           chatId = null; liveVideoId = null;
@@ -239,9 +243,9 @@
       poll();
       return {
         stop: () => { stopped = true; if (timer) clearTimeout(timer); },
-        // 面板「我開播了」:清除 15 分鐘節流,立刻查一次
+        // 面板「我開播了」:清除 15 分鐘節流,立刻查一次;配額已爆時查了也是白查,直接不理會
         checkNow: () => {
-          if (stopped) return;
+          if (stopped || quotaStopped) return;
           lastSearchAt = 0;
           if (timer) clearTimeout(timer);
           timer = setTimeout(poll, 0);
@@ -374,7 +378,7 @@
     let latestConfig = {};        // 最新一份 config(供 pack on('value') 回呼延後觸發時使用,避免用到舊 closure)
 
     function mergedPackAnimations() {
-      const list = currentPackIds.map((id) => packStore[String(id).replace(/\./g, '_')]).filter(Boolean);
+      const list = currentPackIds.map((id) => packStore[PackFormat.packKeyOf(id)]).filter(Boolean);
       const { animations, errors } = PackFormat.mergeActivePacks(list);
       for (const err of errors) console.warn('[pack] 轉換失敗,忽略啟用中的包:', err.id, err.message);
       return animations;
@@ -400,11 +404,9 @@
       thresholds = (config.interactions ?? []).filter(i => i.trigger === 'threshold');
       handlers   = ChatProcessor.buildHandlers(config.interactions ?? []);
 
-      // activePackIds 為主(勾選制);舊資料只有 activePackId → 折成單元素陣列
-      const packIds = Array.isArray(config.activePackIds)
-        ? config.activePackIds.filter((x) => typeof x === 'string' && x)
-        : (config.activePackId ? [config.activePackId] : []);
-      const packKeys = packIds.map((id) => String(id).replace(/\./g, '_'));
+      // activePackIds 為主(勾選制);舊資料只有 activePackId → 折成單元素陣列(折算邏輯見 packFormat.js)
+      const packIds = PackFormat.resolveActivePackIds(config);
+      const packKeys = packIds.map(PackFormat.packKeyOf);
       if (packKeys.join('|') !== currentPackKeysStr) {
         currentPackKeysStr = packKeys.join('|');
         currentPackIds = packIds;

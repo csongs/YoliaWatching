@@ -33,7 +33,8 @@ require('dotenv').config({ path: path.join(userDataDir, '.env') });
 const { createStateMachine } = require('./src/stateMachine');
 const { createChatListener }  = require('./src/chatListener');
 const { createObsServer }     = require('./src/obsServer');
-const { buildAnimationsUpdate, mergeActivePacks } = require('./src/packFormat');
+const { createPackStore }     = require('./src/packStore');
+const { buildAnimationsUpdate, resolveActivePackIds, packIdsCompatFields, packKeyOf } = require('./src/packFormat');
 
 const DEFAULT_ANIMATIONS = {
   idle:      { folder: 'idle',          frames: [0,2,4,5,4,2,0,0,1,0], ms: 150,  loop: false },
@@ -67,38 +68,21 @@ let userAnimations = (() => {
 })();
 
 // 角色包(ADR-004):整包存 packs.json,activePackIds 存 config.json(勾選制,可多包)
-const packsPath = path.join(userDataDir, 'packs.json');
-let packs = (() => {
-  try { return JSON.parse(fs.readFileSync(packsPath, 'utf8')); }
-  catch { return {}; }
-})();
+const packStore = createPackStore(path.join(userDataDir, 'packs.json'));
 let prevPackStates = [];   // 上一次廣播時啟用包的狀態鍵(清殘留用)
 
-const packKeyOf = (id) => String(id).replace(/\./g, '_');
-
-// 勾選制(2026-07-11):activePackIds 陣列;讀舊 config 只有 activePackId 時視為單元素陣列
+// 勾選制(2026-07-11):activePackIds 陣列;讀舊 config 只有 activePackId 時視為單元素陣列。
+// 折算邏輯收在 packFormat.js 的 resolveActivePackIds(桌面/雲端/panel 共用)。
 function activePackIdsList() {
-  if (Array.isArray(config.activePackIds)) return config.activePackIds;
-  return config.activePackId ? [config.activePackId] : [];
-}
-
-function activePackAnimations() {
-  const list = activePackIdsList().map((id) => packs[packKeyOf(id)]).filter(Boolean);
-  const { animations, errors } = mergeActivePacks(list);
-  for (const err of errors) console.warn('[pack] 轉換失敗,忽略啟用中的包:', err.id, err.message);
-  return animations;
+  return resolveActivePackIds(config);
 }
 
 function animationsUpdate() {
   return buildAnimationsUpdate(
     { ...DEFAULT_ANIMATIONS, ...userAnimations },
-    activePackAnimations(),
+    packStore.mergeActive(activePackIdsList()),
     prevPackStates
   );
-}
-
-function savePacksFile() {
-  fs.writeFileSync(packsPath, JSON.stringify(packs, null, 2), 'utf8');
 }
 
 function broadcastAnimations() {
@@ -244,17 +228,15 @@ if (config.modes?.obs) {
         chatListener = null;
       }
     },
-    getPacks: () => packs,
+    getPacks: () => packStore.getAll(),
     savePack: (pack) => {
-      packs[packKeyOf(pack.id)] = pack;
-      savePacksFile();
+      packStore.save(pack);
       // 只在動到啟用中的包時廣播(編輯啟用中的包立即生效,對齊雲端 on() 訂閱行為)
       if (activePackIdsList().includes(pack.id)) broadcastAnimations();
     },
     deletePack: (key) => {
       const wasActive = activePackIdsList().some((id) => packKeyOf(id) === key);
-      delete packs[key];
-      savePacksFile();
+      packStore.remove(key);
       if (wasActive) broadcastAnimations();
     },
     getActivePackIds: () => activePackIdsList(),
@@ -265,16 +247,14 @@ if (config.modes?.obs) {
     // 「我開播了」:立即查一次 YouTube 直播(繞過 15 分鐘節流;配額爆掉時回 false)
     checkYouTubeLive: () => chatListener?.checkYouTubeLiveNow?.() ?? false,
     setActivePackIds: (ids) => {
-      const list = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x);
+      // 新舊欄位(activePackIds/activePackId)一起寫:降版相容,舊版只認 activePackId
+      const fields = packIdsCompatFields(ids);
       const cfgPath = path.join(userDataDir, 'config.json');
       const raw = readUserCfg(cfgPath);
-      if (list.length) raw.activePackIds = list;
-      else delete raw.activePackIds;
-      // 舊欄位同步寫第一個(降版相容:舊版只認 activePackId,至少還能套到一個包)
-      if (list[0]) raw.activePackId = list[0];
-      else delete raw.activePackId;
-      config.activePackIds = list.length ? list : undefined;
-      config.activePackId = list[0] ?? undefined;
+      raw.activePackIds = fields.activePackIds ?? undefined;
+      raw.activePackId  = fields.activePackId  ?? undefined;
+      config.activePackIds = fields.activePackIds ?? undefined;
+      config.activePackId  = fields.activePackId  ?? undefined;
       fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
       broadcastAnimations();
     },

@@ -1,6 +1,7 @@
 const tmi = require('tmi.js');
 const { google } = require('googleapis');
 const { buildHandlers, computeState, processMessage: processMsg } = require('./chatProcessor');
+const YoutubePollPolicy = require('./youtubePollPolicy');
 
 function createChatListener(config, sm, broadcast) {
   let thresholds = (config.interactions ?? []).filter(i => i.trigger === 'threshold');
@@ -35,12 +36,6 @@ function createChatListener(config, sm, broadcast) {
       || '';
   }
 
-  function isYouTubeQuotaError(error) {
-    const reason  = getYouTubeErrorReason(error);
-    const message = (error?.message ?? '').toLowerCase();
-    return reason === 'quotaExceeded' || message.includes('quota');
-  }
-
   function startTwitch() {
     if (!config.twitch?.enabled || !config.twitch?.channel) return;
     twitchClient = new tmi.Client({
@@ -60,11 +55,9 @@ function createChatListener(config, sm, broadcast) {
   let resolvedChanId = null;
   let notLiveLogged  = false;
   let lastSearchAt   = 0;
-  // search.list 每日獨立上限 100 次(developers.google.com/youtube/v3/determine_quota_cost,
-  // 2026-07-12 查)——30 秒輪詢 50 分鐘就會用光一天的額度,故未開播時 15 分鐘查一次,
-  // 與雲端 overlay 一致;要立即偵測用面板「我開播了」(checkYouTubeLiveNow)。
-  const LIVE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
-  const RETRY_INTERVAL_MS      = 30_000;   // 缺設定/暫時性狀況的重排間隔(不打 search)
+  // 找直播節奏/quota 判斷收斂在 youtubePollPolicy.js(桌面與雲端 overlay 共用同一份純函數,
+  // sync.js 複製到 web/public);要立即偵測用面板「我開播了」(checkYouTubeLiveNow)。
+  const { LIVE_CHECK_INTERVAL_MS, RETRY_INTERVAL_MS } = YoutubePollPolicy;
   let youtubeClient  = null;
 
   async function resolveLiveVideoId(youtube) {
@@ -103,7 +96,8 @@ function createChatListener(config, sm, broadcast) {
     try {
       if (!liveVideoId) {
         const now = Date.now();
-        if (now - lastSearchAt < LIVE_CHECK_INTERVAL_MS) return { pageToken: null, delayMs: LIVE_CHECK_INTERVAL_MS - (now - lastSearchAt) };
+        const check = YoutubePollPolicy.shouldCheckLiveNow(now, lastSearchAt, LIVE_CHECK_INTERVAL_MS);
+        if (!check.ready) return { pageToken: null, delayMs: check.delayMs };
         lastSearchAt = now;
         liveVideoId  = await resolveLiveVideoId(youtube);
         if (!liveVideoId) {
@@ -138,7 +132,7 @@ function createChatListener(config, sm, broadcast) {
 
       return { pageToken: chatRes.data.nextPageToken ?? null, delayMs: chatRes.data.pollingIntervalMillis ?? 5000 };
     } catch (e) {
-      if (isYouTubeQuotaError(e)) {
+      if (YoutubePollPolicy.classifyYoutubeError({ reason: getYouTubeErrorReason(e), message: e.message }).quota) {
         youtubePaused       = true;
         youtubeErrorMessage = '已超過 YouTube API 配額，YouTube 聊天監聽已停止。';
         console.error('[YouTube] quota exceeded, stop polling:', e.message);

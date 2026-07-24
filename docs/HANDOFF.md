@@ -4,7 +4,43 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-12，YouTube 直播偵測改 15 分鐘+「我開播了」）
+## 目前狀態（2026-07-25，架構審查後的四項收斂重構）
+
+- 起因:`/mattpocock-skills:improve-codebase-architecture` 掃過角色包/市集熱點與
+  聊天監聽子系統,列出 4 個「重複邏輯收斂成單一 interface」的候選,維護者核准全做。
+  全程只收斂既有邏輯的**位置**,格式/行為刻意不變(RTDB schema、動畫格式皆未動)。
+- **① `yuupeek/src/youtubePollPolicy.js`(新檔,isomorphic,已加進 sync.js)**:
+  `shouldCheckLiveNow`/`classifyYoutubeError` 收斂桌面 `chatListener.js` 與雲端
+  `index.html` 原本各自手刻的「15 分鐘找直播節奏」「quota 錯誤判斷」——上一版
+  (2026-07-12 那次)兩邊各改一次,這次起兩邊都呼叫同一份純函數。**順手補的行為修正**:
+  雲端 overlay 原本 quota 爆掉後沒有停止狀態,「我開播了」還會再打一次註定失敗的請求;
+  現在跟桌面版一樣有 `quotaStopped` 旗標擋掉。
+- **② `packFormat.js` 新增 `packKeyOf`/`resolveActivePackIds`/`packIdsCompatFields`/
+  `selectPack`**:收斂 `activePackId`↔`activePackIds` 相容折算(原本 main.js/
+  obsServer.js/panel.html 兩個 adapter/index.html 共 6 處各自手刻)與「換角包一次只能
+  一個」互斥規則(原本 workshop.js/market.js 各刻一份,`mergeActivePacks` 本身不知道
+  這條規則,任何新呼叫端理論上可悄悄同時啟用兩個換角包)。7 個呼叫端全部改呼叫這 4 個
+  函數,touchpoints:main.js、obsServer.js、panel.html 兩個 adapter、workshop.js、
+  market.js、web overlay(index.html)。
+- **③ `packFormat.js` 新增 `guessIndexUrl`/`extractIndexUrlFromFirebaseConfig`**:
+  market.js 的 `resolveIndex` 原本把「市集位址→候選 index.json URL」的純字串邏輯
+  跟 fetch/try-catch 編排混在一起,且完全沒測試(雖然 `window.Market._resolveIndex`
+  早就掛了測試鉤子)。純字串部分搬進 packFormat.js,market.js 只留 I/O 編排。
+  `normalizeIndex` 一併搬過去(原本已是純函數,只是位置不對)。
+- **④(範圍縮小)`yuupeek/src/packStore.js`(新檔,electron 無關)**:原候選是把
+  main.js 的 panelHandlers 整個拆成 configStore/packStore/broadcastPolicy/
+  listenerLifecycle 四塊;實際只做了 packStore 這塊——main.js 需要 `require('electron')`
+  才能跑,這個 repo 目前沒有任何 main.js 的自動化測試,沒有安全網驗證更大範圍的拆分。
+  packStore 這塊本身不依賴 electron(只用 fs),已補 `packStore.test.js`。
+  **剩下三塊(configStore/broadcastPolicy/listenerLifecycle)還沒拆**,建議之後真的要拆時
+  先跑 `/grilling` 談好新 interface 邊界,再動手(理由同上:main.js 無測試安全網)。
+- 驗證:`cd yuupeek && npm test` 10 suites / 131 tests 全綠(含新增的
+  `youtubePollPolicy.test.js`、`packStore.test.js`,以及 `packFormat.test.js` 補的
+  pack-selection/index-format 測試)。`main.js` 只能 `node --check` 語法檢查
+  (此沙盒環境 `ELECTRON_RUN_AS_NODE=1`,無法真的開視窗跑桌面版;維護者本機
+  `npm start` 建議手動驗一次工房勾選/市集安裝/YouTube 面板「我開播了」)。
+
+## 前次狀態（2026-07-12，YouTube 直播偵測改 15 分鐘+「我開播了」）
 
 - 查證(2026-07-12,determine_quota_cost):**search.list 改為獨立每日 100 次上限**,
   其他端點共用 10,000 units/天。桌面版原本未開播 30 秒搜一次=50 分鐘用光額度 → bug。

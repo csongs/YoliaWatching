@@ -179,6 +179,86 @@
     return typeof name === 'string' && STATE_RE.test(name);
   }
 
+  // pack id 含「.」(作者.包名),RTDB 路徑/檔案 key 不能有「.」,一律轉底線存取
+  function packKeyOf(id) {
+    return String(id).replace(/\./g, '_');
+  }
+
+  // 讀 activePackIds/activePackId 相容折算(勾選制 2026-07-11 前只有單包欄位 activePackId):
+  // 一律回傳陣列;cfg 兩個欄位都沒有就回傳空陣列。呼叫端(main.js/obsServer.js/panel.html
+  // 兩個 DataAdapter/index.html 的 config 訂閱)原本各自手刻同一段折算,統一收在這裡。
+  function resolveActivePackIds(cfg) {
+    const ids = cfg?.activePackIds;
+    if (Array.isArray(ids)) return ids.filter((x) => typeof x === 'string' && x);
+    return (typeof cfg?.activePackId === 'string' && cfg.activePackId) ? [cfg.activePackId] : [];
+  }
+
+  // resolveActivePackIds 的反向:把陣列寫回新+舊兩個相容欄位,供呼叫端存回自己的媒介
+  // (RTDB update()/本機 config.json/HTTP 回應——空值該存 null 還是刪 key 由呼叫端決定)。
+  function packIdsCompatFields(ids) {
+    const list = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x);
+    return { activePackIds: list.length ? list : null, activePackId: list[0] ?? null };
+  }
+
+  // 換角包(base !== 'builtin')一次只能啟用一個,擴充包可疊加不限數量(規格 §5)。
+  // currentIds=目前已勾選的陣列;packsByKey=id 轉 packKeyOf 後可查到 pack 物件的 map
+  // (workshop.js 的 packs、market.js 的 installed 兩個呼叫端各自維護,形狀相同);
+  // on=true 時把 id 加入陣列並套用互斥規則,on=false 時只是移除。
+  // 回傳新的 ids 陣列,replacedWhole 標記是否因為互斥規則頂掉了先前的換角包(UI 決定要不要提示)。
+  function selectPack(currentIds, packsByKey, id, on) {
+    const isWhole = (pid) => { const p = packsByKey?.[packKeyOf(pid)]; return !!p && p.base !== 'builtin'; };
+    let ids = (currentIds ?? []).filter((x) => x !== id);
+    let replacedWhole = false;
+    if (on) {
+      if (isWhole(id) && ids.some(isWhole)) {
+        ids = ids.filter((x) => !isWhole(x));
+        replacedWhole = true;
+      }
+      ids.push(id);
+    }
+    return { ids, replacedWhole };
+  }
+
+  // ── 市集 index 格式相容(ADR-005;呼叫端 market.js 只留 fetch/DOM,規則收在這裡)────────
+
+  // 使用者貼的市集位址→候選 index.json URL(不發請求,呼叫端依序嘗試):
+  //   1. 已經是 .../index.json(可帶查詢字串,如 RTDB emulator 的 ?ns=)→ 原樣使用
+  //   2. 其他網址 → 補 /index.json(查詢字串原樣保留,不遺失 ?ns=)
+  // normalizedInput 供呼叫端在猜測失敗時取 origin,做第 3 步(firebase-config.js)探測用。
+  function guessIndexUrl(input) {
+    let u = String(input).trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    if (/\/index\.json(\?|$)/.test(u)) return { url: u, isLiteral: true, normalizedInput: u };
+    const qi = u.indexOf('?');
+    const url = qi === -1 ? u + '/index.json'
+      : u.slice(0, qi).replace(/\/+$/, '') + '/index.json' + u.slice(qi);
+    return { url, isLiteral: false, normalizedInput: u };
+  }
+
+  // 貼的是平台網站網址(而非 Registry URL 本身)時,從該站部署的 firebase-config.js
+  // 原始碼挖 databaseURL,組出對應資料庫的 index.json 位址;挖不到回 null。
+  function extractIndexUrlFromFirebaseConfig(text) {
+    const m = String(text ?? '').match(/databaseURL:\s*["']([^"']+)["']/);
+    return m ? m[1].replace(/\/+$/, '') + '/index.json' : null;
+  }
+
+  // 兩種 index 格式都收(ADR-005):
+  //   陣列 = GitHub registry(每項自帶 packUrl)
+  //   物件 = 中央平台 RTDB REST 的 /index.json(key→條目;packUrl 由 registry 根組出
+  //          `<根>/packs/<key>.json`,即平台 /packs 節點的 REST 端點)
+  // 查詢字串要原樣帶到 packUrl——RTDB emulator 靠 ?ns=<namespace> 選資料庫,丟掉就 404
+  function normalizeIndex(data, url) {
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== 'object') return [];
+    const m = String(url).match(/^(.*?)\/index\.json(\?.*)?$/);
+    const base = m ? m[1] : String(url).replace(/\/index\.json.*$/, '');
+    const qs = (m && m[2]) || '';
+    return Object.entries(data).map(([key, it]) => ({
+      ...it,
+      packUrl: it.packUrl ?? (base + '/packs/' + key + '.json' + qs),
+    }));
+  }
+
   // semver 欄位比較(市集更新判斷用):回傳 <0 / 0 / >0;缺段補 0,非數字段當 0
   function compareVersions(a, b) {
     const parse = (v) => String(v ?? '').split('.').map(n => parseInt(n, 10) || 0);
@@ -189,5 +269,10 @@
     return 0;
   }
 
-  return { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions, KNOWN_STATES };
+  return {
+    validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions,
+    buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions, KNOWN_STATES,
+    packKeyOf, resolveActivePackIds, packIdsCompatFields, selectPack,
+    guessIndexUrl, extractIndexUrlFromFirebaseConfig, normalizeIndex,
+  };
 });

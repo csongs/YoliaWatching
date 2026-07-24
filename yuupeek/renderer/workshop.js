@@ -2,7 +2,7 @@
 // 由 panel.html initApp 的 IS_WEB 分支以 loadScript 載入。依賴全域:api、showToast、PackFormat。
 (function () {
   const root = () => document.getElementById('workshop-root');
-  const keyOf = (id) => String(id).replace(/\./g, '_');
+  const keyOf = PackFormat.packKeyOf;
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   let packs = {};          // RTDB /packs 全量:key → pack
@@ -156,17 +156,10 @@
     showToast('已匯出 ' + p.id + '.yolia.json');
   }
 
-  // 勾選/取消勾選一個包。換角包(整隻角色)一次只能勾一個:勾新的自動取消舊的
+  // 勾選/取消勾選一個包。互斥規則(換角包一次只能一個)收在 PackFormat.selectPack
   async function toggle(id, on) {
-    const isWhole = (pid) => packs[keyOf(pid)] && packs[keyOf(pid)].base !== 'builtin';
-    let ids = activePackIds.filter((x) => x !== id);
-    if (on) {
-      if (isWhole(id) && ids.some(isWhole)) {
-        ids = ids.filter((x) => !isWhole(x));
-        showToast('換角包一次只能啟用一個,已取消先前勾選的換角包');
-      }
-      ids.push(id);
-    }
+    const { ids, replacedWhole } = PackFormat.selectPack(activePackIds, packs, id, on);
+    if (replacedWhole) showToast('換角包一次只能啟用一個,已取消先前勾選的換角包');
     try {
       await api.setActivePackIds(ids);
       activePackIds = ids;

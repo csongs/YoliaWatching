@@ -4,7 +4,7 @@
 (function () {
   const root = () => document.getElementById('market-root');
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  const keyOf = (id) => String(id).replace(/\./g, '_');
+  const keyOf = PackFormat.packKeyOf;
 
   const URL_KEY = 'yolia.marketplaceUrl';
   // 無預設 registry(ADR-005:GitHub registry 路線已由中央平台取代,平台網址由
@@ -60,50 +60,27 @@
     return res.json();
   }
 
-  // 使用者貼什麼都盡量接(依序嘗試;實測 2026-07-10,詳 docs/designs/market-platform.md):
-  //   1. 含 /index.json → 原樣抓(平台首頁底部顯示的 Registry URL)
-  //   2. 資料庫根網址(可帶 ?ns=,emulator 用)→ 補 /index.json 再抓
-  //   3. 平台網站網址 → 抓站上部署的 firebase-config.js 挖 databaseURL
+  // 使用者貼什麼都盡量接(依序嘗試;實測 2026-07-10,詳 docs/designs/market-platform.md)。
+  // URL 猜測與 firebase-config.js 解析都是純字串邏輯,收在 PackFormat(格式邏輯一律在
+  // packFormat.js,見檔頭);這裡只留三步的 fetch/try-catch 排序(I/O 編排)。
   async function resolveIndex(input) {
-    let u = String(input).trim().replace(/\/+$/, '');
-    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
-    if (/\/index\.json(\?|$)/.test(u)) return { url: u, data: await fetchJson(u) };
-    const qi = u.indexOf('?');
-    const guess = qi === -1 ? u + '/index.json'
-      : u.slice(0, qi).replace(/\/+$/, '') + '/index.json' + u.slice(qi);
+    const guess = PackFormat.guessIndexUrl(input);   // 步驟 1(literal)/2(補 /index.json)
+    if (guess.isLiteral) return { url: guess.url, data: await fetchJson(guess.url) };
     try {
-      return { url: guess, data: await fetchJson(guess) };
+      return { url: guess.url, data: await fetchJson(guess.url) };
     } catch (e) {
       if (!e.notIndex) throw e;                      // 連線失敗/權限錯:原樣回報
     }
-    try {
-      const origin = new URL(u).origin;
+    try {                                             // 步驟 3:平台網站網址 → firebase-config.js
+      const origin = new URL(guess.normalizedInput).origin;
       const txt = await (await fetch(origin + '/firebase-config.js', { cache: 'no-store' })).text();
-      const m = txt.match(/databaseURL:\s*["']([^"']+)["']/);
-      if (m) {
-        const dbUrl = m[1].replace(/\/+$/, '') + '/index.json';
-        return { url: dbUrl, data: await fetchJson(dbUrl) };
-      }
+      const dbUrl = PackFormat.extractIndexUrlFromFirebaseConfig(txt);
+      if (dbUrl) return { url: dbUrl, data: await fetchJson(dbUrl) };
     } catch (e2) { /* 走下面的統一提示 */ }
     throw new Error('這個位址找不到市集資料。貼平台網站網址(部署版可自動偵測),或開平台首頁把最下方的 Registry URL 整串複製過來(本機 emulator 必須用這串)');
   }
 
-  // 兩種 index 格式都收(ADR-005):
-  //   陣列 = GitHub registry(每項自帶 packUrl)
-  //   物件 = 中央平台 RTDB REST 的 /index.json(key→條目;packUrl 由 registry 根組出
-  //          `<根>/packs/<key>.json`,即平台 /packs 節點的 REST 端點)
-  // 查詢字串要原樣帶到 packUrl——RTDB emulator 靠 ?ns=<namespace> 選資料庫,丟掉就 404
-  function normalizeIndex(data, url) {
-    if (Array.isArray(data)) return data;
-    if (!data || typeof data !== 'object') return [];
-    const m = String(url).match(/^(.*?)\/index\.json(\?.*)?$/);
-    const base = m ? m[1] : String(url).replace(/\/index\.json.*$/, '');
-    const qs = (m && m[2]) || '';
-    return Object.entries(data).map(([key, it]) => ({
-      ...it,
-      packUrl: it.packUrl ?? (base + '/packs/' + key + '.json' + qs),
-    }));
-  }
+  const normalizeIndex = PackFormat.normalizeIndex;
 
   function renderUnconfigured() {
     root().innerHTML = `
@@ -246,11 +223,10 @@
       render();
       showToast('已安裝「' + pack.name + '」');
       if (confirm('立即啟用「' + pack.name + '」?')) {
-        // 勾選制:附加到已啟用清單;換角包一次只能一個(同 workshop 規則)
-        const isWhole = (pid) => installed[keyOf(pid)] && installed[keyOf(pid)].base !== 'builtin';
-        let ids = (await api.getActivePackIds()).filter((x) => x !== pack.id);
-        if (pack.base !== 'builtin') ids = ids.filter((x) => !isWhole(x));
-        ids.push(pack.id);
+        // 勾選制:附加到已啟用清單;互斥規則(換角包一次只能一個)同 workshop,收在 PackFormat.selectPack
+        const currentIds = await api.getActivePackIds();
+        const { ids, replacedWhole } = PackFormat.selectPack(currentIds, installed, pack.id, true);
+        if (replacedWhole) showToast('換角包一次只能啟用一個,已取消先前勾選的換角包');
         await api.setActivePackIds(ids);
         showToast('已啟用');
       }

@@ -21,10 +21,17 @@
 | 設定存放 | RTDB `/config` | 本機 `config.json` + `%APPDATA%\YoliaWatching\animations.json`；角色包存同目錄 `packs.json`（ADR-004；dev 模式=yuupeek/，已 gitignore） |
 | 版本發布 | push main → GitHub Actions 部署 | electron-builder → GitHub Releases（`npm run release`） |
 
-共用核心（isomorphic，單一源頭在 yuupeek/）：
+共用核心（isomorphic，單一源頭在 yuupeek/，經 sync.js 複製到 web/public/）：
 - `yuupeek/renderer/character.js` — canvas 動畫引擎
 - `yuupeek/src/chatProcessor.js` — 訊息處理純函數
+- `yuupeek/src/packFormat.js` — 角色包格式驗證/合併/市集 index 相容(規格 docs/specs/character-pack-format.md)
+- `yuupeek/src/youtubePollPolicy.js` — YouTube 找直播節奏/quota 錯誤判斷(2026-07-25 從
+  chatListener.js 與 index.html 各自手刻的重複邏輯收斂而來)
 - `yuupeek/renderer/panel.html` — 控制面板（內建 DataAdapter：web 模式走 Firebase，桌面模式走 localhost API；見 panel.html 的 `initApp()`，約 L816–916）
+
+桌面版專屬(electron 無關,可獨立單元測試)：
+- `yuupeek/src/packStore.js` — packs.json 讀寫+啟用中包合併(2026-07-25 從 main.js 拆出;
+  main.js 本身因 require('electron') 無法在 jest 下跑,拆出的模組才有測試)
 
 ## 3. 部署模型（雲端版）
 
@@ -162,11 +169,13 @@ index.html 訂閱處理（約 L351–383）、[yuupeek/default.config.json](../y
 
 ## 10. 測試與本機開發
 
-- 測試：`cd yuupeek && npm test`（jest@30 + jsdom）。8 個測試檔在 `yuupeek/src/__tests__/`：
+- 測試：`cd yuupeek && npm test`（jest@30 + jsdom）。10 個測試檔在 `yuupeek/src/__tests__/`：
   `character`、`chatListener`（2026-07-10 重寫，對齊 createChatListener API）、
   `chatProcessor`（2026-07-10 建）、`detector`、`obsServer`、`packFormat`、
-  `stateMachine`、`syncManifest`（sync 清單守門）。
-  【事實，2026-07-10 實測】基線**全綠**（8 suites / 84 tests）。
+  `packStore`（2026-07-25 新增，electron 無關）、`stateMachine`、
+  `syncManifest`（sync 清單守門）、`youtubePollPolicy`（2026-07-25 新增）。
+  【事實，2026-07-25 實測】基線**全綠**（10 suites / 131 tests）。main.js 因
+  `require('electron')` 無法在 jest 下跑，沒有對應測試檔（拆出去的 packStore.js 例外）。
 - 桌面版：`npm start`；角色沙盒本機測試：`npm run test-ui`（`yuupeek/test-server.js` 在
   port 3001 服務 test.html；沙盒讀不到 RTDB/animations.json 的自訂動畫，且必有兩種已知
   console 紅字——WS 重連與 pet-config 404，詳 PLAYBOOK §2）。

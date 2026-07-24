@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
+const { resolveActivePackIds } = require('./packFormat');
 
 const MIME = {
   '.html': 'text/html',
@@ -292,10 +293,8 @@ function createObsServer(config, rootDir) {
 
     if (req.url === '/panel/api/active-pack' && req.method === 'POST') {
       readBody(req).then(body => {
-        // 新介面收陣列;舊 body 只有 activePackId 時折成單元素陣列
-        const ids = Array.isArray(body.activePackIds)
-          ? body.activePackIds
-          : (body.activePackId ? [body.activePackId] : []);
+        // 新介面收陣列;舊 body 只有 activePackId 時折成單元素陣列(折算邏輯見 packFormat.js)
+        const ids = resolveActivePackIds(body);
         panelHandlers?.setActivePackIds?.(ids);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));

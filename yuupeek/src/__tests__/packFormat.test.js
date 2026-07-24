@@ -1,4 +1,4 @@
-const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions } = require('../packFormat');
+const { validatePack, packToAnimations, sliceGeometry, defaultLoop, applyDefaultInteractions, buildAnimationsUpdate, mergeActivePacks, isValidStateName, compareVersions, packKeyOf, resolveActivePackIds, packIdsCompatFields, selectPack, guessIndexUrl, extractIndexUrlFromFirebaseConfig, normalizeIndex } = require('../packFormat');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -303,6 +303,125 @@ describe('compareVersions(市集更新判斷)', () => {
   test('非法輸入不炸,當 0 處理', () => {
     expect(compareVersions('abc', '1.0.0')).toBeLessThan(0);
     expect(compareVersions(undefined, undefined)).toBe(0);
+  });
+});
+
+describe('packKeyOf', () => {
+  test('id 的「.」換成底線', () => {
+    expect(packKeyOf('fans.yolia-extras')).toBe('fans_yolia-extras');
+  });
+});
+
+describe('resolveActivePackIds(舊 activePackId ↔ 新 activePackIds 相容折算)', () => {
+  test('有 activePackIds 陣列:直接回傳(濾掉非字串/空字串)', () => {
+    expect(resolveActivePackIds({ activePackIds: ['a.one', '', 42, 'b.two'] })).toEqual(['a.one', 'b.two']);
+  });
+  test('只有舊欄位 activePackId:折成單元素陣列', () => {
+    expect(resolveActivePackIds({ activePackId: 'a.one' })).toEqual(['a.one']);
+  });
+  test('activePackIds 優先於 activePackId(就算前者是空陣列)', () => {
+    expect(resolveActivePackIds({ activePackIds: [], activePackId: 'a.one' })).toEqual([]);
+  });
+  test('兩者都沒有:空陣列', () => {
+    expect(resolveActivePackIds({})).toEqual([]);
+    expect(resolveActivePackIds(undefined)).toEqual([]);
+  });
+});
+
+describe('packIdsCompatFields(寫回新舊相容欄位)', () => {
+  test('非空陣列:activePackIds=原陣列,activePackId=第一個', () => {
+    expect(packIdsCompatFields(['a.one', 'b.two'])).toEqual({ activePackIds: ['a.one', 'b.two'], activePackId: 'a.one' });
+  });
+  test('空陣列/非陣列輸入:兩欄位都是 null', () => {
+    expect(packIdsCompatFields([])).toEqual({ activePackIds: null, activePackId: null });
+    expect(packIdsCompatFields(undefined)).toEqual({ activePackIds: null, activePackId: null });
+  });
+});
+
+describe('selectPack(換角包互斥規則)', () => {
+  const whole1 = { id: 'w.one', base: undefined };
+  const whole2 = { id: 'w.two', base: undefined };
+  const ext1   = extPack({ id: 'e.one' });
+  const packsByKey = { w_one: whole1, w_two: whole2, e_one: ext1 };
+
+  test('啟用一個換角包,目前沒有其他換角包:直接加入', () => {
+    const r = selectPack([], packsByKey, 'w.one', true);
+    expect(r).toEqual({ ids: ['w.one'], replacedWhole: false });
+  });
+
+  test('啟用第二個換角包:頂掉第一個,標記 replacedWhole', () => {
+    const r = selectPack(['w.one'], packsByKey, 'w.two', true);
+    expect(r).toEqual({ ids: ['w.two'], replacedWhole: true });
+  });
+
+  test('擴充包不受換角包互斥規則限制,可疊加', () => {
+    const r = selectPack(['w.one'], packsByKey, 'e.one', true);
+    expect(r).toEqual({ ids: ['w.one', 'e.one'], replacedWhole: false });
+  });
+
+  test('停用(on=false):只移除,不觸發互斥規則', () => {
+    const r = selectPack(['w.one', 'e.one'], packsByKey, 'w.one', false);
+    expect(r).toEqual({ ids: ['e.one'], replacedWhole: false });
+  });
+
+  test('id 在 packsByKey 查不到(如已刪除的包):視為非換角包,不觸發互斥', () => {
+    const r = selectPack(['w.one'], packsByKey, 'missing.pack', true);
+    expect(r).toEqual({ ids: ['w.one', 'missing.pack'], replacedWhole: false });
+  });
+});
+
+describe('guessIndexUrl(市集位址→候選 index.json URL)', () => {
+  test('已經是 index.json:原樣使用,isLiteral=true', () => {
+    expect(guessIndexUrl('https://x.web.app/index.json')).toEqual({
+      url: 'https://x.web.app/index.json', isLiteral: true, normalizedInput: 'https://x.web.app/index.json',
+    });
+  });
+  test('保留查詢字串(RTDB emulator 的 ?ns=)', () => {
+    const r = guessIndexUrl('https://x.web.app/index.json?ns=demo');
+    expect(r).toEqual({ url: 'https://x.web.app/index.json?ns=demo', isLiteral: true, normalizedInput: 'https://x.web.app/index.json?ns=demo' });
+  });
+  test('網站網址:補 /index.json', () => {
+    const r = guessIndexUrl('x.web.app');
+    expect(r).toEqual({ url: 'https://x.web.app/index.json', isLiteral: false, normalizedInput: 'https://x.web.app' });
+  });
+  test('資料庫根網址帶 ?ns=:補在 /index.json 之後,查詢字串不遺失', () => {
+    const r = guessIndexUrl('https://x.web.app?ns=demo');
+    expect(r.url).toBe('https://x.web.app/index.json?ns=demo');
+    expect(r.isLiteral).toBe(false);
+  });
+  test('沒有 https:// 前綴一律補上', () => {
+    expect(guessIndexUrl('x.web.app').url).toBe('https://x.web.app/index.json');
+  });
+});
+
+describe('extractIndexUrlFromFirebaseConfig', () => {
+  test('挖得到 databaseURL:組出 index.json 位址', () => {
+    const text = "const FIREBASE_CONFIG = { databaseURL: 'https://x-default-rtdb.firebaseio.com/' };";
+    expect(extractIndexUrlFromFirebaseConfig(text)).toBe('https://x-default-rtdb.firebaseio.com/index.json');
+  });
+  test('挖不到:回傳 null', () => {
+    expect(extractIndexUrlFromFirebaseConfig('not a config file')).toBeNull();
+    expect(extractIndexUrlFromFirebaseConfig(undefined)).toBeNull();
+  });
+});
+
+describe('normalizeIndex(市集 index 格式相容,ADR-005)', () => {
+  test('陣列格式(GitHub registry)原樣回傳', () => {
+    const arr = [{ id: 'a.one', packUrl: 'https://x/a.one.json' }];
+    expect(normalizeIndex(arr, 'https://x/index.json')).toBe(arr);
+  });
+  test('物件格式(中央平台):補出 packUrl,保留查詢字串', () => {
+    const data = { a_one: { id: 'a.one', name: 'A' } };
+    const r = normalizeIndex(data, 'https://x-default-rtdb.firebaseio.com/index.json?ns=demo');
+    expect(r).toEqual([{ id: 'a.one', name: 'A', packUrl: 'https://x-default-rtdb.firebaseio.com/packs/a_one.json?ns=demo' }]);
+  });
+  test('物件格式已有 packUrl:不覆蓋', () => {
+    const data = { a_one: { id: 'a.one', packUrl: 'https://cdn.example/a.json' } };
+    const r = normalizeIndex(data, 'https://x/index.json');
+    expect(r[0].packUrl).toBe('https://cdn.example/a.json');
+  });
+  test('不是陣列也不是物件:空陣列', () => {
+    expect(normalizeIndex(null, 'https://x/index.json')).toEqual([]);
   });
 });
 
