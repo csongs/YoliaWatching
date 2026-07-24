@@ -1,6 +1,6 @@
 const tmi = require('tmi.js');
 const { google } = require('googleapis');
-const { buildHandlers, computeState, processMessage: processMsg } = require('./chatProcessor');
+const { buildHandlers, computeState, processMessage: processMsg, planMessageEffects } = require('./chatProcessor');
 const YoutubePollPolicy = require('./youtubePollPolicy');
 
 function createChatListener(config, sm, broadcast) {
@@ -11,17 +11,17 @@ function createChatListener(config, sm, broadcast) {
     const r = processMsg(text, username, handlers, sm.yolia_see, thresholds);
     sm.yolia_see = r.yolia_see;
     sm.state     = r.state;
+    if (!r.costDenied) console.log(`[${source}] → yolia_see:${sm.yolia_see} state:${sm.state}`);
 
-    if (r.costDenied) {
-      broadcast({ value: sm.yolia_see, state: sm.state, speech: r.speech });
-      setTimeout(() => broadcast({ value: sm.yolia_see, state: sm.state }), 3000);
-      return;
-    }
-
-    console.log(`[${source}] → yolia_see:${sm.yolia_see} state:${sm.state}`);
-    broadcast({ value: sm.yolia_see, state: sm.state, animOnly: r.animOnly, speech: r.speech });
-    if (r.resetState !== null) {
-      setTimeout(() => { sm.state = r.resetState; broadcast({ value: sm.yolia_see, state: sm.state }); }, 3000);
+    // 「何時套用什麼」的決策收在 chatProcessor.planMessageEffects(雲端 overlay 共用同一份);
+    // 這裡只負責把 patch 餵給 broadcast,以及桌面版特有的 sm.state 持久化(供 getStatus 等讀取)。
+    const { immediate, delayed } = planMessageEffects(r, sm.yolia_see);
+    broadcast(immediate);
+    if (delayed) {
+      setTimeout(() => {
+        sm.state = delayed.patch.state;
+        broadcast(delayed.patch);
+      }, delayed.delayMs);
     }
   }
 

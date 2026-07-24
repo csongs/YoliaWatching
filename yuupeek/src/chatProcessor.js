@@ -71,5 +71,24 @@
     return { yolia_see, state: computed, animOnly: false, speech: null, costDenied: false, resetState: null };
   }
 
-  return { buildHandlers, computeState, processMessage };
+  // 純函數:規劃 processMessage 結果「何時套用什麼」,呼叫端(桌面 broadcast/
+  // 雲端 char.applyUpdate)只負責把 patch 餵給自己的 sink,不必各自重刻這段時序決策。
+  // costDenied:立即顯示提示,3 秒後回復原狀(不含 speech)。
+  // 一般訊息:立即套用;若 resetState 不為 null(播完要回的狀態),3 秒後回復成該狀態。
+  function planMessageEffects(r, yolia_see) {
+    if (r.costDenied) {
+      return {
+        immediate: { value: yolia_see, state: r.state, speech: r.speech },
+        delayed:   { delayMs: 3000, patch: { value: yolia_see, state: r.state } },
+      };
+    }
+    return {
+      immediate: { value: yolia_see, state: r.state, animOnly: r.animOnly, speech: r.speech },
+      delayed: r.resetState !== null
+        ? { delayMs: 3000, patch: { value: yolia_see, state: r.resetState } }
+        : null,
+    };
+  }
+
+  return { buildHandlers, computeState, processMessage, planMessageEffects };
 });

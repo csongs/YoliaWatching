@@ -1,4 +1,4 @@
-const { buildHandlers, computeState, processMessage } = require('../chatProcessor');
+const { buildHandlers, computeState, processMessage, planMessageEffects } = require('../chatProcessor');
 
 describe('computeState', () => {
   const thresholds = [
@@ -92,5 +92,27 @@ describe('processMessage — keyword 與一般訊息', () => {
     expect(r.yolia_see).toBe(43);
     expect(r.speech).toBeNull();
     expect(r.animOnly).toBe(false);
+  });
+});
+
+describe('planMessageEffects(桌面 chatListener.js 與雲端 index.html 共用的套用時機決策)', () => {
+  test('costDenied:立即顯示提示(不含 animOnly),3 秒後回復(不含 speech)', () => {
+    const r = { costDenied: true, resetState: null, animOnly: false, state: 'idle', speech: '幽視值不足' };
+    const plan = planMessageEffects(r, 10);
+    expect(plan.immediate).toEqual({ value: 10, state: 'idle', speech: '幽視值不足' });
+    expect(plan.delayed).toEqual({ delayMs: 3000, patch: { value: 10, state: 'idle' } });
+  });
+
+  test('一般訊息 + resetState:立即套用,3 秒後回復成 resetState', () => {
+    const r = { costDenied: false, resetState: 'idle', animOnly: true, state: 'jump', speech: null };
+    const plan = planMessageEffects(r, 20);
+    expect(plan.immediate).toEqual({ value: 20, state: 'jump', animOnly: true, speech: null });
+    expect(plan.delayed).toEqual({ delayMs: 3000, patch: { value: 20, state: 'idle' } });
+  });
+
+  test('一般訊息 + resetState 為 null:沒有延遲效果', () => {
+    const r = { costDenied: false, resetState: null, animOnly: false, state: 'peek', speech: null };
+    const plan = planMessageEffects(r, 30);
+    expect(plan.delayed).toBeNull();
   });
 });

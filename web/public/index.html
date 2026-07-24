@@ -73,17 +73,13 @@
     const sm = { yolia_see: 0 };
     let thresholds = [];
 
+    // 「何時套用什麼」的決策收在 chatProcessor.planMessageEffects(桌面版 chatListener.js 共用)
     function onMessage(text, username) {
       const r = ChatProcessor.processMessage(text, username, handlers, sm.yolia_see, thresholds);
       sm.yolia_see = r.yolia_see;
-      char.applyUpdate({ value: sm.yolia_see, state: r.state, animOnly: r.animOnly, speech: r.speech });
-      if (r.costDenied) {
-        setTimeout(() => char.applyUpdate({ value: sm.yolia_see, state: r.state }), 3000);
-        return;
-      }
-      if (r.resetState !== null) {
-        setTimeout(() => char.applyUpdate({ value: sm.yolia_see, state: r.resetState }), 3000);
-      }
+      const { immediate, delayed } = ChatProcessor.planMessageEffects(r, sm.yolia_see);
+      char.applyUpdate(immediate);
+      if (delayed) setTimeout(() => char.applyUpdate(delayed.patch), delayed.delayMs);
     }
 
     let handlers = ChatProcessor.buildHandlers([]);
