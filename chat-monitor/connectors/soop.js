@@ -20,6 +20,7 @@
 // metadata(見 node_modules/soop-extension/dist/chat/chat.js 的 getJoinPacket()),不會被這樣
 // 短命地踢斷,但需要使用者自己的 SOOP 帳密,尚未實作。
 const { DEBUG, debugLog } = require('../lib/debugLog');
+const { RAW_CAPTURE, rawCapture } = require('../lib/rawCapture');
 
 const RETRY_INTERVAL_MS = 30_000; // 主播還沒開台時多久查一次(跟 youtube connector 的 RETRY_INTERVAL_MS 同數量級)
 const RECONNECT_DELAY_MS = 500; // 連線中途斷線(見檔頭)時的重連延遲——刻意很短,把監聽空窗壓到最小
@@ -71,12 +72,18 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
 
       soopChat = client.chat({ streamerId: channel });
 
-      const emit = (type, res, fields) => onEvent({
-        platform: 'soop', sourceDetail: 'community', eventType: type,
-        dedupKey: dedupKeyFor(type, res),
-        receivedAt: res.receivedTime || new Date().toISOString(),
-        ...fields,
-      });
+      const emit = (type, res, fields) => {
+        // CHAT_MONITOR_RAW_CAPTURE=1 才會寫:存 soop-extension 給的原始 res 物件(還沒被我們
+        // 挑欄位、重新命名之前),不是存 fields 裡我們自己詮釋過的結果——像 SUBSCRIBE 那個
+        // monthCount/amount 對不起來的 bug,只看我們自己輸出的結果看不出來,得比對原始物件。
+        if (RAW_CAPTURE && type !== 'chat') rawCapture('soop', type, res);
+        return onEvent({
+          platform: 'soop', sourceDetail: 'community', eventType: type,
+          dedupKey: dedupKeyFor(type, res),
+          receivedAt: res.receivedTime || new Date().toISOString(),
+          ...fields,
+        });
+      };
 
       soopChat.on(SoopChatEvent.CHAT, (res) => emit('chat', res, {
         username: res.username, message: res.comment, amount: null, extra: { userId: res.userId },
@@ -107,6 +114,10 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
       // packet.split(SEPARATOR) 之後的完整陣列,parts[0] 開頭含 type code,自己抓出來判斷。
       soopChat.on(SoopChatEvent.UNKNOWN, (parts) => {
         const type = parts[0]?.substring(2, 6);
+        // 不管認不認得這個 type 都先存下來(只要開了 RAW_CAPTURE)——GIFT_ITEM_TYPE 之外還有
+        // 好幾種目前完全沒處理的未知封包(之前抓包時見過 0110/0054/0090/0094),讓它們自動被
+        // 記下來,之後要查就不用重寫一次性診斷腳本。
+        if (RAW_CAPTURE) rawCapture('soop', `unknown_${type}`, parts);
         if (type !== GIFT_ITEM_TYPE) return;
         const receivedTime = new Date().toISOString();
         const toUsername = parts[5] ?? null;

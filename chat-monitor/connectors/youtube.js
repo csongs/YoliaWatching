@@ -10,6 +10,8 @@
 // 「新加入/連續/贈禮」——因此這裡只留 chat(一般會員留言會多帶 extra.isMembership)、superchat、
 // supersticker 三種事件,不再產生 membership_new/_milestone/_gift/_gift_received。
 const { LiveChat, NotLiveError } = require('youtube-chat-next');
+const { debugLog } = require('../lib/debugLog');
+const { RAW_CAPTURE, rawCapture } = require('../lib/rawCapture');
 
 const NOT_LIVE_RETRY_MS = 30_000; // 套件的 start() 失敗或 loop 結束後不會自動重試,連接器自己排下一次嘗試
 
@@ -92,16 +94,26 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
     retryTimer = setTimeout(attemptStart, NOT_LIVE_RETRY_MS);
   }
 
+  // 之前只有 SOOP 有連線層級的 debugLog(連上/斷線/錯誤),Twitch/YouTube 完全沒有,三平台
+  // 除錯能見度不對稱(user 發現的落差)——這裡補齊,跟 soop.js 同樣的詳細程度。
   function attachHandlers(chat) {
-    chat.on('start', () => onStatus({ live: true, error: null }));
-    chat.on('chat', (item) => onEvent({ platform: 'youtube', dedupKey: item.id, ...classifyItem(item) }));
+    chat.on('start', (liveId) => { debugLog('youtube', 'started', { liveId }); onStatus({ live: true, error: null }); });
+    chat.on('chat', (item) => {
+      // CHAT_MONITOR_RAW_CAPTURE=1 才會寫,一般聊天(沒有 superchat 也不是會員)跳過,只存
+      // youtube-chat-next 解析完的完整 ChatItem(比我們自己 classifyItem() 篩選過的欄位更完整,
+      // 之後要查有沒有漏掉的欄位可以直接比對)。
+      if (RAW_CAPTURE && (item.superchat || item.isMembership)) rawCapture('youtube', item.superchat ? 'superchat' : 'membership', item);
+      onEvent({ platform: 'youtube', dedupKey: item.id, ...classifyItem(item) });
+    });
     chat.on('error', (err) => {
       // 沒開台是預期狀態,不當錯誤顯示;loop 結束(含 5 次連續錯誤後套件自己 stop)一律交給
       // 'end' 事件觸發重試,這裡只負責更新狀態列文字,避免 'error' 跟 'end' 都排一次重試。
       if (err instanceof NotLiveError) { onStatus({ live: false, error: null }); return; }
+      debugLog('youtube', 'error', { message: err?.message || String(err) });
       onStatus({ live: false, error: err?.message || String(err) });
     });
-    chat.on('end', () => {
+    chat.on('end', (reason) => {
+      debugLog('youtube', 'ended', { reason: reason ?? null });
       onStatus({ live: false, error: null });
       scheduleRetry();
     });
@@ -112,6 +124,7 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
     liveChat = new LiveChat(toYoutubeId(channel));
     attachHandlers(liveChat);
     const ok = await liveChat.start();
+    debugLog('youtube', 'start() result', { ok });
     if (!ok) scheduleRetry();
   }
 

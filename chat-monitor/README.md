@@ -56,6 +56,21 @@ npm run package
 
 `data/` 整個目錄已加進 `.gitignore`，不會被 commit。
 
+## 除錯與抓包（環境變數，可寫進 chat-monitor/.env）
+
+- `CHAT_MONITOR_DEBUG=1`：三個平台一致——連上/斷線/錯誤都會印，同時印到 console 跟寫進
+  `data/debug.log`。SOOP 額外印斷線時的原始 WebSocket close code；YouTube 額外印
+  `start()`/`end()` 的結果跟原因。（2026-08-13 前只有 SOOP 有這個層級的 log，Twitch/YouTube
+  完全沒有，已補齊到同樣詳細程度。）
+- `CHAT_MONITOR_RAW_CAPTURE=1`：把「一般聊天以外」的所有事件，存進
+  `data/raw-capture.jsonl`（JSON Lines，一行一筆）——存的是各平台函式庫給我們的**原始**
+  回應物件（`res`/`tags`/`ChatItem`），不是我們自己篩選/重新命名過的欄位，所以像 SOOP
+  `subscribe` 那種「我們自己讀錯欄位名稱」的 bug，比對這份原始紀錄就看得出來，不用像
+  `gift_item`/徽章那幾次一樣，另外寫一次性診斷腳本連線抓包。SOOP 這邊額外會把完全不認識
+  的封包類型（`unknown_<type code>`）也記下來，方便之後補齊套件沒解析的事件（已知的舊
+  類型見「已知限制」的 `gift_item` 說明；2026-08-13 實測另外抓到一個新的 `unknown_0012`，
+  疑似「使用者進入聊天室」的廣播通知，尚未解讀）。兩個變數預設都關閉，不影響正常監聽。
+
 ## 三平台涵蓋的事件類型
 
 | 平台 | 一般聊天 | 特殊聊天類型 | 抖內/贊助類 |
