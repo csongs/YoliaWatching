@@ -93,8 +93,12 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
       soopChat.on(SoopChatEvent.AD_BALLOON_DONATION, (res) => emit('ad_balloon_donation', res, {
         username: res.fromUsername, message: null, amount: res.amount, extra: { fanClubOrdinal: res.fanClubOrdinal },
       }));
+      // soop-extension 的 .d.ts 宣稱 SubscribeResponse 有 monthCount 欄位,但實際
+      // parseSubscribe()(dist/chat/chat.js:169-173)回傳的物件裡月數其實叫 amount——
+      // .d.ts 跟實作對不起來,讀 res.monthCount 永遠是 undefined,月數就顯示不出來
+      // (user 實測回報「訂閱2個月但顯示沒有兩個月」)。改讀實際存在的 res.amount。
       soopChat.on(SoopChatEvent.SUBSCRIBE, (res) => emit('subscribe', res, {
-        username: res.fromUsername, message: null, amount: res.monthCount, extra: { tier: res.tier },
+        username: res.fromUsername, message: null, amount: res.amount, extra: { tier: res.tier },
       }));
       soopChat.on(SoopChatEvent.NOTIFICATION, (res) => emit('notification', res, {
         username: null, message: res.notification, amount: null, extra: null,

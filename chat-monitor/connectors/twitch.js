@@ -47,13 +47,20 @@ function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
       });
     });
 
-    client.on('resub', (_ch, username, months, message, userstate) => {
+    client.on('resub', (_ch, username, streakMonths, message, userstate) => {
+      // tmi.js 把 msg-param-streak-months(連續訂閱月數)當成 months 參數傳出來,不是累積訂閱
+      // 月數——使用者可以在 Twitch 選擇不分享連續訂閱紀錄,這種情況 streak-months 會是 0,但
+      // Twitch 自己畫面上顯示的月數(例如「進入第 2 個月了」)其實是 msg-param-cumulative-months
+      // 這個 tag,tmi.js 沒有把它當獨立參數傳出來(見 node_modules/tmi.js/lib/client.js:699 只取
+      // streak-months),得自己從 userstate(完整 tags)裡讀,不能信 streakMonths 這個參數
+      // (user 實測回報顯示成「續訂 0 個月」,截圖對比 Twitch 原文正確數字是 2)。
+      const cumulativeMonths = userstate?.['msg-param-cumulative-months'];
       onEvent({
         platform: 'twitch', eventType: 'resub',
-        dedupKey: userstate?.id || `resub:${username}:${months}:${Date.now()}`,
-        username, message: message || null, amount: String(months ?? ''),
+        dedupKey: userstate?.id || `resub:${username}:${cumulativeMonths ?? streakMonths}:${Date.now()}`,
+        username, message: message || null, amount: String(cumulativeMonths ?? streakMonths ?? ''),
         receivedAt: new Date().toISOString(),
-        extra: { plan: userstate?.['msg-param-sub-plan'] ?? null },
+        extra: { plan: userstate?.['msg-param-sub-plan'] ?? null, streakMonths: streakMonths ?? null },
       });
     });
 

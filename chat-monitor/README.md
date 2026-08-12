@@ -100,3 +100,11 @@ YouTube 這邊是即時輪詢（`youtube-chat-next`），不會回放開播以�
 - Twitch 的頻道點數兌換只能偵測「醒目留言」這種會出現在一般聊天訊息裡、帶
   `custom-reward-id` tag 的兌換項目；不會出現在聊天訊息裡的其他兌換（例如純粹的音效/
   特效類獎勵）不會被聽到，因為那些不走 IRC 聊天訊息，需要另外接 EventSub。
+- **Twitch cheer 目前只有 bits 數字，沒有 Cheermote 圖片/動畫**（2026-08-13 使用者提供的
+  研究方向，尚未實作，先記錄）：官方 Helix API `GET /helix/bits/cheermotes`
+  （<https://dev.twitch.tv/docs/api/reference/#get-cheermotes>）能拿到每一階 tier 對應的
+  圖片網址（dark/light、animated/static、多種尺寸），比自己畫圖或猜測可靠；更進階可以用
+  EventSub `channel.bits.use` 訂閱拿結構化事件（fragments 已經把文字跟 cheermote 位置拆好，
+  不用自己寫 regex 解析）。實作門檻：這兩者都需要 Twitch 開發者帳號的 **Client-ID**（Helix
+  App/User Access Token 都要搭 Client-ID），跟現在 `connectors/twitch.js` 只用 `tmi.js`
+  走 IRC、只填 OAuth Token 的方式不同，需要額外的憑證管理流程；使用者已決定暫不實作。
