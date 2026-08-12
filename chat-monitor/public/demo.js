@@ -252,6 +252,21 @@
     return true;
   }
 
+  // Twitch resub 跟 SOOP subscribe 的 amount 存的是「已訂閱幾個月」(見 connectors/twitch.js
+  // 的 resub handler、connectors/soop.js 的 SUBSCRIBE handler),原本跟抖內金額一樣顯示成
+  // 「+7」,看不出來是月數;這兩種明確標成「已訂閱 N 個月」。YouTube 沒有對應的事件——
+  // youtube-chat-next 只給得出 isMembership 布林值,沒有月數資料,顯示不出來是資料源頭的限制,
+  // 不是這裡漏接。
+  const SUBSCRIPTION_MONTHS_TYPES = new Set(['subscribe', 'resub']);
+
+  function formatAmount(evt) {
+    if (!evt.amount) return '';
+    if (SUBSCRIPTION_MONTHS_TYPES.has(evt.event_type)) {
+      return `<span class="amount">已訂閱 ${escapeHtml(evt.amount)} 個月</span>`;
+    }
+    return `<span class="amount">+${escapeHtml(evt.amount)}</span>`;
+  }
+
   function renderLine(evt) {
     const cat = eventCategory(evt);
     const div = document.createElement('div');
@@ -259,7 +274,7 @@
     const dt = new Date(evt.received_at);
     const time = dt.toLocaleTimeString('zh-TW', { hour12: false });
     const fullDateTime = dt.toLocaleString('zh-TW', { hour12: false }); // hover 用,含日期,跨天監聽也看得出來
-    const amount = evt.amount ? `<span class="amount">+${evt.amount}</span>` : '';
+    const amount = formatAmount(evt);
     const msg = evt.message ? escapeHtml(evt.message) : '';
     // 一般聊天訊息(event_type 'chat')每則都會重複同一個灰色「一般訊息」標籤,量大時是純雜訊,
     // 省略不顯示;抖內/會員/系統通知等特殊事件的類型標籤還是保留,因為那才是使用者想一眼看到的資訊。

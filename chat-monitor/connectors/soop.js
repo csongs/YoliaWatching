@@ -105,9 +105,13 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
         const type = parts[0]?.substring(2, 6);
         if (type !== GIFT_ITEM_TYPE) return;
         const receivedTime = new Date().toISOString();
+        const toUsername = parts[5] ?? null;
+        // 禮物項目名稱(「1個月訂閱贈送券」之類的文字)沒解出來,[6]/[7] 意義不明(見檔頭說明);
+        // 送禮者→收禮者是唯一確認過的資訊,比照 Twitch subgift(見 connectors/twitch.js)同樣
+        // 用「→ 收禮者」當 message,demo 頁面才看得出來是送給誰,不是只顯示送禮者一個人名字。
         emit('gift_item', { receivedTime, fromUsername: parts[3] }, {
-          username: parts[3] ?? null, message: null, amount: null,
-          extra: { toUsername: parts[5] ?? null, fromUserId: parts[4] ?? null, raw: parts },
+          username: parts[3] ?? null, message: toUsername ? `→ ${toUsername}` : null, amount: null,
+          extra: { toUsername, fromUserId: parts[4] ?? null, raw: parts },
         });
       });
 
