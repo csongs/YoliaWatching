@@ -79,7 +79,7 @@ function getStats() {
 // 三個平台各一列,config_json 存平台專屬欄位(channel/apiMode 等),不用另開一堆欄位。
 const DEFAULT_CONFIG = {
   twitch: { channel: '', oauthToken: '' },
-  youtube: { channel: '', apiKey: '' },
+  youtube: { channel: '' },
   soop: { channel: '', apiMode: 'community' },
 };
 

@@ -1,11 +1,12 @@
 // 獨立測試工具的伺服器——不依附 yuupeek 的 Electron 主程序或 obsServer.js,單純用
-// node server.js 啟動,也不依賴 yuupeek/ 資料夾同時存在(見 lib/youtubePollPolicy.js)。
-// 連線邏輯(tmi.js/googleapis/soop-extension 的用法)抄自 yuupeek/src/chatListener.js,
+// node server.js 啟動,也不依賴 yuupeek/ 資料夾同時存在。
+// 連線邏輯(tmi.js/youtube-chat-next/soop-extension 的用法)參考 yuupeek/src/chatListener.js,
 // 但輸出目標從「幽視值狀態機」換成「SQLite 事件歷史 + demo 頁面」。
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { WebSocketServer } = require('ws');
+const { DEBUG, debugLog } = require('./lib/debugLog');
 
 // 只在「第一次啟動、settings 表還是空的」這個情境下當方便的預設值來源(見下面
 // loadSeedFromYuupeekConfig);找不到 yuupeek/.env 也不會出錯(dotenv 對不存在的路徑
@@ -32,7 +33,7 @@ function loadSeedFromYuupeekConfig() {
   try { cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'yuupeek', 'config.json'), 'utf8')); } catch { /* 沒有就用空預設 */ }
   return {
     twitch: { enabled: !!cfg.twitch?.enabled, config: { channel: cfg.twitch?.channel ?? '', oauthToken: process.env.TWITCH_OAUTH ?? '' } },
-    youtube: { enabled: !!cfg.youtube?.enabled, config: { channel: cfg.youtube?.channel ?? '', apiKey: process.env.YOUTUBE_API_KEY ?? '' } },
+    youtube: { enabled: !!cfg.youtube?.enabled, config: { channel: cfg.youtube?.channel ?? '' } },
     soop: { enabled: !!cfg.soop?.enabled, config: { channel: cfg.soop?.channel ?? '', apiMode: cfg.soop?.apiMode ?? 'community' } },
   };
 }
@@ -60,12 +61,14 @@ function handleEvent(evt) {
 
 function handleStatus(platform, patch) {
   status[platform] = { ...status[platform], ...patch };
+  debugLog(platform, 'status ->', status[platform]);
   broadcast({ type: 'status', platform, data: status[platform] });
 }
 
 function startConnector(platform) {
   const settings = db.getSettings()[platform];
   if (!settings.enabled) return;
+  debugLog(platform, 'connector start', { channel: settings.channel });
   const factory = CONNECTOR_FACTORIES[platform];
   const connector = factory(settings, handleEvent, (patch) => handleStatus(platform, patch));
   connectors[platform] = connector;
@@ -163,6 +166,7 @@ function broadcast(msg) {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`[chat-monitor] http://127.0.0.1:${PORT}`);
   console.log(`[chat-monitor] SQLite: ${db.DB_PATH}`);
+  console.log(`[chat-monitor] debug 模式: ${DEBUG ? '開啟(log 同時寫進 data/debug.log)' : '關閉(設 CHAT_MONITOR_DEBUG=1 開啟)'}`);
 });
 
 process.on('SIGINT', () => {

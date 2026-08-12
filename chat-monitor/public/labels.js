@@ -26,10 +26,6 @@
     // --- YouTube ---
     superchat:              { label: 'Super Chat(付費醒目訊息)', category: 'donation' },
     supersticker:           { label: 'Super Sticker(付費貼圖)', category: 'donation' },
-    membership_new:         { label: '新會員', category: 'donation' },
-    membership_milestone:   { label: '會員里程碑', category: 'donation' },
-    membership_gift:        { label: '會員贈禮(贈送方)', category: 'donation' },
-    membership_gift_received: { label: '收到會員贈禮', category: 'donation' },
 
     // --- SOOP ---
     emoticon:               { label: '表情訊息', category: 'chat' },
@@ -53,7 +49,7 @@
   }
 
   // 給 DEMO 頁「說明」面板用——各平台「等級/金額」概念不一樣,不是同一把尺,
-  // 這裡只給既有實作(soop-extension / tmi.js tags / YouTube API)已經能觀察到的欄位說明,
+  // 這裡只給既有實作(soop-extension / tmi.js tags / youtube-chat-next)已經能觀察到的欄位說明,
   // 不編造未查證的官方定價或門檻數字。
   const PLATFORM_DONATION_NOTES = [
     {
@@ -66,9 +62,10 @@
     {
       platform: 'youtube',
       title: 'YouTube',
-      note: 'Super Chat / Super Sticker 依實際付款金額分色階(金額越高,訊息在聊天室置頂時間越久、顏色越顯眼),'
-          + 'API 回傳 amountMicros/currency 與 tier,可用來還原「等級」;'
-          + '會員(Membership)等級則是頻道自訂的方案名稱與月費,非平台統一標準。',
+      note: 'Super Chat / Super Sticker 依實際付款金額分色階(金額越高,訊息在聊天室置頂時間越久、顏色越顯眼);'
+          + '這裡監聽的是公開網頁聊天室(youtube-chat-next,免 API Key),只能拿到金額字串與顏色,拿不到'
+          + '官方 API 才有的 amountMicros/tier 數字;會員(Membership)也只知道「是不是會員」,分不出'
+          + '新加入/連續/贈禮是哪一種(欄位含義依 youtube-chat-next 3.1.0 型別定義,2026-08-12 查)。',
     },
     {
       platform: 'soop',

@@ -5,14 +5,15 @@
   "description": "獨立測試工具:即時監看 Twitch / YouTube / SOOP 的聊天、抖內、特殊訊息事件並存進 SQLite",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "package": "node scripts/package.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "dotenv": "^17.4.2",
-    "googleapis": "^171.4.0",
     "soop-extension": "^1.3.3",
     "tmi.js": "^1.8.5",
-    "ws": "^8.20.0"
+    "ws": "^8.20.0",
+    "youtube-chat-next": "^3.1.0"
   }
 }

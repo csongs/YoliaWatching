@@ -2,7 +2,26 @@
 // 同一顆套件),但這裡把它已經有實作、production 版沒接的事件全部攤開:表情/文字抖內/影片抖內/
 // 廣告氣球抖內/訂閱/系統通知(soop-extension/dist/chat/event.d.ts 裡列的事件清單)。
 // 官方模式(apiMode:'official')跟 chatListener.js 現況一致——尚未實作,直接回報原因。
+//
+// 2026-08-12 用 CHAT_MONITOR_DEBUG=1 實測(見下面 raw ws close 那段 log)確認:匿名(不登入)連
+// SOOP 聊天室的 WebSocket 三不五時會被伺服器用 close code 1000(「正常關閉」,wasClean:true)
+// 主動、乾淨地關掉——不是網路斷線。但撐多久沒有固定規律:同一顆頻道測到過連上 3 秒內就斷,
+// 也測到過穩定撐了 4 分多鐘才斷,兩次都是同樣的 close code。soop-extension 本身沒有自動重連或
+// 真正的保活機制(sendPing() 只送 ping,不檢查有沒有收到回應),斷線後完全要靠我們自己重連。
+//
+// 原本這裡對「連線中途斷線」做指數退避(以為連續快速斷線代表被伺服器懲罰性拒絕,退避才禮貌),
+// 但實測發現快速斷線就只是剛好連續發生,不是會因為重連頻繁而惡化的懲罰機制——用指數退避反而在
+// 那種連續快速斷線的區間裡,把大部分時間都花在「等」而不是「聽」,漏掉更多訊息(user 實測回報過)。
+// 改成固定短延遲立刻重連,把「沒在監聽」的空窗壓到最小;真正的例外(網路壞掉、API 掛掉等
+// attempt() 直接 throw 的情況)不受影響,仍然走下面 catch 區塊的 RETRY_INTERVAL_MS。
+//
+// 治本的解法是幫 SoopChat 加上登入帳密(soop-extension 的 login 選項)——有登入的連線會送完整
+// metadata(見 node_modules/soop-extension/dist/chat/chat.js 的 getJoinPacket()),不會被這樣
+// 短命地踢斷,但需要使用者自己的 SOOP 帳密,尚未實作。
+const { DEBUG, debugLog } = require('../lib/debugLog');
+
 const RETRY_INTERVAL_MS = 30_000; // 主播還沒開台時多久查一次(跟 youtube connector 的 RETRY_INTERVAL_MS 同數量級)
+const RECONNECT_DELAY_MS = 500; // 連線中途斷線(見檔頭)時的重連延遲——刻意很短,把監聽空窗壓到最小
 
 // soop-extension 的事件物件沒有唯一 id 欄位,dedup key 用「事件類型+收到時間+使用者+內容」組出來
 // (同一次連線內幾乎不可能撞相同的四元組;reconnect 不會重送歷史,所以夠用)。
@@ -18,6 +37,7 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
   let timer = null;
   let SoopClientCtor = null;
   let SoopChatEvent = null;
+  let connectedAt = 0; // 只用來在 debug log 裡記錄這次連線撐了多久,不影響重連延遲
 
   // 「主播目前沒開台」是已知且很常見的狀態,不是異常——soop-extension 的 connect() 在這種情況下
   // 會自己 throw + console.error 一份完整 stack trace(它内部 errorHandling() 的固定行為,見
@@ -70,18 +90,39 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
         username: null, message: res.notification, amount: null, extra: null,
       }));
 
-      soopChat.on(SoopChatEvent.CONNECT, () => onStatus({ connected: true, error: null }));
+      soopChat.on(SoopChatEvent.CONNECT, () => {
+        connectedAt = Date.now();
+        debugLog('soop', 'connected');
+        onStatus({ connected: true, error: null });
+      });
       soopChat.on(SoopChatEvent.DISCONNECT, () => {
-        // 直播結束是預期中的事件(soop-extension 正常 emit,不是錯誤路徑),回到輪詢下一場開台。
+        // 斷線本身是預期中的事件(soop-extension 正常 emit,不是錯誤路徑)——可能是直播真的結束,
+        // 也可能只是匿名連線被 SOOP 伺服器中途斷開(見檔頭註解),兩者從這個事件本身分不出來,
+        // 所以一律用固定短延遲快速重連(見檔頭 RECONNECT_DELAY_MS 說明——這裡刻意不做指數退避)。
         onStatus({ connected: false, error: null });
         soopChat = null;
-        if (!stopped) timer = setTimeout(attempt, RETRY_INTERVAL_MS);
+        if (stopped) return;
+        debugLog('soop', 'disconnected', { stayedConnectedMs: Date.now() - connectedAt });
+        timer = setTimeout(attempt, RECONNECT_DELAY_MS);
       });
 
       await soopChat.connect();
+
+      // soop-extension 的 disconnect() 不會帶 WebSocket 原始的 close code/reason(chat.js 裡
+      // ws.onclose 直接丟掉那個事件物件),要診斷「為什麼斷線」得自己在它裝好 onclose 之後外面再包一層。
+      // 只在 DEBUG 模式做這個 monkey patch,平常不動 soopChat.ws,避免影響正常行為。
+      if (DEBUG && soopChat?.ws) {
+        const rawWs = soopChat.ws;
+        const originalOnClose = rawWs.onclose;
+        rawWs.onclose = (ev) => {
+          debugLog('soop', 'raw ws close', { code: ev?.code, reason: ev?.reason || null, wasClean: ev?.wasClean });
+          if (typeof originalOnClose === 'function') originalOnClose(ev);
+        };
+      }
     } catch (e) {
       // 這裡才是真的沒預期到的狀況(網路錯誤等)——soop-extension 仍會自己印一份 log,
       // 我們額外把訊息餵進 status API 讓 demo 頁看得到乾淨版本。
+      debugLog('soop', 'attempt() threw', { message: e.message });
       onStatus({ connected: false, error: e.message });
       soopChat = null;
       if (!stopped) timer = setTimeout(attempt, RETRY_INTERVAL_MS);

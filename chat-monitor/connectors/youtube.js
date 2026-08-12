@@ -1,157 +1,97 @@
-// YouTube 連接器——沿用 yuupeek/src/chatListener.js 找直播/輪詢 liveChatMessages 的邏輯,
-// 额外把 snippet.type 攤開成事件類型(production 版 chatListener.js 目前只讀
-// displayMessage,SuperChat/會員事件會被吃掉,demo 這裡補上)。
-// youtubePollPolicy 用 lib/ 底下的副本(chat-monitor 要能整包獨立打包給別人測試,
-// 不能依賴 yuupeek/ 資料夾同時存在——見 lib/youtubePollPolicy.js 開頭的說明)。
-const { google } = require('googleapis');
-const YoutubePollPolicy = require('../lib/youtubePollPolicy');
+// YouTube 連接器——改用 youtube-chat-next(github.com/LucasSantana-Dev/youtube-chat-next)這個
+// 免 API Key 的公開網頁聊天室爬蟲套件,取代先前的 googleapis 官方 API 做法(search.list 每日只有
+// 100 次配額,逼得未開播時要 15 分鐘才查一次;見已刪除的 lib/youtubePollPolicy.js)。換套件後
+// YouTube 分頁不再需要填 API Key,只要 handle 或頻道 ID。
+//
+// 代價(2026-08-12 查證,youtube-chat-next 3.1.0 型別定義):官方 API 能把付費/會員事件細分成
+// superChatEvent / superStickerEvent / newSponsorEvent / memberMilestoneChatEvent /
+// membershipGiftingEvent / giftMembershipReceivedEvent 六種,這個套件是爬公開網頁聊天室,ChatItem
+// 只給 superchat?:{amount,color,sticker?} 與 isMembership:boolean 兩個欄位,沒有 tier 數字也分不出
+// 「新加入/連續/贈禮」——因此這裡只留 chat(一般會員留言會多帶 extra.isMembership)、superchat、
+// supersticker 三種事件,不再產生 membership_new/_milestone/_gift/_gift_received。
+const { LiveChat, NotLiveError } = require('youtube-chat-next');
 
-const { LIVE_CHECK_INTERVAL_MS, RETRY_INTERVAL_MS } = YoutubePollPolicy;
+const NOT_LIVE_RETRY_MS = 30_000; // 套件的 start() 失敗或 loop 結束後不會自動重試,連接器自己排下一次嘗試
 
-function createYoutubeConnector({ channel, apiKey }, onEvent, onStatus) {
+function createYoutubeConnector({ channel }, onEvent, onStatus) {
   let stopped = true;
-  let timer = null;
-  let youtubeClient = null;
-  let liveVideoId = null;
-  let resolvedChanId = null;
-  let lastSearchAt = 0;
-  let pageToken = null;
-  let paused = false;
+  let liveChat = null;
+  let retryTimer = null;
 
-  function getErrorReason(e) {
-    return e?.errors?.[0]?.reason || e?.response?.data?.error?.errors?.[0]?.reason || '';
+  function messageToText(message) {
+    return (message ?? []).map((m) => ('text' in m ? m.text : m.emojiText || m.alt || '')).join('');
   }
 
-  async function resolveLiveVideoId(youtube) {
-    if (!resolvedChanId) {
-      if (channel.startsWith('UC')) {
-        resolvedChanId = channel;
-      } else {
-        const handle = channel.startsWith('@') ? channel : `@${channel}`;
-        const res = await youtube.channels.list({ part: ['id'], forHandle: handle });
-        resolvedChanId = res.data.items?.[0]?.id ?? null;
-        if (!resolvedChanId) return null;
-      }
-    }
-    const searchRes = await youtube.search.list({
-      part: ['id'], channelId: resolvedChanId, eventType: 'live', type: 'video', maxResults: 1,
-    });
-    return searchRes.data.items?.[0]?.id?.videoId ?? null;
-  }
-
-  // snippet.type 決定事件分類;superChatDetails/superStickerDetails 帶 amountDisplayString + tier。
+  // superchat.sticker 有值代表是 Super Sticker,否則是文字 Super Chat——套件把兩者合併成同一個
+  // 欄位,跟官方 API 分成 superChatEvent/superStickerEvent 兩種事件不同。
   function classifyItem(item) {
-    const type = item.snippet?.type;
-    const username = item.authorDetails?.displayName ?? '';
-    const base = { username, receivedAt: item.snippet?.publishedAt || new Date().toISOString() };
+    const username = item.author?.name ?? '';
+    const base = { username, receivedAt: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString() };
+    const text = messageToText(item.message);
 
-    switch (type) {
-      case 'superChatEvent': {
-        const d = item.snippet.superChatDetails;
-        return { ...base, eventType: 'superchat', message: d?.userComment ?? null, amount: d?.amountDisplayString ?? null, extra: { tier: d?.tier ?? null } };
-      }
-      case 'superStickerEvent': {
-        const d = item.snippet.superStickerDetails;
-        return { ...base, eventType: 'supersticker', message: null, amount: d?.amountDisplayString ?? null, extra: { tier: d?.tier ?? null, sticker: d?.superStickerMetadata?.altText ?? null } };
-      }
-      case 'newSponsorEvent': {
-        const d = item.snippet.newSponsorDetails;
-        return { ...base, eventType: 'membership_new', message: null, amount: null, extra: { level: d?.memberLevelName ?? null } };
-      }
-      case 'memberMilestoneChatEvent': {
-        const d = item.snippet.memberMilestoneChatDetails;
-        return { ...base, eventType: 'membership_milestone', message: d?.userComment ?? null, amount: String(d?.memberMonth ?? ''), extra: { level: d?.memberLevelName ?? null } };
-      }
-      case 'membershipGiftingEvent': {
-        const d = item.snippet.membershipGiftingDetails;
-        return { ...base, eventType: 'membership_gift', message: null, amount: String(d?.giftMembershipsCount ?? ''), extra: { level: d?.giftMembershipsLevelName ?? null } };
-      }
-      case 'giftMembershipReceivedEvent': {
-        const d = item.snippet.giftMembershipReceivedDetails;
-        return { ...base, eventType: 'membership_gift_received', message: null, amount: null, extra: { gifterName: d?.gifterChannelId ?? null } };
-      }
-      case 'textMessageEvent':
-      default:
-        return { ...base, eventType: 'chat', message: item.snippet?.displayMessage ?? '', amount: null, extra: null };
+    if (item.superchat) {
+      const isSticker = !!item.superchat.sticker;
+      return {
+        ...base,
+        eventType: isSticker ? 'supersticker' : 'superchat',
+        message: isSticker ? null : text,
+        amount: item.superchat.amount ?? null,
+        extra: { color: item.superchat.color ?? null, sticker: item.superchat.sticker?.alt ?? null },
+      };
     }
+    return {
+      ...base,
+      eventType: 'chat',
+      message: text,
+      amount: null,
+      extra: item.isMembership ? { isMembership: true } : null,
+    };
   }
 
-  async function fetchOnce() {
-    if (!channel) return { delayMs: RETRY_INTERVAL_MS };
-    if (paused) return { stop: true };
-    const effectiveKey = apiKey || process.env.YOUTUBE_API_KEY;
-    if (!effectiveKey) {
-      onStatus({ live: false, error: '尚未設定 YouTube API Key（見左側「平台設定」）' });
-      return { delayMs: RETRY_INTERVAL_MS };
-    }
-    if (!youtubeClient) youtubeClient = google.youtube({ version: 'v3', auth: effectiveKey });
-    const youtube = youtubeClient;
-
-    try {
-      if (!liveVideoId) {
-        const now = Date.now();
-        const check = YoutubePollPolicy.shouldCheckLiveNow(now, lastSearchAt, LIVE_CHECK_INTERVAL_MS);
-        if (!check.ready) return { delayMs: check.delayMs };
-        lastSearchAt = now;
-        liveVideoId = await resolveLiveVideoId(youtube);
-        if (!liveVideoId) {
-          onStatus({ live: false, error: null });
-          return { delayMs: LIVE_CHECK_INTERVAL_MS };
-        }
-      }
-
-      const videoRes = await youtube.videos.list({ part: ['liveStreamingDetails'], id: [liveVideoId] });
-      const chatId = videoRes.data.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
-      if (!chatId) {
-        liveVideoId = null; lastSearchAt = 0;
-        onStatus({ live: false, error: null });
-        return { delayMs: RETRY_INTERVAL_MS };
-      }
-      onStatus({ live: true, error: null });
-
-      const chatRes = await youtube.liveChatMessages.list({
-        liveChatId: chatId, part: ['snippet', 'authorDetails'],
-        ...(pageToken ? { pageToken } : {}),
-      });
-
-      // 跟 chatListener.js 同一個決定:第一次呼叫(pageToken 為 null)不處理 items,只拿 nextPageToken 當起點,
-      // 避免「剛連上就把開播以來的歷史訊息全部灌進來」——這同時也是 restart 後不重複寫入的關鍵。
-      if (pageToken) {
-        for (const item of chatRes.data.items ?? []) {
-          onEvent({ platform: 'youtube', dedupKey: item.id, ...classifyItem(item) });
-        }
-      }
-
-      pageToken = chatRes.data.nextPageToken ?? null;
-      return { delayMs: chatRes.data.pollingIntervalMillis ?? 5000 };
-    } catch (e) {
-      if (YoutubePollPolicy.classifyYoutubeError({ reason: getErrorReason(e), message: e.message }).quota) {
-        paused = true;
-        onStatus({ live: false, error: '已超過 YouTube API 配額' });
-        return { stop: true };
-      }
-      onStatus({ live: false, error: e.message });
-      return { delayMs: 5000 };
-    }
+  function toYoutubeId(ch) {
+    if (ch.startsWith('UC')) return { channelId: ch };
+    return { handle: ch.startsWith('@') ? ch : `@${ch}` };
   }
 
-  async function loop() {
+  function scheduleRetry() {
     if (stopped) return;
-    const { delayMs, stop } = await fetchOnce();
-    if (stop || stopped) return;
-    timer = setTimeout(loop, delayMs ?? RETRY_INTERVAL_MS);
+    retryTimer = setTimeout(attemptStart, NOT_LIVE_RETRY_MS);
+  }
+
+  function attachHandlers(chat) {
+    chat.on('start', () => onStatus({ live: true, error: null }));
+    chat.on('chat', (item) => onEvent({ platform: 'youtube', dedupKey: item.id, ...classifyItem(item) }));
+    chat.on('error', (err) => {
+      // 沒開台是預期狀態,不當錯誤顯示;loop 結束(含 5 次連續錯誤後套件自己 stop)一律交給
+      // 'end' 事件觸發重試,這裡只負責更新狀態列文字,避免 'error' 跟 'end' 都排一次重試。
+      if (err instanceof NotLiveError) { onStatus({ live: false, error: null }); return; }
+      onStatus({ live: false, error: err?.message || String(err) });
+    });
+    chat.on('end', () => {
+      onStatus({ live: false, error: null });
+      scheduleRetry();
+    });
+  }
+
+  async function attemptStart() {
+    if (stopped) return;
+    liveChat = new LiveChat(toYoutubeId(channel));
+    attachHandlers(liveChat);
+    const ok = await liveChat.start();
+    if (!ok) scheduleRetry();
   }
 
   function start() {
     if (!channel) { onStatus({ live: false, error: '未設定 YouTube 頻道/handle' }); return; }
     stopped = false;
-    liveVideoId = null; resolvedChanId = null; lastSearchAt = 0; pageToken = null; paused = false;
-    timer = setTimeout(loop, 0);
+    attemptStart();
   }
 
   function stop() {
     stopped = true;
-    if (timer) clearTimeout(timer);
+    if (retryTimer) clearTimeout(retryTimer);
+    liveChat?.stop('connector stopped');
+    liveChat = null;
   }
 
   return { start, stop };

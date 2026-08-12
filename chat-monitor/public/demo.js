@@ -8,8 +8,7 @@
       { key: 'oauthToken', label: 'OAuth Token（選填，留空可匿名讀取聊天，但收不到訂閱/Bits 以外資訊）', placeholder: 'oauth:xxxxxxxx', type: 'password' },
     ],
     youtube: [
-      { key: 'channel', label: 'YouTube handle 或頻道 ID', placeholder: '例如 @altheayolia 或 UCxxxx', type: 'text' },
-      { key: 'apiKey', label: 'YouTube API Key', placeholder: 'AIzaSy...', type: 'password' },
+      { key: 'channel', label: 'YouTube handle 或頻道 ID(免 API Key)', placeholder: '例如 @altheayolia 或 UCxxxx', type: 'text' },
     ],
     soop: [
       { key: 'channel', label: 'SOOP 主播 ID (streamerId)', placeholder: '例如 altheayolia', type: 'text' },
