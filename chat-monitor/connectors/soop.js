@@ -123,7 +123,14 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
       // 這裡才是真的沒預期到的狀況(網路錯誤等)——soop-extension 仍會自己印一份 log,
       // 我們額外把訊息餵進 status API 讓 demo 頁看得到乾淨版本。
       debugLog('soop', 'attempt() threw', { message: e.message });
-      onStatus({ connected: false, error: e.message });
+      // client.chat().connect() 內部會自己再打一次 live.detail()(跟我們前面 isLive() 那次是
+      // 兩次獨立呼叫),兩次呼叫之間如果直播狀態剛好變化(例如剛好結束),第二次拿到的回應可能
+      // 缺 CHANNEL.CHDOMAIN,soop-extension 內部 makeChatUrl() 對 undefined 呼叫 toLowerCase()
+      // 就會炸出這種看不懂的原始 TypeError——換成人看得懂的訊息,原始錯誤還是留在 debugLog 裡。
+      const error = e instanceof TypeError && /toLowerCase/.test(e.message)
+        ? 'SOOP 直播狀態在確認的瞬間剛好變化(可能剛開台或剛結束),稍後會自動重試'
+        : e.message;
+      onStatus({ connected: false, error });
       soopChat = null;
       if (!stopped) timer = setTimeout(attempt, RETRY_INTERVAL_MS);
     }
@@ -148,7 +155,13 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
   function stop() {
     stopped = true;
     if (timer) clearTimeout(timer);
-    soopChat = null; // soop-extension 未提供 disconnect() API;停止監聽靠不再接收事件(下次 start 會建立新 client)
+    // 2026-08-13 修正:soop-extension 其實有提供 disconnect()(見 dist/chat/chat.d.ts),
+    // 之前這裡誤以為沒有,只把我們自己的 soopChat 參考設成 null——但事件監聽器是綁在原本那個
+    // SoopChat 物件上,WebSocket 也還開著,只丟掉參考不會讓連線斷掉,訊息會繼續進來、繼續呼叫
+    // onEvent(使用者回報「關閉監聽後訊息還是一直進來」就是這個 bug)。改成真的呼叫 disconnect()
+    // 把底層 ws 關掉;disconnect() 內部會 emit DISCONNECT,但 stopped 已經是 true,不會誤觸發重連。
+    soopChat?.disconnect();
+    soopChat = null;
   }
 
   return { start, stop };
