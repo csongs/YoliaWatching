@@ -23,6 +23,10 @@
   // 尚未存檔的欄位修改,切分頁或收到 WS 狀態推播觸發 renderForm() 重繪都不會遺失
   // (renderForm 用 settings 疊 edits 畫表單,每次輸入變動都同步寫回 edits)。
   let edits = { twitch: {}, youtube: {}, soop: {} };
+  // 這個分頁目前是不是有還沒存檔的修改——只用來畫「尚未儲存」提示,不影響存檔內容本身。
+  let dirty = { twitch: false, youtube: false, soop: false };
+  // 剛存檔完的 2 秒內顯示「已儲存」,見 showSavedConfirmation()/updateSaveStatus()。
+  let justSaved = { twitch: false, youtube: false, soop: false };
   let status = { twitch: {}, youtube: {}, soop: {} };
   let activeTab = 'twitch';
   let events = [];
@@ -31,10 +35,14 @@
 
   const $tabs = document.getElementById('platformTabs');
   const $form = document.getElementById('settingsForm');
-  const $btnSaveAll = document.getElementById('btnSaveAll');
   const $appVersion = document.getElementById('appVersion');
   const $chatLog = document.getElementById('chatLog');
   const $dbInfo = document.getElementById('dbInfo');
+  const $dbLocationBanner = document.getElementById('dbLocationBanner');
+  const $dbLocationBannerText = document.getElementById('dbLocationBannerText');
+  const $btnBrowseLocation = document.getElementById('btnBrowseLocation');
+  const $btnUseDefaultLocation = document.getElementById('btnUseDefaultLocation');
+  const $btnChangeLocation = document.getElementById('btnChangeLocation');
   const $donationNotes = document.getElementById('donationNotes');
   const $wsState = document.getElementById('wsState');
   const $filterPlatform = document.getElementById('filterPlatform');
@@ -91,19 +99,59 @@
     html += `<div class="status-line ${line.cls}">${line.text}</div>`;
     html += `<button class="save" id="btnSave">儲存並套用</button>`;
     html += `<div class="save-hint">只儲存「${L.platformLabel(p)}」這個分頁</div>`;
+    html += `<div class="save-status" id="saveStatus"></div>`;
     $form.innerHTML = html;
 
     document.getElementById('btnSave').onclick = () => saveActiveTab();
     // input/change 委派到整個表單:切分頁或 WS 狀態推播觸發重繪前,先把目前打的字同步進 edits,
-    // 不會因為重繪就消失。
-    $form.oninput = () => captureFormInto(p);
-    $form.onchange = () => captureFormInto(p);
+    // 不會因為重繪就消失,同時標記「尚未儲存」。取消勾選「啟用監聽」是例外——不用等按按鈕,
+    // 直接存檔套用(關閉監聽沒有理由要延遲)。
+    function handleFormChange(e) {
+      captureFormInto(p);
+      setDirty(p, true);
+      if (e.target.id === 'f_enabled' && !e.target.checked) saveActiveTab();
+    }
+    $form.oninput = handleFormChange;
+    $form.onchange = handleFormChange;
     for (const btn of $form.querySelectorAll('.toggle-visibility')) {
       btn.onclick = () => {
         const input = document.getElementById(btn.dataset.target);
         input.type = input.type === 'password' ? 'text' : 'password';
       };
     }
+    updateSaveStatus(p); // 從別的分頁切回來,反映這個分頁自己還記得的 dirty 狀態
+  }
+
+  function setDirty(p, isDirty) {
+    dirty[p] = isDirty;
+    if (isDirty) justSaved[p] = false; // 存檔後又改了,「已儲存」的提示不該繼續蓋著新的未存變更
+    updateSaveStatus(p);
+  }
+
+  // updateSaveStatus 每次都重新抓 DOM、用 justSaved/dirty 這兩個模組層級狀態畫,不依賴呼叫當下
+  // #saveStatus 是不是同一個節點——saveActiveTab() 存檔後 800ms 還會再跑一次 refreshStatus()→
+  // renderForm(),整個表單 DOM 會被換掉一次,如果「已儲存」訊息只是設在舊節點上,800ms 後就會
+  // 被無聲蓋掉,使用者兩秒都看不滿;改成狀態驅動,不管中間重繪幾次都能正確反映。
+  function updateSaveStatus(p) {
+    if (p !== activeTab) return;
+    const el = document.getElementById('saveStatus');
+    if (!el) return;
+    if (justSaved[p]) {
+      el.textContent = '✓ 已儲存';
+      el.className = 'save-status saved';
+    } else if (dirty[p]) {
+      el.textContent = '● 尚未儲存的變更';
+      el.className = 'save-status dirty';
+    } else {
+      el.textContent = '';
+      el.className = 'save-status';
+    }
+  }
+
+  function showSavedConfirmation(p) {
+    justSaved[p] = true;
+    updateSaveStatus(p);
+    setTimeout(() => { justSaved[p] = false; updateSaveStatus(p); }, 2000);
   }
 
   function captureFormInto(p) {
@@ -122,30 +170,20 @@
   }
 
   async function saveOne(p) {
-    if (p === activeTab) captureFormInto(p);
+    captureFormInto(p);
     const res = await fetch(`/api/settings/${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildBody(p)) });
     const saved = await res.json();
     settings[p] = saved;
     edits[p] = {};
+    dirty[p] = false;
   }
 
   async function saveActiveTab() {
-    await saveOne(activeTab);
+    const p = activeTab;
+    await saveOne(p);
     renderForm();
+    showSavedConfirmation(p);
     setTimeout(refreshStatus, 800); // 給 connector 一點時間連線再刷新狀態
-  }
-
-  async function saveAllSettings() {
-    $btnSaveAll.disabled = true;
-    $btnSaveAll.textContent = '儲存中…';
-    try {
-      await Promise.all(PLATFORMS.map(saveOne));
-    } finally {
-      $btnSaveAll.disabled = false;
-      $btnSaveAll.textContent = '三個平台一起儲存並套用';
-    }
-    renderForm();
-    setTimeout(refreshStatus, 800);
   }
 
   function renderDonationNotes() {
@@ -167,6 +205,38 @@
       <div style="margin-top:6px;">目前共 <b style="color:var(--text)">${info.count}</b> 筆事件，檔案大小 ${fmtBytes(info.fileSizeBytes)}</div>
       <div style="margin-top:6px;">想清空歷史紀錄：關閉伺服器後直接刪除上面這個檔案（含 .sqlite / -wal / -shm）即可，重開伺服器會自動重建空白資料庫。平台設定也存在同一個檔案裡，一併刪除後會用 yuupeek/config.json 的既有頻道設定重新帶入。</div>
     `;
+  }
+
+  async function refreshDbLocation() {
+    const info = await (await fetch('/api/db-location')).json();
+    if (!info.chosen) {
+      $dbLocationBannerText.textContent = `尚未選擇 SQLite 存放位置，目前使用預設路徑：${info.folder}`;
+      $dbLocationBanner.style.display = '';
+    } else {
+      $dbLocationBanner.style.display = 'none';
+    }
+  }
+
+  // 跳出伺服器端的原生「瀏覽資料夾」對話方塊(見 server.js 的 browseForFolder());按鈕在等待
+  // 期間會被 disable + 換文字提示,因為 fetch 這段時間就是使用者在跳出的視窗裡選資料夾。
+  // 選到的資料夾如果已經有 events.sqlite,伺服器那邊會直接沿用(合併歷史),不會覆蓋或清空。
+  async function browseAndSwitchLocation(triggerBtn) {
+    const originalText = triggerBtn.textContent;
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = '請在跳出的視窗中選擇資料夾…';
+    try {
+      const { folder } = await (await fetch('/api/db-location/browse', { method: 'POST' })).json();
+      if (!folder) return; // 使用者按了取消
+      const res = await fetch('/api/db-location', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder }) });
+      if (!res.ok) { const err = await res.json(); alert('切換位置失敗：' + err.error); return; }
+      await refreshDbLocation();
+      await refreshDbInfo();
+    } catch (e) {
+      alert('切換位置失敗：' + e.message);
+    } finally {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = originalText;
+    }
   }
 
   function eventLabel(evt) {
@@ -246,6 +316,7 @@
     renderForm();
     renderChatLog();
     refreshDbInfo();
+    refreshDbLocation();
     // debug 開關狀態不在頁面顯示(對一般使用者是雜訊)——啟動伺服器時終端機那行已經有講,
     // /api/version 仍然回傳 debug 欄位,需要的話可以直接 curl 那支 API 查。
     const { version } = await (await fetch('/api/version')).json();
@@ -282,7 +353,12 @@
     $chatLog.classList.toggle('hide-timestamps', !checked);
     fetch('/api/prefs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ showTimestamps: checked }) });
   };
-  $btnSaveAll.onclick = () => saveAllSettings();
+  $btnBrowseLocation.onclick = () => browseAndSwitchLocation($btnBrowseLocation);
+  $btnChangeLocation.onclick = () => browseAndSwitchLocation($btnChangeLocation);
+  $btnUseDefaultLocation.onclick = async () => {
+    await fetch('/api/db-location/confirm-default', { method: 'POST' });
+    await refreshDbLocation();
+  };
 
   renderDonationNotes();
   loadInitial();

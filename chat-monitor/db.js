@@ -1,19 +1,15 @@
-// SQLite 儲存層——事件歷史 + 平台設定都存在同一個檔案。DB 檔案位置固定在
-// chat-monitor/data/events.sqlite,demo 頁面會顯示這個絕對路徑,方便 user 直接刪檔清空一切
-// (事件歷史 + 設定一起清空,重開伺服器會用內建預設值重新 seed 設定)。
+// SQLite 儲存層——事件歷史 + 平台設定都存在同一個檔案。存放位置預設在 chat-monitor/data/,
+// 使用者可以在畫面上用「瀏覽並選擇位置」換到別的資料夾(見 openDatabase()/switchLocation())。
+// 「換到哪裡」這個選擇本身不能存進 SQLite 裡——都還沒開資料庫,要去哪裡讀這個選擇本身?——所以
+// 另外用一個固定位置、跟 events.sqlite 分開的小 JSON 檔案(LOCATION_CONFIG_PATH)記錄。
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const DATA_DIR = path.join(__dirname, 'data');
-const DB_PATH = path.join(DATA_DIR, 'events.sqlite');
+const DEFAULT_DATA_DIR = path.join(__dirname, 'data');
+const LOCATION_CONFIG_PATH = path.join(__dirname, 'db-location.json');
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
-
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-
-db.exec(`
+const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     platform TEXT NOT NULL,
@@ -41,17 +37,79 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value_json TEXT NOT NULL
   );
-`);
+`;
+
+function readLocationConfig() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(LOCATION_CONFIG_PATH, 'utf8'));
+    if (raw.folder) return { folder: raw.folder, chosen: !!raw.chosen };
+  } catch { /* 沒有這個檔案,或壞掉——當作還沒選過,用預設值 */ }
+  return { folder: DEFAULT_DATA_DIR, chosen: false };
+}
+
+function writeLocationConfig(folder, chosen) {
+  fs.writeFileSync(LOCATION_CONFIG_PATH, JSON.stringify({ folder, chosen }, null, 2));
+}
+
+let db, DB_PATH, insertStmt, upsertSettingsStmt, upsertPrefStmt;
+
+// 開啟(或換到)指定資料夾底下的 events.sqlite——資料夾裡如果已經有這個檔案就直接沿用(合併歷史,
+// 不會覆蓋或清空),沒有就建立新的空白資料庫,CREATE TABLE IF NOT EXISTS 兩種情況都安全。
+// 新連線確認開成功、schema 也建好之後才關掉舊連線;中途失敗(例如資料夾沒有寫入權限)會直接
+// throw,舊連線維持原樣不受影響,不會讓整個 app 陷入沒資料庫可用的狀態。
+function openDatabase(folder) {
+  fs.mkdirSync(folder, { recursive: true });
+  const newPath = path.join(folder, 'events.sqlite');
+  const newDb = new Database(newPath);
+  newDb.pragma('journal_mode = WAL');
+  newDb.exec(SCHEMA_SQL);
+
+  const newInsertStmt = newDb.prepare(`
+    INSERT OR IGNORE INTO events
+      (platform, source_detail, event_type, dedup_key, username, message, amount, extra_json, received_at)
+    VALUES
+      (@platform, @sourceDetail, @eventType, @dedupKey, @username, @message, @amount, @extraJson, @receivedAt)
+  `);
+  const newUpsertSettingsStmt = newDb.prepare(`
+    INSERT INTO settings (platform, enabled, config_json, updated_at)
+    VALUES (@platform, @enabled, @configJson, datetime('now'))
+    ON CONFLICT(platform) DO UPDATE SET
+      enabled = excluded.enabled,
+      config_json = excluded.config_json,
+      updated_at = excluded.updated_at
+  `);
+  const newUpsertPrefStmt = newDb.prepare(`
+    INSERT INTO prefs (key, value_json) VALUES (@key, @valueJson)
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json
+  `);
+
+  if (db) db.close();
+  db = newDb;
+  DB_PATH = newPath;
+  insertStmt = newInsertStmt;
+  upsertSettingsStmt = newUpsertSettingsStmt;
+  upsertPrefStmt = newUpsertPrefStmt;
+}
+
+openDatabase(readLocationConfig().folder);
+
+function getLocationInfo() {
+  return { folder: path.dirname(DB_PATH), chosen: readLocationConfig().chosen, defaultFolder: DEFAULT_DATA_DIR };
+}
+
+function switchLocation(folder) {
+  openDatabase(folder); // 失敗會直接 throw,呼叫端(server.js)接住轉成 400 回應
+  writeLocationConfig(folder, true);
+  return getLocationInfo();
+}
+
+function confirmDefaultLocation() {
+  writeLocationConfig(path.dirname(DB_PATH), true);
+  return getLocationInfo();
+}
 
 // dedup_key 必須是「同一事件重送時會算出相同值」的東西——每平台的組法見各 connector。
 // 用 INSERT OR IGNORE + UNIQUE(platform, dedup_key) 擋掉 reconnect/restart 造成的重複寫入。
-const insertStmt = db.prepare(`
-  INSERT OR IGNORE INTO events
-    (platform, source_detail, event_type, dedup_key, username, message, amount, extra_json, received_at)
-  VALUES
-    (@platform, @sourceDetail, @eventType, @dedupKey, @username, @message, @amount, @extraJson, @receivedAt)
-`);
-
 function insertEvent(evt) {
   const row = {
     platform: evt.platform,
@@ -92,15 +150,6 @@ const DEFAULT_CONFIG = {
   soop: { channel: 'altheayolia', apiMode: 'community' },
 };
 
-const upsertSettingsStmt = db.prepare(`
-  INSERT INTO settings (platform, enabled, config_json, updated_at)
-  VALUES (@platform, @enabled, @configJson, datetime('now'))
-  ON CONFLICT(platform) DO UPDATE SET
-    enabled = excluded.enabled,
-    config_json = excluded.config_json,
-    updated_at = excluded.updated_at
-`);
-
 function seedSettingsIfEmpty(seed = {}) {
   const existing = db.prepare('SELECT COUNT(*) AS count FROM settings').get().count;
   if (existing > 0) return;
@@ -138,11 +187,6 @@ function saveSettings(platform, { enabled, ...config }) {
 // ── 介面偏好設定(跟平台無關,例如「顯示時間戳」這種畫面選項)──────────────────
 // 跟 settings 表分開,是因為 settings 的 saveSettings()/API 綁定 CONNECTOR_FACTORIES,
 // 存檔會觸發 restartConnector(platform)——這裡存的是純畫面選項,不該觸發任何連線重啟。
-const upsertPrefStmt = db.prepare(`
-  INSERT INTO prefs (key, value_json) VALUES (@key, @valueJson)
-  ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json
-`);
-
 function getPrefs() {
   const rows = db.prepare('SELECT * FROM prefs').all();
   const out = {};
@@ -158,7 +202,9 @@ function savePrefs(patch) {
 }
 
 module.exports = {
-  insertEvent, getRecentEvents, getStats, DB_PATH,
+  insertEvent, getRecentEvents, getStats,
+  get DB_PATH() { return DB_PATH; },
+  getLocationInfo, switchLocation, confirmDefaultLocation,
   seedSettingsIfEmpty, getSettings, saveSettings,
   getPrefs, savePrefs,
 };

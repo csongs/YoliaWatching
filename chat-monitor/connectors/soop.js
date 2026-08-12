@@ -1,6 +1,7 @@
 // SOOP 連接器——社群模式(apiMode:'community')使用 soop-extension(跟 yuupeek/src/chatListener.js
 // 同一顆套件),但這裡把它已經有實作、production 版沒接的事件全部攤開:表情/文字抖內/影片抖內/
-// 廣告氣球抖內/訂閱/系統通知(soop-extension/dist/chat/event.d.ts 裡列的事件清單)。
+// 廣告氣球抖內/訂閱/系統通知(soop-extension/dist/chat/event.d.ts 裡列的事件清單),外加套件完全
+// 沒解析、自己反推封包格式接上去的「贈送禮物」(gift_item,見下面 GIFT_ITEM_TYPE 說明)。
 // 官方模式(apiMode:'official')跟 chatListener.js 現況一致——尚未實作,直接回報原因。
 //
 // 2026-08-12 用 CHAT_MONITOR_DEBUG=1 實測(見下面 raw ws close 那段 log)確認:匿名(不登入)連
@@ -30,6 +31,15 @@ function dedupKeyFor(type, res) {
   const what = res.comment ?? res.amount ?? res.notification ?? res.emoticonId ?? '';
   return `${type}:${res.receivedTime ?? ''}:${who}:${what}`;
 }
+
+// soop-extension 的 ChatType enum 裡沒有「贈送禮物」(快播Plus/訂閱禮物券等道具型贈禮,跟已經有
+// 支援的星氣球/影片/廣告氣球抖內是不同的封包類型)這種事件,收到會直接落到 UNKNOWN,內容整個被丟掉。
+// 2026-08-13 用 CHAT_MONITOR_DEBUG 抓包 + 比對使用者截圖(快播Plus 7天券,from 미오탱 to 정글대마법사)
+// 反推出來的欄位對應——沒有官方文件,只有這一筆樣本核對過,[6]/[7] 意義不明,所以 extra 裡把完整
+// 原始欄位陣列(raw)也存起來,萬一猜錯之後還查得到:
+//   parts[0] 開頭(含 type code "0045") / [1] 疑似房間或直播編號 / [2] 頻道 ID /
+//   [3] 送禮者暱稱 / [4] 送禮者 userId / [5] 收禮者暱稱 / [6][7] 意義不明(可能是禮物項目/數量代碼)
+const GIFT_ITEM_TYPE = '0045';
 
 function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStatus) {
   let soopChat = null;
@@ -89,6 +99,17 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
       soopChat.on(SoopChatEvent.NOTIFICATION, (res) => emit('notification', res, {
         username: null, message: res.notification, amount: null, extra: null,
       }));
+      // soop-extension 沒有解析這個類型(見檔頭 GIFT_ITEM_TYPE 說明),UNKNOWN 事件給的是
+      // packet.split(SEPARATOR) 之後的完整陣列,parts[0] 開頭含 type code,自己抓出來判斷。
+      soopChat.on(SoopChatEvent.UNKNOWN, (parts) => {
+        const type = parts[0]?.substring(2, 6);
+        if (type !== GIFT_ITEM_TYPE) return;
+        const receivedTime = new Date().toISOString();
+        emit('gift_item', { receivedTime, fromUsername: parts[3] }, {
+          username: parts[3] ?? null, message: null, amount: null,
+          extra: { toUsername: parts[5] ?? null, fromUserId: parts[4] ?? null, raw: parts },
+        });
+      });
 
       soopChat.on(SoopChatEvent.CONNECT, () => {
         connectedAt = Date.now();

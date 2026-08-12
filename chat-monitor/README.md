@@ -55,7 +55,7 @@ npm run package
 |---|---|---|---|
 | Twitch | `chat` | `chat_highlight`（頻道點數兌換的「醒目留言」） | `cheer`(bits)、`sub`/`resub`/`subgift`/`submysterygift`、`raid` |
 | YouTube | `chat`（會員留言會多帶 `extra.isMembership`） | — | `superchat`、`supersticker` |
-| SOOP（社群模式） | `chat`、`emoticon` | `notification`(系統通知) | `text_donation`、`video_donation`、`ad_balloon_donation`、`subscribe` |
+| SOOP（社群模式） | `chat`、`emoticon` | `notification`(系統通知) | `text_donation`、`video_donation`、`ad_balloon_donation`、`subscribe`、`gift_item`(快播Plus/訂閱禮物券等,自己反推封包格式接的,見已知限制) |
 | SOOP（官方模式） | 尚未實作（跟 `yuupeek/src/chatListener.js` 現況一致，需要 SOOP 官方 API key） | | |
 
 各類型的中文標籤與「等級/金額怎麼看」的說明集中在 [public/labels.js](public/labels.js)
@@ -85,6 +85,11 @@ YouTube 這邊是即時輪詢（`youtube-chat-next`），不會回放開播以�
   也只有金額字串跟顏色，沒有官方 API 的 tier 數字。細節見
   [connectors/youtube.js](connectors/youtube.js) 開頭註解。
 - SOOP 官方 API 模式沒有實作（`yuupeek/` 裡目前也還沒有這個串接的文件可抄）。
+- SOOP 的 `gift_item`（贈送禮物）不是 `soop-extension` 有支援的事件類型，是自己抓封包反推
+  格式接上去的（2026-08-13，用 `CHAT_MONITOR_DEBUG=1` 抓包 + 比對實際截圖核對），沒有官方
+  文件，只驗證過送禮者／收禮者暱稱正確；`amount` 欄位目前是空的（原始封包裡還有兩個意義不明
+  的欄位，猜測跟禮物項目/數量有關，但沒把握，都存在 `extra.raw` 裡供之後回頭查）。細節見
+  [connectors/soop.js](connectors/soop.js) 的 `GIFT_ITEM_TYPE` 註解。
 - Twitch 的頻道點數兌換只能偵測「醒目留言」這種會出現在一般聊天訊息裡、帶
   `custom-reward-id` tag 的兌換項目；不會出現在聊天訊息裡的其他兌換（例如純粹的音效/
   特效類獎勵）不會被聽到，因為那些不走 IRC 聊天訊息，需要另外接 EventSub。

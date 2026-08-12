@@ -5,8 +5,31 @@
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const { execFile } = require('child_process');
 const { WebSocketServer } = require('ws');
 const { DEBUG, debugLog } = require('./lib/debugLog');
+
+// 跳出 Windows 原生的「瀏覽資料夾」對話方塊,讓使用者選 SQLite 要存在哪裡——這個工具本來就只給
+// Windows 用(install.bat/start.bat 是 .bat),用 PowerShell 內建的 System.Windows.Forms 就好,
+// 不用多裝任何套件。用 execFile(非同步)而不是 execFileSync:對話方塊開著的這段時間如果用同步
+// 版本會整個 Node event loop 卡住,其他 API 請求、WebSocket 廣播、聊天監聽全部跟著凍結,
+// 使用者選多久這個 server 就假死多久——非同步版本只有這一支 request 在等,其他事情照常運作。
+function browseForFolder() {
+  const script = `
+    Add-Type -AssemblyName System.Windows.Forms
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = '選擇 chat-monitor 的 SQLite 資料庫存放資料夾'
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+      Write-Output $dialog.SelectedPath
+    }
+  `;
+  return new Promise((resolve, reject) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], (err, stdout) => {
+      if (err) return reject(err);
+      resolve(stdout.trim() || null); // 使用者按取消,SelectedPath 不會印出東西
+    });
+  });
+}
 
 // 只在「第一次啟動、settings 表還是空的」這個情境下當方便的預設值來源(見下面
 // loadSeedFromYuupeekConfig);找不到 yuupeek/.env 也不會出錯(dotenv 對不存在的路徑
@@ -155,6 +178,34 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/db-info' && req.method === 'GET') {
     return sendJson(res, 200, db.getStats());
+  }
+
+  if (url.pathname === '/api/db-location' && req.method === 'GET') {
+    return sendJson(res, 200, db.getLocationInfo());
+  }
+
+  if (url.pathname === '/api/db-location/browse' && req.method === 'POST') {
+    try {
+      const folder = await browseForFolder();
+      return sendJson(res, 200, { folder });
+    } catch (e) {
+      return sendJson(res, 500, { error: '無法開啟資料夾選擇視窗：' + e.message });
+    }
+  }
+
+  if (url.pathname === '/api/db-location' && req.method === 'POST') {
+    try {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      if (!body.folder) return sendJson(res, 400, { error: '缺少 folder' });
+      debugLog('db', 'switching location', { folder: body.folder });
+      return sendJson(res, 200, db.switchLocation(body.folder));
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  if (url.pathname === '/api/db-location/confirm-default' && req.method === 'POST') {
+    return sendJson(res, 200, db.confirmDefaultLocation());
   }
 
   if (url.pathname === '/api/prefs' && req.method === 'GET') {

@@ -36,7 +36,7 @@ function main() {
   for (const entry of TEMPLATE_ENTRIES) {
     fs.cpSync(path.join(ROOT, 'packaging', entry), path.join(OUT_DIR, entry));
   }
-  fs.writeFileSync(path.join(OUT_DIR, '.gitignore'), 'node_modules/\ndata/\n.env\n');
+  fs.writeFileSync(path.join(OUT_DIR, '.gitignore'), 'node_modules/\ndata/\n.env\ndb-location.json\n');
 
   console.log(`[package] 原始碼已複製到 ${OUT_DIR}`);
 

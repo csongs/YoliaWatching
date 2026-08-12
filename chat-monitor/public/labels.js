@@ -33,6 +33,7 @@
     video_donation:          { label: '影片抖內', category: 'donation' },
     ad_balloon_donation:     { label: '廣告氣球抖內', category: 'donation' },
     subscribe:               { label: '訂閱(구독)', category: 'donation' },
+    gift_item:               { label: '贈送禮物(快播Plus/訂閱禮物券等)', category: 'donation' },
     notification:            { label: '系統通知', category: 'system' },
   };
 
@@ -72,7 +73,10 @@
       title: 'SOOP',
       note: '抖內以「별풍선(星球)」虛擬幣計價,文字/語音/影片/廣告氣球是不同的抖內管道,'
           + '金額換算與粉絲團加入順位(fanClubOrdinal)由 soop-extension 函式庫回傳的欄位而來;'
-          + '訂閱(구독)另外帶月數與 tier。以上欄位含義依 soop-extension README(未查證官方原始定義)。',
+          + '訂閱(구독)另外帶月數與 tier。以上欄位含義依 soop-extension README(未查證官方原始定義)。'
+          + '贈送禮物(快播Plus/訂閱禮物券等道具型贈禮)不是 soop-extension 有支援的事件,是自己反推'
+          + '封包格式接上去的(見 connectors/soop.js 的 GIFT_ITEM_TYPE 註解),只驗證過送禮者/收禮者'
+          + '暱稱正確,amount 欄位目前是空的(還不確定原始封包裡哪個欄位代表禮物項目/數量)。',
     },
   ];
 
