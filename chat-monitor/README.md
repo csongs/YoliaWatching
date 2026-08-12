@@ -68,6 +68,30 @@ npm run package
 各類型的中文標籤與「等級/金額怎麼看」的說明集中在 [public/labels.js](public/labels.js)
 （server 與前端共用同一份，避免兩邊漂移），demo 頁面下方也有一份可讀版本。
 
+## 各事件類型驗證狀態（2026-08-13）
+
+「驗證過」指的是實際連上真實頻道、看過真實事件跑過一次確認欄位正確——不是「程式碼邏輯看起來
+合理」或「型別定義這樣寫」就算數。這份清單記錄目前到哪個程度，之後遇到對應事件時可以順便驗證、
+更新這裡。
+
+| 平台 | 事件 | 狀態 | 說明 |
+|---|---|---|---|
+| YouTube | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
+| YouTube | Super Chat/Sticker | ⚠️ 沒驗證過 | 照套件型別定義寫的，沒收過真實 Super Chat 確認金額/顏色欄位 |
+| YouTube | 會員留言（`isMembership`） | ✅ 驗證過 | 129 則真實會員聊天，欄位正確 |
+| YouTube | 會員月數（`membershipHeader`） | ⚠️ 沒驗證過 | patch 邏輯有跑，但只確認「一般會員聊天正確回傳 null」，沒遇過真正的里程碑事件確認欄位內容 |
+| YouTube | 訂閱／贈送訂閱 | 🚫 不支援 | `youtube-chat-next` 資料源頭沒有這個資訊，是已知限制不是漏測 |
+| Twitch | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
+| Twitch | Bits 抖內（`cheer`） | ⚠️ 沒驗證過 | 沒有實際看過一筆真的 cheer 事件跑過 |
+| Twitch | 續訂月數（`resub`） | ⚠️ 沒驗證過 | `cumulative-months` 修法是查 `tmi.js` 原始碼推論，修完沒等到真實 resub 事件確認顯示結果 |
+| Twitch | 新訂閱（`sub`） | ❌ 完全沒測過 | 寫完就沒特別驗證 |
+| Twitch | 贈送訂閱（`subgift`/`submysterygift`） | ⚠️ 沒驗證過 | 「→ 收禮者」顯示邏輯寫了，沒有真實事件確認 |
+| Twitch | 公告（`announcement`/`usernotice_other`） | ❌ 完全沒測過 | 剛加上去就因為測試環境撞到正式資料庫緊急關掉，連跑都沒跑過 |
+| SOOP | 一般聊天 | ✅ 驗證過 | 大量真實訊息 |
+| SOOP | 訂閱月數（`subscribe`） | ⚠️ 沒驗證過 | `res.amount` 修法用模擬封包跑過 `parseSubscribe()` 解構邏輯確認位置，沒有真實訂閱事件驗證顯示結果 |
+| SOOP | 抖內（`text_donation`/`video_donation`/`ad_balloon_donation`） | ❌ 完全沒測過 | 連接器邏輯一開始就寫了，沒有 specifically 見過真實抖內事件跑過 |
+| SOOP | 贈送禮物（`gift_item`） | ✅ 部分驗證 | 送禮者/收禮者暱稱對照過真實截圖確認正確，但金額/禮物項目名稱是空的、原始封包 `[6]`/`[7]` 欄位意義不明，這部分沒驗證 |
+
 ## 避免 restart 後重複寫入
 
 每筆事件都算一個 `dedup_key`（Twitch/YouTube 用平台原生的訊息 id；SOOP 沒有 id，
