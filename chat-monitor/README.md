@@ -1,8 +1,9 @@
 # chat-monitor — 聊天/抖內/特殊訊息 測試工具
 
 獨立的小工具，跟 `yuupeek/`（桌面版）、`web/`（雲端版）平行，不會被 `web/sync.js` 或
-`electron-builder` 打包進正式產物。用來即時觀察 Twitch / YouTube / SOOP 三個平台會送出
-哪些聊天、抖內、特殊訊息事件，並把它們存進本機 SQLite 方便之後查閱格式。
+`electron-builder` 打包進正式產物，執行期也完全不依賴 `yuupeek/`（或任何其他資料夾）同時
+存在——`chat-monitor` 資料夾單獨複製到別的地方一樣能跑。用來即時觀察 Twitch / YouTube /
+SOOP 三個平台會送出哪些聊天、抖內、特殊訊息事件，並把它們存進本機 SQLite 方便之後查閱格式。
 
 ## 啟動
 
@@ -15,9 +16,10 @@ npm start        # http://127.0.0.1:3100
 打開 `http://127.0.0.1:3100` 後，左側「平台設定」分頁（Twitch / YouTube / SOOP）就是
 唯一要設定的地方——頻道名稱、金鑰（Twitch OAuth Token）、SOOP 連線方式、啟用開關，填完按
 「儲存並套用」即可，全部存進 SQLite 的 `settings` 表，不用手動編輯任何 `.env` 或 `.json` 檔。
-第一次啟動（`settings` 表是空的）會自動帶入 `yuupeek/config.json` 的頻道名稱 + `yuupeek/.env`
-的金鑰當預設值，之後這兩個檔案就與本工具無關了——改設定一律回到這個頁面改。右側是聊天視窗，
-每則訊息前面標 `[平台][類型]`。
+第一次啟動（`settings` 表是空的）頻道名稱會帶入 `db.js` 內建的預設值（這個專案自己的實況主
+`altheayolia`）；如果 `chat-monitor/.env` 有設 `TWITCH_OAUTH`，Twitch 的金鑰也會一併帶入，
+純粹圖方便，不填一樣能用。改設定一律回到這個頁面改。右側是聊天視窗，每則訊息前面標
+`[平台][類型]`。
 
 YouTube 這邊改用 [youtube-chat-next](https://github.com/LucasSantana-Dev/youtube-chat-next)
 （爬公開網頁聊天室，免 API Key）取代官方 `googleapis`，所以 YouTube 分頁只要填 handle
@@ -42,10 +44,15 @@ npm run package
 
 ## SQLite 存在哪裡
 
-`chat-monitor/data/events.sqlite`（demo 頁面左側也會顯示這個絕對路徑）。
-想清空歷史：**關掉伺服器後直接刪除這個檔案**（連同可能的 `-wal` / `-shm`）即可，
-下次啟動會自動重建空白資料庫。平台設定（頻道名稱、啟用狀態）也存在同一個檔案，
-一併刪除後會用 `yuupeek/config.json` 的既有設定重新帶入一次。
+預設在 `chat-monitor/data/events.sqlite`，但存放位置可以換——demo 頁面「SQLite 歷史紀錄」
+面板有「變更存放位置…」按鈕，會跳出 Windows 原生的資料夾選擇視窗，選到的資料夾如果已經有
+`events.sqlite` 會直接沿用（合併歷史，不會覆蓋）。目前實際用的路徑一律看 demo 頁面左側顯示
+的絕對路徑，不要假設一定是預設位置。這個選擇存在 `chat-monitor/db-location.json`（跟
+`events.sqlite` 分開存，已加進 `.gitignore`）。
+
+想清空歷史：**關掉伺服器後直接刪除 events.sqlite**（連同可能的 `-wal` / `-shm`）即可，
+下次啟動會在同一個資料夾自動重建空白資料庫。平台設定（頻道名稱、啟用狀態）也存在同一個
+檔案，一併刪除後會用內建的預設頻道設定（`db.js` 的 `DEFAULT_CONFIG`）重新帶入一次。
 
 `data/` 整個目錄已加進 `.gitignore`，不會被 commit。
 

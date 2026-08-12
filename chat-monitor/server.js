@@ -31,12 +31,10 @@ function browseForFolder() {
   });
 }
 
-// 只在「第一次啟動、settings 表還是空的」這個情境下當方便的預設值來源(見下面
-// loadSeedFromYuupeekConfig);找不到 yuupeek/.env 也不會出錯(dotenv 對不存在的路徑
-// 就是 no-op),打包給別人測試時可以完全不帶 yuupeek/ 資料夾,直接在 demo 頁面填自己的金鑰。
-require('dotenv').config({ path: path.join(__dirname, '..', 'yuupeek', '.env'), quiet: true });
+// chat-monitor 完全獨立,不依賴 yuupeek/ 資料夾同時存在——只讀自己資料夾底下的 .env(沒有就是
+// no-op,不會出錯)。
 if (fs.existsSync(path.join(__dirname, '.env'))) {
-  require('dotenv').config({ path: path.join(__dirname, '.env'), override: true, quiet: true });
+  require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
 }
 
 const db = require('./db');
@@ -47,23 +45,12 @@ const { createSoopConnector } = require('./connectors/soop');
 const PORT = process.env.CHAT_MONITOR_PORT || 3100;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-// 開機時如果 settings 表是空的,從 yuupeek/config.json(頻道名稱)+ yuupeek/.env(金鑰)
-// 撈現成的值當預設值,省得每次都要重新輸入——純粹是「第一次啟動」的方便,種進 SQLite 之後,
-// 之後所有讀寫都只認 DB 裡的值,demo 頁面「平台設定」分頁就是唯一的設定介面,不用再回頭改
-// .env 或 config.json。
-// 只在 yuupeek/config.json 真的有這個平台的區塊時才回傳該平台的 seed——不能每個平台都無條件
-// 回傳(即使是空字串的 channel),否則 db.seedSettingsIfEmpty() 合併時那個空字串會蓋掉
-// db.js DEFAULT_CONFIG 裡寫死的頻道預設值(打包給別人的版本沒有 yuupeek/ 可讀,只能靠 DEFAULT_CONFIG)。
-function loadSeedFromYuupeekConfig() {
-  let cfg = {};
-  try { cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'yuupeek', 'config.json'), 'utf8')); } catch { /* 沒有就用空預設 */ }
-  const seed = {};
-  if (cfg.twitch) seed.twitch = { enabled: !!cfg.twitch.enabled, config: { channel: cfg.twitch.channel ?? '', oauthToken: process.env.TWITCH_OAUTH ?? '' } };
-  if (cfg.youtube) seed.youtube = { enabled: !!cfg.youtube.enabled, config: { channel: cfg.youtube.channel ?? '' } };
-  if (cfg.soop) seed.soop = { enabled: !!cfg.soop.enabled, config: { channel: cfg.soop.channel ?? '', apiMode: cfg.soop.apiMode ?? 'community' } };
-  return seed;
-}
-db.seedSettingsIfEmpty(loadSeedFromYuupeekConfig());
+// 第一次啟動(settings 表是空的)用 db.js 的 DEFAULT_CONFIG 當預設值就好;如果 chat-monitor
+// 自己的 .env 有設 TWITCH_OAUTH,額外拿來當 Twitch OAuth Token 的預設值(純粹圖方便,不填也
+// 完全能用,進「平台設定」分頁貼上去存檔就好)。
+db.seedSettingsIfEmpty(
+  process.env.TWITCH_OAUTH ? { twitch: { config: { oauthToken: process.env.TWITCH_OAUTH } } } : {}
+);
 
 // ── 連線管理:每平台最多一個 connector 實例,設定變更時整組換新的 ─────────────
 const CONNECTOR_FACTORIES = {
