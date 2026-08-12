@@ -14,16 +14,21 @@ const OUT_ZIP = path.join(RELEASE_DIR, `${OUT_NAME}.zip`);
 
 // 直接照抄的原始碼檔案/資料夾(排除 node_modules、data、release、.env——跟 chat-monitor/.gitignore
 // 排除的東西一致,這裡沒有用 .gitignore 本身去過濾,是因為要打包的清單本來就很短,手動列更清楚)。
-const SOURCE_ENTRIES = ['server.js', 'db.js', 'package.json', 'package-lock.json', 'connectors', 'public'];
+const SOURCE_ENTRIES = ['server.js', 'db.js', 'package.json', 'package-lock.json', 'connectors', 'public', 'lib'];
 
 // packaging/ 底下的可編輯範本,複製時改名(install.bat/start.bat/使用說明.txt 本身不用改名,
 // 只是強調來源是 packaging/,不是每次手動改 release/ 裡的副本)。
 const TEMPLATE_ENTRIES = ['install.bat', 'start.bat', '使用說明.txt'];
 
 function main() {
-  fs.rmSync(OUT_DIR, { recursive: true, force: true });
-  fs.rmSync(OUT_ZIP, { force: true });
+  // 清空 OUT_DIR 的內容,但不刪掉資料夾本身再重建——Windows 上如果有 Explorer 視窗或終端機
+  // cd 在這個資料夾裡,rmdir 整個資料夾會撞到「resource busy or locked」,但刪資料夾「裡面」
+  // 的東西不會有這個問題。
   fs.mkdirSync(OUT_DIR, { recursive: true });
+  for (const name of fs.readdirSync(OUT_DIR)) {
+    fs.rmSync(path.join(OUT_DIR, name), { recursive: true, force: true });
+  }
+  fs.rmSync(OUT_ZIP, { force: true });
 
   for (const entry of SOURCE_ENTRIES) {
     fs.cpSync(path.join(ROOT, entry), path.join(OUT_DIR, entry), { recursive: true });
