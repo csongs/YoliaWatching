@@ -22,6 +22,8 @@
     subgift:               { label: '贈送訂閱', category: 'donation' },
     submysterygift:        { label: '神秘箱訂閱(大量贈送)', category: 'donation' },
     raid:                  { label: '突襲(Raid)', category: 'system' },
+    announcement:           { label: '公告(/announce)', category: 'system' },
+    usernotice_other:       { label: '其他系統通知(未分類)', category: 'system' },
 
     // --- YouTube ---
     superchat:              { label: 'Super Chat(付費醒目訊息)', category: 'donation' },

@@ -84,6 +84,23 @@ function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
       });
     });
 
+    // tmi.js 對沒特別處理的 USERNOTICE 類型(例如 Twitch 原生的 /announce 公告)一律丟進這個
+    // 統一備援事件(見 node_modules/tmi.js/lib/client.js 693-712 的 switch default),原本
+    // 完全沒監聽,這種訊息會直接消失、連 SQLite 都不會寫進去(不是分類錯誤,是整個漏接)。
+    // msgid === 'announcement' 才是真的原生公告,其他不認識的 msgid 先歸類成 usernotice_other,
+    // extra.msgId 留著原始值方便之後回頭查是什麼。
+    client.on('usernotice', (msgid, _ch, tags, msg) => {
+      const username = tags?.['display-name'] || tags?.['login'] || '';
+      onEvent({
+        platform: 'twitch',
+        eventType: msgid === 'announcement' ? 'announcement' : 'usernotice_other',
+        dedupKey: tags?.id || `usernotice:${msgid}:${username}:${Date.now()}`,
+        username, message: msg || null, amount: null,
+        receivedAt: new Date().toISOString(),
+        extra: { msgId: msgid, color: tags?.['msg-param-color'] ?? null },
+      });
+    });
+
     client.on('raided', (_ch, username, viewers) => {
       onEvent({
         platform: 'twitch', eventType: 'raid',
