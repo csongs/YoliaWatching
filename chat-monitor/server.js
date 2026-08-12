@@ -28,14 +28,17 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 // 撈現成的值當預設值,省得每次都要重新輸入——純粹是「第一次啟動」的方便,種進 SQLite 之後,
 // 之後所有讀寫都只認 DB 裡的值,demo 頁面「平台設定」分頁就是唯一的設定介面,不用再回頭改
 // .env 或 config.json。
+// 只在 yuupeek/config.json 真的有這個平台的區塊時才回傳該平台的 seed——不能每個平台都無條件
+// 回傳(即使是空字串的 channel),否則 db.seedSettingsIfEmpty() 合併時那個空字串會蓋掉
+// db.js DEFAULT_CONFIG 裡寫死的頻道預設值(打包給別人的版本沒有 yuupeek/ 可讀,只能靠 DEFAULT_CONFIG)。
 function loadSeedFromYuupeekConfig() {
   let cfg = {};
   try { cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'yuupeek', 'config.json'), 'utf8')); } catch { /* 沒有就用空預設 */ }
-  return {
-    twitch: { enabled: !!cfg.twitch?.enabled, config: { channel: cfg.twitch?.channel ?? '', oauthToken: process.env.TWITCH_OAUTH ?? '' } },
-    youtube: { enabled: !!cfg.youtube?.enabled, config: { channel: cfg.youtube?.channel ?? '' } },
-    soop: { enabled: !!cfg.soop?.enabled, config: { channel: cfg.soop?.channel ?? '', apiMode: cfg.soop?.apiMode ?? 'community' } },
-  };
+  const seed = {};
+  if (cfg.twitch) seed.twitch = { enabled: !!cfg.twitch.enabled, config: { channel: cfg.twitch.channel ?? '', oauthToken: process.env.TWITCH_OAUTH ?? '' } };
+  if (cfg.youtube) seed.youtube = { enabled: !!cfg.youtube.enabled, config: { channel: cfg.youtube.channel ?? '' } };
+  if (cfg.soop) seed.soop = { enabled: !!cfg.soop.enabled, config: { channel: cfg.soop.channel ?? '', apiMode: cfg.soop.apiMode ?? 'community' } };
+  return seed;
 }
 db.seedSettingsIfEmpty(loadSeedFromYuupeekConfig());
 

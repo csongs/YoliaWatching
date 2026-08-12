@@ -82,10 +82,14 @@ function getStats() {
 
 // ── 平台設定 ──────────────────────────────────────────────────────────────
 // 三個平台各一列,config_json 存平台專屬欄位(channel/apiMode 等),不用另開一堆欄位。
+// 頻道預設值是這個專案(YoliaWatching)自己的實況主 altheayolia(見 yuupeek/config.json)——
+// chat-monitor 是這個專案內部用的觀察工具,不是給不認識的陌生人的通用產品,打包給協作者的
+// 版本沒有 yuupeek/config.json 可以 seed,直接把預設值寫在這裡最單純;協作者要測別的頻道,
+// 進「平台設定」分頁改掉存檔即可。啟用開關預設仍是 false,不會一解壓縮就自動連線。
 const DEFAULT_CONFIG = {
-  twitch: { channel: '', oauthToken: '' },
-  youtube: { channel: '' },
-  soop: { channel: '', apiMode: 'community' },
+  twitch: { channel: 'altheayolia', oauthToken: '' },
+  youtube: { channel: '@altheayolia' },
+  soop: { channel: 'altheayolia', apiMode: 'community' },
 };
 
 const upsertSettingsStmt = db.prepare(`
