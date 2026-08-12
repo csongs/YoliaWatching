@@ -120,6 +120,10 @@ function serveStatic(req, res, urlPath) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
+  if (url.pathname === '/api/version' && req.method === 'GET') {
+    return sendJson(res, 200, { version: require('./package.json').version, debug: DEBUG });
+  }
+
   if (url.pathname === '/api/settings' && req.method === 'GET') {
     return sendJson(res, 200, db.getSettings());
   }
@@ -148,6 +152,19 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/db-info' && req.method === 'GET') {
     return sendJson(res, 200, db.getStats());
+  }
+
+  if (url.pathname === '/api/prefs' && req.method === 'GET') {
+    return sendJson(res, 200, db.getPrefs());
+  }
+
+  if (url.pathname === '/api/prefs' && req.method === 'POST') {
+    try {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      return sendJson(res, 200, db.savePrefs(body));
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
   }
 
   if (url.pathname.startsWith('/api/')) return sendJson(res, 404, { error: 'not found' });

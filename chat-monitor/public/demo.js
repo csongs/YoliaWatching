@@ -13,13 +13,16 @@
     soop: [
       { key: 'channel', label: 'SOOP 主播 ID (streamerId)', placeholder: '例如 altheayolia', type: 'text' },
       { key: 'apiMode', label: 'SOOP 連線方式', type: 'select', options: [
-        { value: 'community', label: '社群模式（soop-extension，可用）' },
-        { value: 'official', label: '官方 API 模式（尚未實作）' },
+        { value: 'community', label: '社群模式（soop-extension）' },
+        { value: 'official', label: '官方 API 模式（尚未實作）', disabled: true },
       ] },
     ],
   };
 
   let settings = { twitch: {}, youtube: {}, soop: {} };
+  // 尚未存檔的欄位修改,切分頁或收到 WS 狀態推播觸發 renderForm() 重繪都不會遺失
+  // (renderForm 用 settings 疊 edits 畫表單,每次輸入變動都同步寫回 edits)。
+  let edits = { twitch: {}, youtube: {}, soop: {} };
   let status = { twitch: {}, youtube: {}, soop: {} };
   let activeTab = 'twitch';
   let events = [];
@@ -28,25 +31,31 @@
 
   const $tabs = document.getElementById('platformTabs');
   const $form = document.getElementById('settingsForm');
+  const $btnSaveAll = document.getElementById('btnSaveAll');
+  const $appVersion = document.getElementById('appVersion');
   const $chatLog = document.getElementById('chatLog');
   const $dbInfo = document.getElementById('dbInfo');
   const $donationNotes = document.getElementById('donationNotes');
   const $wsState = document.getElementById('wsState');
   const $filterPlatform = document.getElementById('filterPlatform');
   const $filterCategory = document.getElementById('filterCategory');
+  const $toggleTimestamps = document.getElementById('toggleTimestamps');
 
   function statusDotClass(platform) {
     const s = status[platform] || {};
     if (s.error) return 'err';
-    if (s.connected || s.live) return 'on';
+    // 「直播中」(YouTube 的 live)跟「已連線」(Twitch/SOOP 的 connected)語意不同,用不同顏色
+    // 區隔,不要讓使用者誤以為兩者是同一件事。
+    if (s.live) return 'live';
+    if (s.connected) return 'connected';
     return '';
   }
 
   function statusLineText(platform) {
     const s = status[platform] || {};
     if (s.error) return { text: '⚠ ' + s.error, cls: 'err' };
-    if (platform === 'youtube') return s.live ? { text: '● 直播中，監聽訊息中', cls: 'ok' } : { text: '○ 目前沒有偵測到直播', cls: '' };
-    return s.connected ? { text: '● 已連線', cls: 'ok' } : { text: '○ 未連線', cls: '' };
+    if (platform === 'youtube') return s.live ? { text: '● 直播中，監聽訊息中', cls: 'live' } : { text: '○ 目前沒有偵測到直播', cls: '' };
+    return s.connected ? { text: '● 已連線', cls: 'connected' } : { text: '○ 未連線', cls: '' };
   }
 
   function renderTabs() {
@@ -62,7 +71,7 @@
 
   function renderForm() {
     const p = activeTab;
-    const cfg = settings[p] || {};
+    const cfg = { ...settings[p], ...edits[p] };
     const defs = FIELD_DEFS[p];
     const line = statusLineText(p);
 
@@ -71,7 +80,7 @@
     for (const d of defs) {
       html += `<div class="field"><label>${d.label}</label>`;
       if (d.type === 'select') {
-        html += `<select id="f_${d.key}">` + d.options.map((o) => `<option value="${o.value}" ${cfg[d.key] === o.value ? 'selected' : ''}>${o.label}</option>`).join('') + `</select>`;
+        html += `<select id="f_${d.key}">` + d.options.map((o) => `<option value="${o.value}" ${cfg[d.key] === o.value ? 'selected' : ''} ${o.disabled ? 'disabled' : ''}>${o.label}</option>`).join('') + `</select>`;
       } else if (d.type === 'password') {
         html += `<div class="field-secret">`
           + `<input type="password" id="f_${d.key}" placeholder="${d.placeholder || ''}" value="${cfg[d.key] ?? ''}" autocomplete="off">`
@@ -84,9 +93,14 @@
     }
     html += `<div class="status-line ${line.cls}">${line.text}</div>`;
     html += `<button class="save" id="btnSave">儲存並套用</button>`;
+    html += `<div class="save-hint">只儲存「${L.platformLabel(p)}」這個分頁</div>`;
     $form.innerHTML = html;
 
-    document.getElementById('btnSave').onclick = () => saveSettings(p, defs);
+    document.getElementById('btnSave').onclick = () => saveActiveTab();
+    // input/change 委派到整個表單:切分頁或 WS 狀態推播觸發重繪前,先把目前打的字同步進 edits,
+    // 不會因為重繪就消失。
+    $form.oninput = () => captureFormInto(p);
+    $form.onchange = () => captureFormInto(p);
     for (const btn of $form.querySelectorAll('.toggle-visibility')) {
       btn.onclick = () => {
         const input = document.getElementById(btn.dataset.target);
@@ -95,14 +109,46 @@
     }
   }
 
-  async function saveSettings(p, defs) {
-    const body = { enabled: document.getElementById('f_enabled').checked };
-    for (const d of defs) body[d.key] = document.getElementById(`f_${d.key}`).value.trim();
-    const res = await fetch(`/api/settings/${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  function captureFormInto(p) {
+    const enabledEl = document.getElementById('f_enabled');
+    if (!enabledEl) return; // 表單還沒渲染
+    const cfg = { enabled: enabledEl.checked };
+    for (const d of FIELD_DEFS[p]) cfg[d.key] = document.getElementById(`f_${d.key}`).value;
+    edits[p] = cfg;
+  }
+
+  function buildBody(p) {
+    const cfg = { ...settings[p], ...edits[p] };
+    const body = { enabled: !!cfg.enabled };
+    for (const d of FIELD_DEFS[p]) body[d.key] = (cfg[d.key] ?? '').toString().trim();
+    return body;
+  }
+
+  async function saveOne(p) {
+    if (p === activeTab) captureFormInto(p);
+    const res = await fetch(`/api/settings/${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildBody(p)) });
     const saved = await res.json();
     settings[p] = saved;
+    edits[p] = {};
+  }
+
+  async function saveActiveTab() {
+    await saveOne(activeTab);
     renderForm();
     setTimeout(refreshStatus, 800); // 給 connector 一點時間連線再刷新狀態
+  }
+
+  async function saveAllSettings() {
+    $btnSaveAll.disabled = true;
+    $btnSaveAll.textContent = '儲存中…';
+    try {
+      await Promise.all(PLATFORMS.map(saveOne));
+    } finally {
+      $btnSaveAll.disabled = false;
+      $btnSaveAll.textContent = '三個平台一起儲存並套用';
+    }
+    renderForm();
+    setTimeout(refreshStatus, 800);
   }
 
   function renderDonationNotes() {
@@ -143,12 +189,19 @@
     const cat = eventCategory(evt);
     const div = document.createElement('div');
     div.className = 'chat-line' + (cat === 'donation' ? ' donation' : cat === 'system' ? ' system' : '');
-    const time = new Date(evt.received_at).toLocaleTimeString('zh-TW', { hour12: false });
+    const dt = new Date(evt.received_at);
+    const time = dt.toLocaleTimeString('zh-TW', { hour12: false });
+    const fullDateTime = dt.toLocaleString('zh-TW', { hour12: false }); // hover 用,含日期,跨天監聽也看得出來
     const amount = evt.amount ? `<span class="amount">+${evt.amount}</span>` : '';
     const msg = evt.message ? escapeHtml(evt.message) : '';
-    div.innerHTML = `<span class="time">${time}</span>`
+    // 一般聊天訊息(event_type 'chat')每則都會重複同一個灰色「一般訊息」標籤,量大時是純雜訊,
+    // 省略不顯示;抖內/會員/系統通知等特殊事件的類型標籤還是保留,因為那才是使用者想一眼看到的資訊。
+    const typeTag = evt.event_type === 'chat' ? '' : `<span class="tag type">${eventLabel(evt)}</span>`;
+    // 每行時間戳顏色一致,要不要顯示交給使用者用工具列的「顯示時間戳」勾選框控制
+    // (CSS 用 .chat-log.hide-timestamps .time { display:none } 整批切換,不用重繪)。
+    div.innerHTML = `<span class="time" title="${fullDateTime}">${time}</span>`
       + `<span class="tag ${evt.platform}">${L.platformLabel(evt.platform)}</span>`
-      + `<span class="tag type">${eventLabel(evt)}</span>`
+      + typeTag
       + (evt.username ? `<span class="uname">${escapeHtml(evt.username)}</span>` : '')
       + msg + amount;
     return div;
@@ -196,6 +249,15 @@
     renderForm();
     renderChatLog();
     refreshDbInfo();
+    // debug 開關狀態不在頁面顯示(對一般使用者是雜訊)——啟動伺服器時終端機那行已經有講,
+    // /api/version 仍然回傳 debug 欄位,需要的話可以直接 curl 那支 API 查。
+    const { version } = await (await fetch('/api/version')).json();
+    $appVersion.textContent = `v${version}`;
+
+    const prefs = await (await fetch('/api/prefs')).json();
+    const showTimestamps = prefs.showTimestamps ?? true; // 沒存過就預設顯示
+    $toggleTimestamps.checked = showTimestamps;
+    $chatLog.classList.toggle('hide-timestamps', !showTimestamps);
   }
 
   function connectWs() {
@@ -218,6 +280,12 @@
 
   $filterPlatform.onchange = () => { filterPlatform = $filterPlatform.value; renderChatLog(); };
   $filterCategory.onchange = () => { filterCategory = $filterCategory.value; renderChatLog(); };
+  $toggleTimestamps.onchange = () => {
+    const checked = $toggleTimestamps.checked;
+    $chatLog.classList.toggle('hide-timestamps', !checked);
+    fetch('/api/prefs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ showTimestamps: checked }) });
+  };
+  $btnSaveAll.onclick = () => saveAllSettings();
 
   renderDonationNotes();
   loadInitial();

@@ -9,27 +9,34 @@
     --text: #e6e8ee; --muted: #8891a3; --accent: #5b8cff;
     --twitch: #9147ff; --youtube: #ff3b3b; --soop: #1bc47d;
     --donation: #ffb020; --chat: #2a2f3d;
+    --live: #33d17a; --connected: #4fc3f7;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system,"Segoe UI",Roboto,"Noto Sans TC",sans-serif; }
   header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   header h1 { font-size: 16px; margin: 0; }
   header .sub { color: var(--muted); font-size: 12px; }
+  header .version { margin-left: auto; color: var(--muted); font-size: 12px; }
   .layout { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px; align-items: start; }
   @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
   .panel h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .panel-summary { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; cursor: pointer; }
+  #donationNotes { margin-top: 10px; }
 
   .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
   .tab-btn { flex: 1; padding: 8px 4px; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
   .tab-btn.active { color: #fff; border-color: var(--accent); background: #22283a; }
   .tab-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; background: #555; }
-  .tab-btn .dot.on { background: #33d17a; }
+  .tab-btn .dot.live { background: var(--live); }
+  .tab-btn .dot.connected { background: var(--connected); }
   .tab-btn .dot.err { background: #ff5555; }
 
+  #settingsForm { min-height: 260px; } /* 分頁欄位數量不同(YT 1 個/Twitch,SOOP 2 個),固定最小高度避免切分頁時下方卡片跟著跳動 */
   .field { margin-bottom: 10px; }
   .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   .field input[type=text], .field input[type=password], .field select { width: 100%; padding: 7px 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 13px; }
+  .field select option:disabled { color: #666; }
   .field-secret { display: flex; gap: 6px; }
   .field-secret input { flex: 1; min-width: 0; }
   .field-secret .toggle-visibility { flex: 0 0 auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 10px; }
@@ -37,9 +44,13 @@
   .field.row { display: flex; align-items: center; gap: 8px; }
   .status-line { font-size: 12px; color: var(--muted); margin: 6px 0 10px; min-height: 16px; }
   .status-line.err { color: #ff7a7a; }
-  .status-line.ok { color: #33d17a; }
+  .status-line.live { color: var(--live); }
+  .status-line.connected { color: var(--connected); }
   button.save { width: 100%; padding: 8px; background: var(--accent); border: none; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
   button.save:hover { filter: brightness(1.1); }
+  button.save-all { margin-top: 8px; background: var(--panel2); border: 1px solid var(--accent); color: var(--text); }
+  button.save-all:disabled { opacity: .6; cursor: default; }
+  .save-hint { font-size: 11px; color: var(--muted); margin-top: 5px; text-align: center; }
 
   .db-info { font-size: 12px; color: var(--muted); line-height: 1.6; }
   .db-info code { background: var(--bg); padding: 1px 5px; border-radius: 4px; color: #c9d1e0; word-break: break-all; }
@@ -50,6 +61,7 @@
   .chat-window { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; height: 70vh; display: flex; flex-direction: column; }
   .chat-toolbar { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
   .chat-toolbar select { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+  .toggle-label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
   .chat-log { flex: 1; overflow-y: auto; padding: 10px 14px; font-size: 13px; line-height: 1.7; }
   .chat-line { padding: 3px 0; word-wrap: break-word; }
   .tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 4px; color: #fff; }
@@ -59,7 +71,8 @@
   .tag.type { background: var(--chat); color: var(--muted); }
   .chat-line.donation { background: rgba(255,176,32,.08); border-left: 2px solid var(--donation); padding-left: 8px; }
   .chat-line.system { color: var(--muted); font-style: italic; }
-  .time { color: #555; font-size: 11px; margin-right: 6px; }
+  .time { color: #555; font-size: 11px; margin-right: 6px; cursor: default; }
+  .chat-log.hide-timestamps .time { display: none; }
   .uname { font-weight: 700; margin-right: 4px; }
   .amount { color: var(--donation); font-weight: 700; margin-left: 6px; }
   .empty-hint { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
@@ -70,6 +83,7 @@
 <header>
   <h1>Chat Monitor 測試頁</h1>
   <span class="sub">監聽 Twitch / YouTube / SOOP 的聊天、抖內、特殊訊息事件，寫入本機 SQLite</span>
+  <span class="version" id="appVersion"></span>
 </header>
 
 <div class="layout">
@@ -78,6 +92,8 @@
       <h2>平台設定</h2>
       <div class="tabs" id="platformTabs"></div>
       <div id="settingsForm"></div>
+      <button class="save save-all" id="btnSaveAll">三個平台一起儲存並套用</button>
+      <div class="save-hint">一次儲存 Twitch/YouTube/SOOP 三個分頁的設定，包含還沒切換過去看的分頁</div>
     </div>
 
     <div class="panel">
@@ -86,8 +102,10 @@
     </div>
 
     <div class="panel">
-      <h2>各平台「抖內/等級」說明</h2>
-      <div id="donationNotes"></div>
+      <details>
+        <summary class="panel-summary">各平台「抖內/等級」說明</summary>
+        <div id="donationNotes"></div>
+      </details>
     </div>
   </div>
 
@@ -107,6 +125,7 @@
           <option value="donation">抖內/贊助</option>
           <option value="system">系統事件</option>
         </select>
+        <label class="toggle-label"><input type="checkbox" id="toggleTimestamps" checked> 顯示時間戳</label>
         <span id="wsState" style="margin-left:auto;color:var(--muted);">連線中…</span>
       </div>
       <div class="chat-log" id="chatLog"><div class="empty-hint">尚無訊息，啟用左側平台設定後開始監聽</div></div>

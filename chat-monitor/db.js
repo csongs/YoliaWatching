@@ -36,6 +36,11 @@ db.exec(`
     config_json TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS prefs (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL
+  );
 `);
 
 // dedup_key 必須是「同一事件重送時會算出相同值」的東西——每平台的組法見各 connector。
@@ -126,7 +131,30 @@ function saveSettings(platform, { enabled, ...config }) {
   return getSettings()[platform];
 }
 
+// ── 介面偏好設定(跟平台無關,例如「顯示時間戳」這種畫面選項)──────────────────
+// 跟 settings 表分開,是因為 settings 的 saveSettings()/API 綁定 CONNECTOR_FACTORIES,
+// 存檔會觸發 restartConnector(platform)——這裡存的是純畫面選項,不該觸發任何連線重啟。
+const upsertPrefStmt = db.prepare(`
+  INSERT INTO prefs (key, value_json) VALUES (@key, @valueJson)
+  ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json
+`);
+
+function getPrefs() {
+  const rows = db.prepare('SELECT * FROM prefs').all();
+  const out = {};
+  for (const row of rows) out[row.key] = JSON.parse(row.value_json);
+  return out;
+}
+
+function savePrefs(patch) {
+  for (const [key, value] of Object.entries(patch)) {
+    upsertPrefStmt.run({ key, valueJson: JSON.stringify(value) });
+  }
+  return getPrefs();
+}
+
 module.exports = {
   insertEvent, getRecentEvents, getStats, DB_PATH,
   seedSettingsIfEmpty, getSettings, saveSettings,
+  getPrefs, savePrefs,
 };
