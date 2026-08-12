@@ -9,7 +9,6 @@
     --text: #e6e8ee; --muted: #8891a3; --accent: #5b8cff;
     --twitch: #9147ff; --youtube: #ff3b3b; --soop: #1bc47d;
     --donation: #ffb020; --chat: #2a2f3d;
-    --live: #33d17a; --connected: #4fc3f7;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system,"Segoe UI",Roboto,"Noto Sans TC",sans-serif; }
@@ -28,8 +27,7 @@
   .tab-btn { flex: 1; padding: 8px 4px; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
   .tab-btn.active { color: #fff; border-color: var(--accent); background: #22283a; }
   .tab-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; background: #555; }
-  .tab-btn .dot.live { background: var(--live); }
-  .tab-btn .dot.connected { background: var(--connected); }
+  .tab-btn .dot.on { background: #33d17a; }
   .tab-btn .dot.err { background: #ff5555; }
 
   #settingsForm { min-height: 260px; } /* 分頁欄位數量不同(YT 1 個/Twitch,SOOP 2 個),固定最小高度避免切分頁時下方卡片跟著跳動 */
@@ -44,8 +42,7 @@
   .field.row { display: flex; align-items: center; gap: 8px; }
   .status-line { font-size: 12px; color: var(--muted); margin: 6px 0 10px; min-height: 16px; }
   .status-line.err { color: #ff7a7a; }
-  .status-line.live { color: var(--live); }
-  .status-line.connected { color: var(--connected); }
+  .status-line.ok { color: #33d17a; }
   button.save { width: 100%; padding: 8px; background: var(--accent); border: none; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
   button.save:hover { filter: brightness(1.1); }
   button.save-all { margin-top: 8px; background: var(--panel2); border: 1px solid var(--accent); color: var(--text); }

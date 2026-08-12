@@ -44,18 +44,15 @@
   function statusDotClass(platform) {
     const s = status[platform] || {};
     if (s.error) return 'err';
-    // 「直播中」(YouTube 的 live)跟「已連線」(Twitch/SOOP 的 connected)語意不同,用不同顏色
-    // 區隔,不要讓使用者誤以為兩者是同一件事。
-    if (s.live) return 'live';
-    if (s.connected) return 'connected';
+    if (s.connected || s.live) return 'on';
     return '';
   }
 
   function statusLineText(platform) {
     const s = status[platform] || {};
     if (s.error) return { text: '⚠ ' + s.error, cls: 'err' };
-    if (platform === 'youtube') return s.live ? { text: '● 直播中，監聽訊息中', cls: 'live' } : { text: '○ 目前沒有偵測到直播', cls: '' };
-    return s.connected ? { text: '● 已連線', cls: 'connected' } : { text: '○ 未連線', cls: '' };
+    if (platform === 'youtube') return s.live ? { text: '● 直播中，監聽訊息中', cls: 'ok' } : { text: '○ 目前沒有偵測到直播', cls: '' };
+    return s.connected ? { text: '● 已連線', cls: 'ok' } : { text: '○ 未連線', cls: '' };
   }
 
   function renderTabs() {
