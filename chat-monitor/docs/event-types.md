@@ -370,11 +370,12 @@ Connector：[connectors/soop.js](../connectors/soop.js)（`soop-extension`，社
 { "username": "우수현S2사자", "message": "/하트//하트//하트/", "extra": { "userId": "sam96645(3)" } }
 ```
 
-存進 `events` 表：`message` = `res.comment`；`amount` = `null`；`extra` = `{ userId: res.userId }`。
+存進 `events` 表：`message` = `res.comment`；`amount` = `null`；`extra` = `{ userId: res.userId, messageParts }`。
 
-**2026-08-14 發現**：SOOP 的表情符號不是只有獨立的 `emoticon` 事件才會出現——使用者也可以在一般聊天訊息裡直接打 `/코드명/` 這種斜線包住的代碼（例如 `/하트/`、`/하트뿜뿜/`，同一則訊息裡常常重複打好幾次），在真正的 SOOP 網頁上這些代碼會被客戶端換成圖片貼圖，但我們的 `res.comment` 拿到的還是原始文字代碼，不是圖片。跟獨立的 `emoticon` 事件（`emoticonId` 是數字/雜湊 ID）不是同一套 ID 系統——這批是人類可讀的中文/韓文代碼字串，說不定比 `emoticonId` 更有機會反查到官方素材路徑，但目前還沒去查。
+**2026-08-14 發現＋接上圖片渲染**：SOOP 的表情符號不是只有獨立的 `emoticon` 事件才會出現——使用者也可以在一般聊天訊息裡直接打 `/코드명/` 這種斜線包住的代碼（例如 `/하트/`、`/하트뿜뿜/`，同一則訊息裡常常重複打好幾次），在真正的 SOOP 網頁上這些代碼會被客戶端換成圖片貼圖。找到 SOOP 網頁前端自己在用的公開靜態目錄
+`https://res.sooplive.com/images/chat/emoticon/big/list.json`（`{ "/代碼/": "檔名.png" }`，123 筆「經典」表情符號）後，`connectors/soop.js` 的 [`buildEmoticonMessageParts()`](../connectors/soop.js) 會掃描 `res.comment` 裡的 `/代碼/` 片段，對得上目錄的換成 `{type:'emoji', url, alt}`，對不上的（例如上面範例的 `/하트뿜뿜/`，屬於還沒找到目錄的新版 `_s` 表情符號包）保留原始文字——上面範例裡的 `/하트/` 全部三個都能換成圖片（`79.png`），但完整的 `/하트//하트//하트/` 訊息如果混著 `_s` 版代碼，也只有認得的那幾個會變圖片，其他照樣是文字。目錄是連線時背景抓一次、整個程序共用，抓不到就整段退回純文字，不影響聊天監聽本身。
 
-UI 呈現：無類型標籤（`chat` 省略）。**注意**：SOOP 一般聊天目前沒有表情符號圖片渲染（`extra` 沒有 `messageParts`），因為沒找到 SOOP 表情符號的公開圖片網址規則（見 README 已知限制），跟 Twitch/YouTube 不同——上面這種 `/코드/` 訊息目前就是照樣顯示斜線包住的原始文字，不會變成愛心圖片。
+UI 呈現：無類型標籤（`chat` 省略）；`messageParts` 有值時，認得的 `/代碼/` 片段會渲染成 `<img class="chat-emoji">`（跟 Twitch/YouTube 共用同一段 `demo.js` 渲染邏輯），不認得的代碼跟其他純文字一樣直接顯示。
 
 ### emoticon — 表情訊息
 
@@ -412,14 +413,15 @@ CDN 網址規則：`https://res.sooplive.com/images/chat/emoticon/big/{id}.webp`
 或找到 OGQ／SOOP 的圖片解析 API 才能繼續，**目前還沒有辦法把 `emoticonId` 換成正確的圖片網址，
 圖片渲染還沒接上**。
 
-已確認的內建表情符號代碼 → 小整數 ID 對照（使用者從真實 DOM 截圖比對出來的，目前只有這一組）：
-`/댄스2_s/` → `233`。`/응원3_s/`、`/응원5_s/`、`/축하해_s/` 這幾個也在真實聊天室看過對應的圖示，
-但還沒有確認實際的數字 ID（螢幕截圖看得到圖案，但抓不到 `<img src>` 的實際數值）。內建表情符號
-應該有一份完整的代碼→ID 對照表存在 SOOP 網頁前端某處（manifest JSON 或類似的靜態資源），
-比一個一個從瀏覽器 DOM 挖數字更有效率，但目前還沒找到，也還沒去找——不確定的東西不亂猜/亂試
-（大量嘗試數字 ID 對第三方 CDN 送請求也不禮貌）。
+**內建表情符號代碼 → ID 對照表找到了**：`https://res.sooplive.com/images/chat/emoticon/big/list.json`
+是一份公開的靜態 JSON（沒有認證、沒有 API key），內容是 `{ "/代碼/": "檔名.png", ... }`（少數是子
+資料夾例如 `"baseball/1.png"`），123 筆，涵蓋 `/하트/`、`/최고/`、`/ㅋㅋ/`、`/사랑/`、`/짱/` 這類
+「經典」表情符號（加一組棒球隊徽）。**但不包含**帶 `_s` 後綴的新版表情符號（`/댄스2_s/`、
+`/응원3_s/`、`/축하해_s/` 這種），試了幾個合理猜測的網址都是 404，這批新版的對照表還沒找到，
+猜測是完全獨立的第二套目錄。已經接上 `connectors/soop.js`（見下面），連線時背景抓一次、
+整個程序共用、抓不到就退回純文字，不影響聊天本身。
 
-UI 呈現：「表情訊息」標籤，`message` 是 `null`，demo 頁這行**只會顯示使用者名稱，看不到表情符號本身**（原因見上，不是還沒接的小事，是目前抓到的 ID 系統跟已知網址規則對不起來）。
+UI 呈現：「表情訊息」標籤，`message` 是 `null`，demo 頁這行**只會顯示使用者名稱，看不到表情符號本身**——這個獨立的 `emoticon` 事件（OGQ 雜湊 ID）本身沒有解決，跟下面 `chat` 事件裡的 `/代碼/` 圖片渲染是兩回事，不要搞混。
 
 ### text_donation — 文字/語音抖內(별풍선)
 
@@ -534,7 +536,7 @@ UI 呈現：「系統通知」標籤，灰色斜體行，沒有使用者名稱�
 
 - SOOP `subscribe`/`notification` 還沒抓到真實資料（`chat`/`emoticon`/`text_donation` 已經有真實樣本了，見上面對應章節），上面沒有 ✅ 標記的範例都是程式碼推導，欄位型別（尤其是 `amount` 是字串還是數字）有可能猜錯。
 - SOOP `subscribe` 事件可能只在「續訂」時觸發，「新訂閱」可能是完全沒被監聽到的另一個協定類型（`0091`），見 `subscribe` 章節的說明——還沒確認。
-- SOOP 表情符號沒有實作圖片渲染（`messageParts`），已知 CDN 網域（內建表情符號用 `res.sooplive.com`，OGQ 貼圖用 `ogq-sticker-global-cdn-z01.sooplive.com`），但我們實際抓到的 `emoticonId` 換不出正確網址，見 `emoticon` 章節。
+- SOOP 一般聊天訊息裡的 `/代碼/` 表情符號（2026-08-14 已接上圖片渲染，見 `chat` 章節）只涵蓋找得到目錄的 123 個「經典」代碼，帶 `_s` 後綴的新版表情符號包還沒找到對照表，一樣是純文字；獨立的 `emoticon` 事件（OGQ 雜湊 ID）完全沒有圖片渲染，見 `emoticon` 章節。
 - YouTube `supersticker` 沒有真實範例，貼圖圖片本身也沒有渲染進 `messageParts`。
 - YouTube 同一則訊息「既是 Super Chat 又是會員」時，`extra` 目前不會帶會員資訊，見 `superchat` 章節。
 - Twitch `raid`／`cheer`／`resub` 沒有真實範例。

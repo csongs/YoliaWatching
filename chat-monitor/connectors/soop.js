@@ -25,6 +25,63 @@ const { RAW_CAPTURE, rawCapture } = require('../lib/rawCapture');
 const RETRY_INTERVAL_MS = 30_000; // 主播還沒開台時多久查一次(跟 youtube connector 的 RETRY_INTERVAL_MS 同數量級)
 const RECONNECT_DELAY_MS = 500; // 連線中途斷線(見檔頭)時的重連延遲——刻意很短,把監聽空窗壓到最小
 
+// 2026-08-14:一般聊天訊息裡可以直接打 /코드명/ 這種斜線包住的內建表情符號代碼(例如 /하트/),
+// 在真正的 SOOP 網頁上會換成貼圖圖片——一開始只知道有這個語法,不知道代碼對應的圖片網址。
+// 用 curl 試出 SOOP 自己的網頁前端也是讀這份公開的靜態 JSON 目錄(沒有認證、沒有 API key,
+// 純靜態檔案,猜測是 SOOP 網頁聊天室 UI 本身載入表情符號面板用的清單):
+//   https://res.sooplive.com/images/chat/emoticon/big/list.json
+// 內容是 { "/代碼/": "檔名.png", ... }(某些是子資料夾,例如 "baseball/1.png"),圖片網址組法是
+// `${EMOTICON_CDN_BASE}${filename}`——curl 驗證過抓到的檔名真的能載入圖片。目前只找到這一份
+// 「經典表情符號」目錄(123 個代碼,例如 /하트/ /최고/ /ㅋㅋ/ 這種),沒找到另一套帶 `_s` 後綴的
+// 新版表情符號(例如 /댄스2_s/ /응원3_s/)的對照表,試了幾個合理的猜測網址都是 404,沒有再繼續
+// 亂猜——只要不在這份目錄裡的代碼,就照樣顯示原始文字,不強求全部代碼都能換成圖片。
+const EMOTICON_LIST_URL = 'https://res.sooplive.com/images/chat/emoticon/big/list.json';
+const EMOTICON_CDN_BASE = 'https://res.sooplive.com/images/chat/emoticon/big/';
+
+// 目錄是靜態檔案,一次拿到之後整個程序共用,不用每則訊息都重新請求;拿不到(離線/網址失效)就
+// 退回空物件,表情符號代碼全部當純文字處理,不影響聊天本身的監聽。
+let emoticonManifest = null;
+let emoticonManifestPromise = null;
+function loadEmoticonManifest() {
+  if (emoticonManifestPromise) return emoticonManifestPromise;
+  emoticonManifestPromise = fetch(EMOTICON_LIST_URL)
+    .then((res) => (res.ok ? res.json() : {}))
+    .then((json) => {
+      emoticonManifest = json && typeof json === 'object' ? json : {};
+      debugLog('soop', 'emoticon manifest loaded', { count: Object.keys(emoticonManifest).length });
+      return emoticonManifest;
+    })
+    .catch((e) => {
+      debugLog('soop', 'emoticon manifest fetch failed', { message: e?.message });
+      emoticonManifest = {};
+      return emoticonManifest;
+    });
+  return emoticonManifestPromise;
+}
+
+// 掃描聊天內容裡的 /代碼/ 片段,對得上目錄的換成表情符號圖片 part,對不上的整段 /代碼/ 原文
+// 保留(可能是上面提到的 `_s` 新版表情符號,或使用者自己打的、剛好長得像代碼的文字)。
+// manifest 還沒載入完成(emoticonManifest 是 null)時直接回傳 null,退回純文字顯示,不擋訊息。
+function buildEmoticonMessageParts(comment, manifest) {
+  if (!comment || !manifest) return null;
+  const codeRe = /\/[^/\s]+\//g;
+  const parts = [];
+  let cursor = 0;
+  let matchedAny = false;
+  let match;
+  while ((match = codeRe.exec(comment))) {
+    const filename = manifest[match[0]];
+    if (!filename) continue;
+    if (match.index > cursor) parts.push({ type: 'text', text: comment.slice(cursor, match.index) });
+    parts.push({ type: 'emoji', url: EMOTICON_CDN_BASE + filename, alt: match[0] });
+    cursor = match.index + match[0].length;
+    matchedAny = true;
+  }
+  if (!matchedAny) return null;
+  if (cursor < comment.length) parts.push({ type: 'text', text: comment.slice(cursor) });
+  return parts;
+}
+
 // soop-extension 的事件物件沒有唯一 id 欄位,dedup key 用「事件類型+收到時間+使用者+內容」組出來
 // (同一次連線內幾乎不可能撞相同的四元組;reconnect 不會重送歷史,所以夠用)。
 function dedupKeyFor(type, res) {
@@ -93,7 +150,8 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
       };
 
       soopChat.on(SoopChatEvent.CHAT, (res) => emit('chat', res, {
-        username: res.username, message: res.comment, amount: null, extra: { userId: res.userId },
+        username: res.username, message: res.comment, amount: null,
+        extra: { userId: res.userId, messageParts: buildEmoticonMessageParts(res.comment, emoticonManifest) },
       }));
       soopChat.on(SoopChatEvent.EMOTICON, (res) => emit('emoticon', res, {
         username: res.username, message: null, amount: null, extra: { userId: res.userId, emoticonId: res.emoticonId },
@@ -198,6 +256,8 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
       return;
     }
     if (!channel) { onStatus({ connected: false, error: '未設定 SOOP 主播 ID(streamerId)' }); return; }
+
+    loadEmoticonManifest(); // 不用 await——不擋連線流程,載入完成前的訊息先顯示純文字就好
 
     if (!SoopClientCtor) {
       const mod = await import('soop-extension');
