@@ -143,6 +143,26 @@ Token 時，程式碼仍然把 `identity.username` 設成頻道名稱、密碼�
 之前 UI 上「留空可匿名讀取聊天，但收不到訂閱/Bits 以外資訊」這句話的說法沒有查證來源，
 既然连線機制本身都是壞的，這個附帶說法的可信度也存疑，已從畫面上拿掉。
 
+## 表情符號圖片（2026-08-13）
+
+聊天訊息裡的表情符號/emoji，只要來源有給圖片網址就會實際渲染成 `<img>`（不是文字
+shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯的陣列），`message`
+欄位仍然保留純文字版本當退回值跟搜尋用。
+
+- **YouTube**：`youtube-chat-next` 的 `EmojiItem` 本來就帶 `url`（見
+  `dist/types/data.d.ts`），之前 `messageToText()` 直接把網址丟掉只留 alt 文字，現在留著。
+  用真實抓到的資料（`data/raw-capture.jsonl` 裡的 `:face-blue-smiling:` 樣本）驗證過解析
+  邏輯正確。
+- **Twitch**：從 `tags.emotes`（`tmi.js` 解析過的表情位置，見
+  `node_modules/tmi.js/lib/parser.js` 的 `parseComplexTag`）算出文字/表情的交錯位置，
+  圖片網址用 Twitch 官方公開、多年沒變的 CDN 規則自己組
+  （`https://static-cdn.jtvnw.net/emoticons/v2/{id}/default/dark/{scale}.0`，跟
+  Helix `Get Channel/Global Emotes` API 回傳的網址同樣式）。**只用手動模擬資料驗證過切割
+  邏輯，沒有真實 Twitch 表情符號訊息核對過**——已經把「帶表情符號的一般聊天」也加進
+  `CHAT_MONITOR_RAW_CAPTURE` 的收錄範圍（原本只收特殊事件），下次真的遇到再驗證。
+- **SOOP**：查過官方文件跟第三方擴充套件都沒找到表情符號圖片網址的規則，`emoticon` 事件
+  目前只有 `emoticonId` 文字，沒有做圖片渲染，不確定的東西不猜。
+
 ## 已知限制
 
 - YouTube 改用 `youtube-chat-next` 爬公開網頁聊天室後，分不出會員留言是「新加入/連續/

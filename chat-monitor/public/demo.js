@@ -267,6 +267,23 @@
     return `<span class="amount">+${escapeHtml(evt.amount)}</span>`;
   }
 
+  // extra_json 存的是 JSON 字串,壞掉(不合法 JSON)就當沒有,退回純文字 message,不要整行渲染失敗。
+  function getExtra(evt) {
+    if (!evt.extra_json) return null;
+    try { return JSON.parse(evt.extra_json); } catch { return null; }
+  }
+
+  // extra.messageParts 是「文字/表情圖片」交錯的陣列(YouTube/Twitch 才有,SOOP 目前只有
+  // emoticonId,沒查到公開的圖片網址規則,見 README 已知限制),沒有就退回純文字 message。
+  function renderMessageBody(evt) {
+    const parts = getExtra(evt)?.messageParts;
+    if (!parts) return evt.message ? escapeHtml(evt.message) : '';
+    return parts.map((p) => p.type === 'emoji'
+      ? `<img class="chat-emoji" src="${escapeHtml(p.url ?? '')}" alt="${escapeHtml(p.alt ?? '')}" title="${escapeHtml(p.alt ?? '')}" loading="lazy">`
+      : escapeHtml(p.text ?? '')
+    ).join('');
+  }
+
   function renderLine(evt) {
     const cat = eventCategory(evt);
     const div = document.createElement('div');
@@ -275,7 +292,7 @@
     const time = dt.toLocaleTimeString('zh-TW', { hour12: false });
     const fullDateTime = dt.toLocaleString('zh-TW', { hour12: false }); // hover 用,含日期,跨天監聽也看得出來
     const amount = formatAmount(evt);
-    const msg = evt.message ? escapeHtml(evt.message) : '';
+    const msg = renderMessageBody(evt);
     // 一般聊天訊息(event_type 'chat')每則都會重複同一個灰色「一般訊息」標籤,量大時是純雜訊,
     // 省略不顯示;抖內/會員/系統通知等特殊事件的類型標籤還是保留,因為那才是使用者想一眼看到的資訊。
     const typeTag = evt.event_type === 'chat' ? '' : `<span class="tag type">${eventLabel(evt)}</span>`;

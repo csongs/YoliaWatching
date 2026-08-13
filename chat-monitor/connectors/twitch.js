@@ -4,6 +4,38 @@ const tmi = require('tmi.js');
 const { debugLog } = require('../lib/debugLog');
 const { RAW_CAPTURE, rawCapture } = require('../lib/rawCapture');
 
+// Twitch 表情符號(emotes)的 CDN 網址是長期穩定、公開文件記載的規則(dev.twitch.tv 的
+// Get Channel/Global Emotes API 回傳的圖片網址就是這個樣式),不用另外查證——
+// https://static-cdn.jtvnw.net/emoticons/v2/{emote id}/default/dark/{scale}.0
+const TWITCH_EMOTE_CDN = (id, scale = 2) => `https://static-cdn.jtvnw.net/emoticons/v2/${id}/default/dark/${scale}.0`;
+
+// tmi.js 把 IRC 的 emotes tag(格式像 "25:0-4,12-16/1902:6-10")解析成
+// { "25": ["0-4","12-16"], "1902": ["6-10"] } (見 node_modules/tmi.js/lib/parser.js 的
+// parseComplexTag)——位置是 UTF-16 code unit offset,跟 JS 字串的 slice() 用同一套索引,
+// 不用另外轉換。沒有表情符號時 tags.emotes 是 null,回傳 null 不用建結構化版本。
+function buildEmoteMessageParts(message, emotesTag) {
+  if (!emotesTag) return null;
+  const ranges = [];
+  for (const [emoteId, positions] of Object.entries(emotesTag)) {
+    if (!positions) continue;
+    for (const pos of positions) {
+      const [start, end] = String(pos).split('-').map(Number);
+      if (Number.isFinite(start) && Number.isFinite(end)) ranges.push({ emoteId, start, end });
+    }
+  }
+  if (ranges.length === 0) return null;
+  ranges.sort((a, b) => a.start - b.start);
+  const parts = [];
+  let cursor = 0;
+  for (const r of ranges) {
+    if (r.start > cursor) parts.push({ type: 'text', text: message.slice(cursor, r.start) });
+    parts.push({ type: 'emoji', url: TWITCH_EMOTE_CDN(r.emoteId), alt: message.slice(r.start, r.end + 1) });
+    cursor = r.end + 1;
+  }
+  if (cursor < message.length) parts.push({ type: 'text', text: message.slice(cursor) });
+  return parts;
+}
+
 // tags.id 是 Twitch IRC 幫每則訊息/USERNOTICE 蓋的訊息 UUID,拿來當 dedup key 最穩。
 function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
   let client = null;
@@ -18,10 +50,13 @@ function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
     } else if (tags['msg-id'] === 'highlighted-message' || tags['custom-reward-id']) {
       eventType = 'chat_highlight';
     }
-    // CHAT_MONITOR_RAW_CAPTURE=1 才會寫,一般聊天(eventType 還是 'chat')跳過,只存特殊訊息的
-    // 完整原始 tags(不是我們自己挑過的欄位)——像 resub 那個 streak/cumulative 月數搞混的 bug,
-    // 只看我們自己輸出的結果看不出來,得比對 Twitch 原始送來的完整 tags。
-    if (RAW_CAPTURE && eventType !== 'chat') rawCapture('twitch', eventType, tags);
+    // CHAT_MONITOR_RAW_CAPTURE=1 才會寫,一般聊天(eventType 還是 'chat')通常跳過,只存特殊
+    // 訊息的完整原始 tags(不是我們自己挑過的欄位)——像 resub 那個 streak/cumulative 月數
+    // 搞混的 bug,只看我們自己輸出的結果看不出來,得比對 Twitch 原始送來的完整 tags。
+    // 例外:帶表情符號的一般聊天也記——buildEmoteMessageParts() 的位置切割邏輯目前只用
+    // 手動模擬資料驗證過,沒有真實 Twitch 訊息核對過,這裡先把原始 tags.emotes 記下來,
+    // 之後才能拿真實資料驗證切出來的 messageParts 對不對。
+    if (RAW_CAPTURE && (eventType !== 'chat' || tags.emotes)) rawCapture('twitch', eventType !== 'chat' ? eventType : 'chat_with_emotes', tags);
     onEvent({
       platform: 'twitch',
       eventType,
@@ -30,7 +65,7 @@ function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
       message,
       amount,
       receivedAt: new Date().toISOString(),
-      extra: { badges: tags.badges ?? null, color: tags.color ?? null },
+      extra: { badges: tags.badges ?? null, color: tags.color ?? null, messageParts: buildEmoteMessageParts(message, tags.emotes) },
     });
   }
 

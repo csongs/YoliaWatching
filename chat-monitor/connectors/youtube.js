@@ -60,12 +60,27 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
     return (message ?? []).map((m) => ('text' in m ? m.text : m.emojiText || m.alt || '')).join('');
   }
 
+  // 除了純文字版(messageToText,存進 message 欄位,永遠有,方便搜尋/舊版相容),額外建一份
+  // 「文字/表情圖片」交錯的結構化版本——youtube-chat-next 的 EmojiItem 本來就帶 url(見
+  // dist/types/data.d.ts 的 ImageItem),之前 messageToText 直接把圖片網址丟掉只留 alt 文字,
+  // 現在留著給 demo 頁面渲染真的圖片。沒有任何表情符號時回傳 null,不用每則純文字訊息都多存
+  // 一份幾乎重複的資料。
+  function messageToParts(message) {
+    if (!message?.length) return null;
+    const hasEmoji = message.some((m) => !('text' in m));
+    if (!hasEmoji) return null;
+    return message.map((m) => ('text' in m
+      ? { type: 'text', text: m.text }
+      : { type: 'emoji', url: m.url, alt: m.emojiText || m.alt || '' }));
+  }
+
   // superchat.sticker 有值代表是 Super Sticker,否則是文字 Super Chat——套件把兩者合併成同一個
   // 欄位,跟官方 API 分成 superChatEvent/superStickerEvent 兩種事件不同。
   function classifyItem(item) {
     const username = item.author?.name ?? '';
     const base = { username, receivedAt: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString() };
     const text = messageToText(item.message);
+    const messageParts = messageToParts(item.message);
 
     if (item.superchat) {
       const isSticker = !!item.superchat.sticker;
@@ -74,7 +89,7 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
         eventType: isSticker ? 'supersticker' : 'superchat',
         message: isSticker ? null : text,
         amount: item.superchat.amount ?? null,
-        extra: { color: item.superchat.color ?? null, sticker: item.superchat.sticker?.alt ?? null },
+        extra: { color: item.superchat.color ?? null, sticker: item.superchat.sticker?.alt ?? null, messageParts: isSticker ? null : messageParts },
       };
     }
     if (item.isMembership) {
@@ -88,15 +103,21 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
       const header = item.membershipHeader ? String(item.membershipHeader).trim() : '';
       const monthsText = months === 0 ? '新加入會員' : months !== null ? `會員 ${months} 個月` : (header || null);
       const displayMessage = monthsText ? (text ? `[${monthsText}] ${text}` : `[${monthsText}]`) : text;
+      // messageParts 要跟 message(displayMessage)顯示一致,有表情符號時月數前綴也要當成一個
+      // text part 補在最前面——只在「本來就有表情符號要渲染」時才做這件事,純文字留言(沒有
+      // messageParts)直接顯示 message 字串就有前綴了,不用另外多存一份幾乎重複的資料。
+      const withPrefix = monthsText && messageParts
+        ? [{ type: 'text', text: `[${monthsText}] ` }, ...messageParts]
+        : messageParts;
       return {
         ...base,
         eventType: 'chat',
         message: displayMessage,
         amount: null,
-        extra: { isMembership: true, membershipMonths: months, membershipBadge: badgeLabel, membershipHeader: header || null },
+        extra: { isMembership: true, membershipMonths: months, membershipBadge: badgeLabel, membershipHeader: header || null, messageParts: withPrefix },
       };
     }
-    return { ...base, eventType: 'chat', message: text, amount: null, extra: null };
+    return { ...base, eventType: 'chat', message: text, amount: null, extra: messageParts ? { messageParts } : null };
   }
 
   function toYoutubeId(ch) {
