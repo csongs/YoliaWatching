@@ -380,15 +380,36 @@ UI 呈現：無類型標籤（`chat` 省略）。**注意**：SOOP 一般聊天�
 
 分類：`chat`。使用者只送表情符號、沒有文字內容時的獨立事件類型。
 
-🔧 程式碼推導範例：
+✅ 真實抓包範例（2026-08-14）：
 
-```
-{ username: "somesoopviewer", emoticonId: "e123456", userId: "1234567" }
+```json
+{ "userId": "trhd012q", "username": "히리언니", "emoticonId": "65863a0325db1" }
+{ "userId": "enclin1004(2)", "username": "무막", "emoticonId": "6520fc16c376a" }
 ```
 
 存進 `events` 表：`message` = `null`；`amount` = `null`；`extra` = `{ userId, emoticonId }`。
 
-UI 呈現：「表情訊息」標籤，因為沒有圖片網址規則，`message` 是 `null`，demo 頁這行**只會顯示使用者名稱，看不到表情符號本身**（已知限制，非 bug）。
+**2026-08-14 圖片網址研究進度**：使用者從真實 SOOP 網頁的 DOM 截出表情符號圖片標籤，找到
+CDN 網址規則：`https://res.sooplive.com/images/chat/emoticon/big/{id}.webp`（`.png` 版本
+同樣有效，`onerror` 會 fallback 到 `ogq_default.svg`）——curl 驗證過 `id=233`
+回傳 `200 image/webp`/`200 image/png`，`id=1`、`id=999999` 回傳 `404`，證實是一份固定的
+表情符號目錄，不是任意數字都成立。**但這個網址規則對不上我們實際抓到的 `emoticonId`**：
+上面兩筆真實樣本的 `emoticonId` 是類似雜湊值的字串（`65863a0325db1`），curl 這兩個值一樣
+回傳 `404`。推測 SOOP 有至少兩套表情符號 ID 系統——內建表情符號用小整數 ID（`233` 這種,
+`onerror` fallback 到的 `ogq_default.svg` 暗示另一套可能是 OGQ 這個第三方貼圖市集的雜湊
+ID），`soop-extension` 的 `SoopChatEvent.EMOTICON`（協定類型 `0109`,見
+`parseEmoticon()`)給的剛好是雜湊 ID 那一套,不是能直接套用上面網址規則的小整數 ID。
+**目前還沒有辦法把 `emoticonId` 換成正確的圖片網址,圖片渲染還沒接上**,需要再找到
+雜湊 ID 系統的網址規則(或 OGQ 的圖片解析方式)才能繼續。
+
+已確認的內建表情符號代碼 → 小整數 ID 對照（使用者從真實 DOM 截圖比對出來的，目前只有這一組）：
+`/댄스2_s/` → `233`。`/응원3_s/`、`/응원5_s/`、`/축하해_s/` 這幾個也在真實聊天室看過對應的圖示，
+但還沒有確認實際的數字 ID（螢幕截圖看得到圖案，但抓不到 `<img src>` 的實際數值）。內建表情符號
+應該有一份完整的代碼→ID 對照表存在 SOOP 網頁前端某處（manifest JSON 或類似的靜態資源），
+比一個一個從瀏覽器 DOM 挖數字更有效率，但目前還沒找到，也還沒去找——不確定的東西不亂猜/亂試
+（大量嘗試數字 ID 對第三方 CDN 送請求也不禮貌）。
+
+UI 呈現：「表情訊息」標籤，`message` 是 `null`，demo 頁這行**只會顯示使用者名稱，看不到表情符號本身**（原因見上，不是還沒接的小事，是目前抓到的 ID 系統跟已知網址規則對不起來）。
 
 ### text_donation — 文字/語音抖內(별풍선)
 
