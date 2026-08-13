@@ -140,6 +140,16 @@ YouTube 這邊是即時輪詢（`youtube-chat-next`），不會回放開播以�
   重新查一次，不會呼叫到 soop-extension 內部那段一定會印出完整 stack trace 的
   `connect()` 錯誤路徑。真的連線失敗等非預期錯誤才會落到 try/catch，這種情況
   soop-extension 自己仍會印一份 log（外部無法關掉），但 demo 頁的狀態列一樣看得到乾淨訊息。
+- **2026-08-14 修復**：畫面上「亮紅燈（顯示未連線/錯誤），但聊天訊息其實還在跳」——原因是
+  `attempt()`／`stop()` 之間有兩個沒防到的競態：(1) `timer = setTimeout(attempt, ...)`
+  在三個地方各自重新賦值，沒先 `clearTimeout` 掉前一個還沒觸發的計時器，同一時間可能有兩個
+  `attempt()` 都在跑，較晚失敗的那個會用自己的 `soopChat = null` 蓋掉另一個其實連線正常、
+  還在收訊息的 `soopChat`；(2) 使用者切換頻道／停用監聽（觸發 `restartConnector()`）如果
+  剛好發生在 `attempt()` 內部 `await isLive()`／`await connect()` 卡著的時候，`stop()`
+  當下 `soopChat` 可能還是空的（連線都還沒建立），等這個「已經被停用」的 `attempt()` 事後
+  才連線成功，就會變成一個 `stop()` 完全不知道、也關不掉的殭屍連線，繼續送訊息進來。已修正：
+  (1) 排下一次重試前一律先清掉舊計時器（`scheduleRetry()`）；(2) 每個 `await` 之後重新檢查
+  `stopped`，如果這段等待期間已經被停用，直接斷開／放棄，不繼續往下建立連線或回報狀態。
 
 ## Twitch 免 Token（匿名）模式
 

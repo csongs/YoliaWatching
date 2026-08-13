@@ -165,13 +165,28 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
     return detail?.CHANNEL?.RESULT !== 0;
   }
 
+  // 排下一次 attempt() 之前一律先清掉還沒觸發的舊 timer——不然像「isLive() 查到未開台排了
+  // 30 秒後的重試,中途又自然斷線觸發 500 毫秒後的重連」這種情況,兩個 setTimeout 都會各自留在
+  // event loop 裡,變成同時有兩個 attempt() 在跑;較晚那個如果連線失敗,會用自己的 soopChat=null
+  // 蓋掉另一個其實連線正常、還在收訊息的 soopChat,畫面就會變成「亮紅燈但訊息還在跳」這種
+  // 狀態跟實際連線對不起來的情況(user 實測回報過)。
+  function scheduleRetry(delayMs) {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(attempt, delayMs);
+  }
+
   async function attempt() {
     if (stopped) return;
     try {
       const client = new SoopClientCtor();
-      if (!(await isLive(client))) {
+      const live = await isLive(client);
+      // 上面這個 await 讓出過事件迴圈——如果這段等待期間 stop() 被呼叫過(例如使用者剛好在
+      // 這時候切換頻道/停用監聽觸發 restartConnector()),就不要再繼續建立連線,直接放棄這次
+      // attempt(),避免建立一個 stop() 完全不知道、之後也關不掉的殭屍連線。
+      if (stopped) return;
+      if (!live) {
         onStatus({ connected: false, error: '目前未開台（尚未偵測到直播）' });
-        timer = setTimeout(attempt, RETRY_INTERVAL_MS);
+        scheduleRetry(RETRY_INTERVAL_MS);
         return;
       }
 
@@ -257,10 +272,14 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
         soopChat = null;
         if (stopped) return;
         debugLog('soop', 'disconnected', { stayedConnectedMs: Date.now() - connectedAt });
-        timer = setTimeout(attempt, RECONNECT_DELAY_MS);
+        scheduleRetry(RECONNECT_DELAY_MS);
       });
 
       await soopChat.connect();
+      // 跟上面 isLive() 之後同樣的理由:connect() 這段 await 期間如果 stop() 被呼叫過,這個
+      // soopChat 已經是「使用者以為關掉了,但其實剛連上」的殭屍連線,主動斷開、不要繼續往下跑
+      // (掛 CHAT 等監聽器、視為連線成功),避免關閉監聽後訊息還是一直進來。
+      if (stopped) { soopChat?.disconnect().catch(() => {}); soopChat = null; return; }
 
       // soop-extension 的 disconnect() 不會帶 WebSocket 原始的 close code/reason(chat.js 裡
       // ws.onclose 直接丟掉那個事件物件),要診斷「為什麼斷線」得自己在它裝好 onclose 之後外面再包一層。
@@ -274,6 +293,11 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
         };
       }
     } catch (e) {
+      soopChat = null;
+      // 這個 attempt() 已經被 stop() 收掉了(見上面兩處 stopped 檢查),不要再回報狀態或排重試——
+      // 不然一個已經停用的舊 attempt() 失敗,會用它的錯誤訊息蓋掉新連線(或使用者主動停用後)
+      // 正確的狀態,重試也會排出一個 stop() 完全不知道、關不掉的殭屍計時器。
+      if (stopped) return;
       // 這裡才是真的沒預期到的狀況(網路錯誤等)——soop-extension 仍會自己印一份 log,
       // 我們額外把訊息餵進 status API 讓 demo 頁看得到乾淨版本。
       debugLog('soop', 'attempt() threw', { message: e.message });
@@ -285,8 +309,7 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
         ? 'SOOP 直播狀態在確認的瞬間剛好變化(可能剛開台或剛結束),稍後會自動重試'
         : e.message;
       onStatus({ connected: false, error });
-      soopChat = null;
-      if (!stopped) timer = setTimeout(attempt, RETRY_INTERVAL_MS);
+      scheduleRetry(RETRY_INTERVAL_MS);
     }
   }
 
