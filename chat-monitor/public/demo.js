@@ -283,6 +283,17 @@
     ).join('');
   }
 
+  // Twitch(tags.color)、SOOP(randomNicknameColorDarkmode,見 connectors/soop.js 的
+  // parseChat 補丁)都有使用者自訂的暱稱顏色,存在 extra.color——YouTube 目前沒有這個概念
+  // (見過的欄位只有 superchat 的背景色,不是使用者本人的顏色),extra.color 就會是 undefined。
+  // 值來自外部平台,渲染成 CSS 前先驗證格式是合法的 hex color,不合法就當沒有,不要整個
+  // style 屬性讓不可信字串直接進去。
+  const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+  function usernameColorStyle(evt) {
+    const color = getExtra(evt)?.color;
+    return typeof color === 'string' && HEX_COLOR_RE.test(color) ? ` style="color:${color}"` : '';
+  }
+
   function renderLine(evt) {
     const cat = eventCategory(evt);
     const div = document.createElement('div');
@@ -300,7 +311,7 @@
     div.innerHTML = `<span class="time" title="${fullDateTime}">${time}</span>`
       + `<span class="tag ${evt.platform}">${L.platformLabel(evt.platform)}</span>`
       + typeTag
-      + (evt.username ? `<span class="uname">${escapeHtml(evt.username)}</span>` : '')
+      + (evt.username ? `<span class="uname"${usernameColorStyle(evt)}>${escapeHtml(evt.username)}</span>` : '')
       + msg + amount;
     return div;
   }

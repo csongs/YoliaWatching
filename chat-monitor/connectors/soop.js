@@ -122,6 +122,30 @@ function buildEmoticonMessageParts(comment, manifest) {
   return parts;
 }
 
+// 2026-08-14:soop-extension 的 parseChat()(dist/chat/chat.js)只回傳 { userId, comment,
+// username } 三個欄位,把原始封包裡使用者自訂的暱稱顏色欄位整個丟掉了。SOOP 協定其實有帶這個
+// 欄位——查另一個獨立反推同一套協定的非官方 Java 函式庫 soopapi 的 ChatMessageEvent
+// (randomNicknameColor/randomNicknameColorDarkmode),換算索引(該函式庫的 parts 陣列比這裡的
+// packet.split(SEPARATOR) 少一格,因為它先把封包表頭拆掉了)對應到這裡的 parts[9]/parts[10]。
+// 沒有真實封包核對過(一般 chat 事件沒有開 RAW_CAPTURE),只用其他已核對過的欄位(comment/
+// userId/username 分別對上 parts[1]/[2]/[6])間接驗證過索引換算方式是對的——如果哪天發現顏色
+// 不準,回頭查這裡。monkey-patch SoopChat.prototype.parseChat 補回這個欄位,不影響原本
+// userId/comment/username 的行為;這是修補第三方套件的內部實作細節,不是公開 API,套件更新後
+// 這段可能需要跟著調整。
+function patchChatColor(SoopChatCtor, SEPARATOR) {
+  if (SoopChatCtor.prototype.__yoliaPatchedForColor) return;
+  const originalParseChat = SoopChatCtor.prototype.parseChat;
+  SoopChatCtor.prototype.parseChat = function patchedParseChat(packet) {
+    const result = originalParseChat.call(this, packet);
+    const parts = packet.split(SEPARATOR);
+    // demo 頁是深色主題,優先用 darkmode 版本的顏色,沒有才退回一般版本,兩個都沒有就是 null
+    // (不上色,demo.js 那邊退回 CSS 預設文字色)。
+    result.color = parts[10] || parts[9] || null;
+    return result;
+  };
+  SoopChatCtor.prototype.__yoliaPatchedForColor = true;
+}
+
 // soop-extension 的事件物件沒有唯一 id 欄位,dedup key 用「事件類型+收到時間+使用者+內容」組出來
 // (同一次連線內幾乎不可能撞相同的四元組;reconnect 不會重送歷史,所以夠用)。
 function dedupKeyFor(type, res) {
@@ -207,7 +231,7 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
 
       soopChat.on(SoopChatEvent.CHAT, (res) => emit('chat', res, {
         username: res.username, message: res.comment, amount: null,
-        extra: { userId: res.userId, messageParts: buildEmoticonMessageParts(res.comment, emoticonManifest) },
+        extra: { userId: res.userId, color: res.color ?? null, messageParts: buildEmoticonMessageParts(res.comment, emoticonManifest) },
       }));
       soopChat.on(SoopChatEvent.EMOTICON, (res) => emit('emoticon', res, {
         username: res.username, message: null, amount: null, extra: { userId: res.userId, emoticonId: res.emoticonId },
@@ -330,6 +354,7 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
       const mod = await import('soop-extension');
       SoopClientCtor = mod.SoopClient;
       SoopChatEvent = mod.SoopChatEvent;
+      patchChatColor(mod.SoopChat, mod.ChatDelimiter.SEPARATOR);
     }
     attempt();
   }
