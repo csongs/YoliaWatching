@@ -70,6 +70,12 @@ npm run package
   的封包類型（`unknown_<type code>`）也記下來，方便之後補齊套件沒解析的事件（已知的舊
   類型見「已知限制」的 `gift_item` 說明；2026-08-13 實測另外抓到一個新的 `unknown_0012`，
   疑似「使用者進入聊天室」的廣播通知，尚未解讀）。兩個變數預設都關閉，不影響正常監聽。
+- `CHAT_MONITOR_RAW_CAPTURE_SKIP`：逗號分隔的 `platform:eventType` 清單，列在裡面的
+  事件類型即使 `CHAT_MONITOR_RAW_CAPTURE=1` 也不會寫進 `raw-capture.jsonl`——欄位對應
+  已經拿真實樣本核對過的類型（[docs/event-types.md](docs/event-types.md) 標「✅ 真實
+  抓包」的那些）繼續收只是灌水，先跳過讓檔案聚焦在還沒驗證過的類型上。`platform:*`
+  可以整個平台跳過。例：`CHAT_MONITOR_RAW_CAPTURE_SKIP=youtube:membership,twitch:sub`。
+  之後想重新驗證某個類型，直接從這個清單刪掉那一項即可，不用改程式碼。
 
 ## 三平台涵蓋的事件類型
 
