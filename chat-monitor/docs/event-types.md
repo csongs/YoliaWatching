@@ -288,7 +288,7 @@ Connector：[connectors/youtube.js](../connectors/youtube.js)（`youtube-chat-ne
 
 ### chat — 一般訊息（含會員留言）
 
-分類：`chat`。YouTube 沒有獨立的「會員留言」`event_type`——會員留言仍然是 `event_type: 'chat'`，靠 `extra.isMembership` 旗標與 `message` 前綴的 `[會員 N 個月]`/`[新加入會員]` 標記區分，不是另外分類，因為套件給的資訊不足以支撐一個獨立事件類型（沒有金額、沒有明確的「加入」時刻）。
+分類：`chat`。YouTube 沒有獨立的「會員留言」`event_type`——會員留言仍然是 `event_type: 'chat'`，靠 `extra.isMembership` 旗標區分，不是另外分類，因為套件給的資訊不足以支撐一個獨立事件類型（沒有金額、沒有明確的「加入」時刻）。2026-08-14 之前 `message` 會被加上 `[會員 N 個月]`/`[新加入會員]` 這種文字前綴，使用者反應每則訊息都重複顯示太雜訊，已經拿掉——現在 `message` 就是單純的留言文字本身，跟一般聊天訊息顯示方式一致，月數/徽章資料只留在 `extra` 裡。
 
 ✅ 真實抓包範例（2026-08-13，一般會員留言，非新加入/里程碑）：
 
@@ -307,13 +307,13 @@ Connector：[connectors/youtube.js](../connectors/youtube.js)（`youtube-chat-ne
 `author.badge.label` 目前見過三種格式：`"New member"` → 0 個月；`"Member (N months)"` → N 個月（237 筆真實樣本核對過）；`"Member (N year(s))"` → N×12 個月（2026-08-14 抓到一筆 `"Member (1 year)"` 才補上，YouTube 滿一年後改用「年」當單位）。由 [`parseMembershipMonths()`](../connectors/youtube.js) 解析。
 
 存進 `events` 表：
-- `message` = `` `[新加入會員] 我覺得踢萬值得妳第十名的喜歡！` ``（月數文字前綴 + 純文字內容，`displayMessage`）
+- `message` = `` `我覺得踢萬值得妳第十名的喜歡！` ``（純文字內容，沒有任何前綴，即上面範例的 `text`）
 - `amount` = `null`
-- `extra` = `{ isMembership: true, membershipMonths: 0, membershipBadge: "New member", membershipHeader: null, messageParts }`；`messageParts` 若訊息帶表情符號，前綴文字也會被塞進陣列第一個 `{type:'text'}` 元素，跟 `message` 顯示一致。
+- `extra` = `{ isMembership: true, membershipMonths: 0, membershipBadge: "New member", membershipHeader: null, messageParts }`（`messageParts` 就是訊息本身的表情符號交錯陣列，沒有額外塞前綴 part）
 
 一般非會員聊天（無表情符號）：`extra` 直接是 `null`；帶表情符號則 `extra: { messageParts }`。
 
-UI 呈現：無類型標籤（`chat` 省略）；月數前綴直接印在訊息文字裡（不是獨立的 UI 元素），例如「**蕭翔澤-p4z** [新加入會員] 我覺得...」。
+UI 呈現：無類型標籤（`chat` 省略），會員留言在畫面上**跟一般聊天訊息完全一樣**，看不出誰是會員／第幾個月——這是使用者明確要求拿掉前綴後的結果，月數資料還在 `extra.membershipMonths`，之後如果要重新顯示（例如做成一個小徽章而不是文字前綴）可以直接從那裡取。
 
 ### superchat — Super Chat（付費醒目訊息）
 

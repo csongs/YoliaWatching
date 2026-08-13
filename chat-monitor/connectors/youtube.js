@@ -106,20 +106,15 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
       const badgeLabel = item.author?.badge?.label ?? null;
       const months = parseMembershipMonths(badgeLabel);
       const header = item.membershipHeader ? String(item.membershipHeader).trim() : '';
-      const monthsText = months === 0 ? '新加入會員' : months !== null ? `會員 ${months} 個月` : (header || null);
-      const displayMessage = monthsText ? (text ? `[${monthsText}] ${text}` : `[${monthsText}]`) : text;
-      // messageParts 要跟 message(displayMessage)顯示一致,有表情符號時月數前綴也要當成一個
-      // text part 補在最前面——只在「本來就有表情符號要渲染」時才做這件事,純文字留言(沒有
-      // messageParts)直接顯示 message 字串就有前綴了,不用另外多存一份幾乎重複的資料。
-      const withPrefix = monthsText && messageParts
-        ? [{ type: 'text', text: `[${monthsText}] ` }, ...messageParts]
-        : messageParts;
+      // 2026-08-14 之前這裡會把「[會員 N 個月]」這種文字前綴直接塞進 message/messageParts,
+      // 使用者反應每則訊息都重複顯示月數太雜訊、不需要——改成 message 就是單純留言文字本身,
+      // 跟一般聊天訊息一樣,月數/徽章資料只留在 extra 裡供之後需要的地方自己取用,不影響顯示。
       return {
         ...base,
         eventType: 'chat',
-        message: displayMessage,
+        message: text,
         amount: null,
-        extra: { isMembership: true, membershipMonths: months, membershipBadge: badgeLabel, membershipHeader: header || null, messageParts: withPrefix },
+        extra: { isMembership: true, membershipMonths: months, membershipBadge: badgeLabel, membershipHeader: header || null, messageParts },
       };
     }
     return { ...base, eventType: 'chat', message: text, amount: null, extra: messageParts ? { messageParts } : null };
