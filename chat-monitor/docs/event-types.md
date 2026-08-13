@@ -303,7 +303,7 @@ Connector：[connectors/youtube.js](../connectors/youtube.js)（`youtube-chat-ne
 }
 ```
 
-`author.badge.label` 目前只見過兩種格式（237 筆真實樣本核對過）：`"New member"` → 0 個月；`"Member (N months)"` → N 個月，由 [`parseMembershipMonths()`](../connectors/youtube.js) 解析。
+`author.badge.label` 目前見過三種格式：`"New member"` → 0 個月；`"Member (N months)"` → N 個月（237 筆真實樣本核對過）；`"Member (N year(s))"` → N×12 個月（2026-08-14 抓到一筆 `"Member (1 year)"` 才補上，YouTube 滿一年後改用「年」當單位）。由 [`parseMembershipMonths()`](../connectors/youtube.js) 解析。
 
 存進 `events` 表：
 - `message` = `` `[新加入會員] 我覺得踢萬值得妳第十名的喜歡！` ``（月數文字前綴 + 純文字內容，`displayMessage`）
@@ -331,6 +331,8 @@ UI 呈現：無類型標籤（`chat` 省略）；月數前綴直接印在訊息�
 存進 `events` 表：`message` = 純文字內容；`amount` = `"NT$70.00"`（含幣別符號的字串，不是數字，套件沒有拆開 amountMicros/currency）；`extra` = `{ color: "#00E5FF", sticker: null, messageParts }`。
 
 UI 呈現：「Super Chat(付費醒目訊息)」標籤 + 橘色底 + `+NT$70.00`（`formatAmount()` 對非 `resub`/`subscribe` 類型的通用 `+amount` 格式，注意這裡是原始幣別字串直接接在 `+` 後面，不是重新格式化過的數字）。
+
+**已知落差**：`item.superchat` 跟 `item.isMembership`可能同時為真（2026-08-14 真實遇到過，一位「Member (1 year)」的會員發了一筆 `¥500` 的 Super Chat）——`classifyItem()` 目前優先走 `superchat` 分支直接 `return`，不會再檢查 `isMembership`，所以這種情況 `extra` 完全沒有 `membershipMonths`/`membershipBadge`，demo 頁看不出這位付費者同時是會員。
 
 ### supersticker — Super Sticker（付費貼圖）
 
@@ -362,15 +364,17 @@ Connector：[connectors/soop.js](../connectors/soop.js)（`soop-extension`，社
 
 分類：`chat`。
 
-🔧 程式碼推導範例（依 `soop-extension` 的 `CHAT` 事件欄位建構）：
+✅ 真實抓包範例（2026-08-13，來自 SQLite `events` 表，非 `raw-capture.jsonl`——一般 `chat` 沒有開 raw capture）：
 
-```
-{ username: "somesoopviewer", comment: "안녕하세요", userId: "1234567" }
+```json
+{ "username": "우수현S2사자", "message": "/하트//하트//하트/", "extra": { "userId": "sam96645(3)" } }
 ```
 
 存進 `events` 表：`message` = `res.comment`；`amount` = `null`；`extra` = `{ userId: res.userId }`。
 
-UI 呈現：無類型標籤（`chat` 省略）。**注意**：SOOP 一般聊天目前沒有表情符號圖片渲染（`extra` 沒有 `messageParts`），因為沒找到 SOOP 表情符號的公開圖片網址規則（見 README 已知限制），跟 Twitch/YouTube 不同。
+**2026-08-14 發現**：SOOP 的表情符號不是只有獨立的 `emoticon` 事件才會出現——使用者也可以在一般聊天訊息裡直接打 `/코드명/` 這種斜線包住的代碼（例如 `/하트/`、`/하트뿜뿜/`，同一則訊息裡常常重複打好幾次），在真正的 SOOP 網頁上這些代碼會被客戶端換成圖片貼圖，但我們的 `res.comment` 拿到的還是原始文字代碼，不是圖片。跟獨立的 `emoticon` 事件（`emoticonId` 是數字/雜湊 ID）不是同一套 ID 系統——這批是人類可讀的中文/韓文代碼字串，說不定比 `emoticonId` 更有機會反查到官方素材路徑，但目前還沒去查。
+
+UI 呈現：無類型標籤（`chat` 省略）。**注意**：SOOP 一般聊天目前沒有表情符號圖片渲染（`extra` 沒有 `messageParts`），因為沒找到 SOOP 表情符號的公開圖片網址規則（見 README 已知限制），跟 Twitch/YouTube 不同——上面這種 `/코드/` 訊息目前就是照樣顯示斜線包住的原始文字，不會變成愛心圖片。
 
 ### emoticon — 表情訊息
 
@@ -458,7 +462,15 @@ UI 呈現：「系統通知」標籤，灰色斜體行，沒有使用者名稱�
 
 ### unknown_* — 未解析的封包類型（尚未接上事件系統，僅供除錯）
 
-**不是**一個正式的 `event_type`，不會出現在 `events` 表或 demo 頁裡——這是 `RAW_CAPTURE` 開啟時，`SoopChatEvent.UNKNOWN` 收到、但類型代碼不是 `gift_item` 的 `0045` 時，單純寫進 `raw-capture.jsonl` 供之後研究用的原始封包片段。目前已經抓到但還沒解出來的類型代碼：`0012`／`0054`／`0088`／`0090`／`0094`（各自的欄位含義都還不知道，`raw-capture.jsonl` 裡有完整 `parts` 陣列可查）。
+**不是**一個正式的 `event_type`，不會出現在 `events` 表或 demo 頁裡——這是 `RAW_CAPTURE` 開啟時，`SoopChatEvent.UNKNOWN` 收到、但類型代碼不是 `gift_item` 的 `0045` 時，單純寫進 `raw-capture.jsonl` 供之後研究用的原始封包片段。目前已經抓到但還沒解出來的類型代碼：`0012`（最常見，疑似「使用者進入聊天室」廣播）／`0014`（2026-08-14 新發現，見下面樣本）／`0054`／`0090`／`0094`／`0110`（各自的欄位含義都還不知道，`raw-capture.jsonl` 裡有完整 `parts` 陣列可查）。
+
+✅ `unknown_0014` 真實抓包範例（2026-08-14）：
+
+```json
+["...00140006600", "sam96645", "우한갱S2사자", "1", "2952871968|294912", "우수현S2사자", ""]
+```
+
+`parts[1]`（`sam96645`）跟 `parts[5]`（`우수현S2사자`）分別對得上同時間點聊天記錄裡「우수현S2사자」訊息的 `userId`（`sam96645(3)`）與暱稱——`parts[2]`（`우한갱S2사자`）是另一個不同的暱稱，猜測跟粉絲團/應援團的稱號或暱稱異動有關，但只有這一筆樣本，還不確定。
 
 ---
 

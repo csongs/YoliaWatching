@@ -69,7 +69,8 @@ npm run package
   `gift_item`/徽章那幾次一樣，另外寫一次性診斷腳本連線抓包。SOOP 這邊額外會把完全不認識
   的封包類型（`unknown_<type code>`）也記下來，方便之後補齊套件沒解析的事件（已知的舊
   類型見「已知限制」的 `gift_item` 說明；2026-08-13 實測另外抓到一個新的 `unknown_0012`，
-  疑似「使用者進入聊天室」的廣播通知，尚未解讀）。兩個變數預設都關閉，不影響正常監聽。
+  疑似「使用者進入聊天室」的廣播通知，尚未解讀；2026-08-14 又新抓到一個 `unknown_0014`，
+  細節見 [docs/event-types.md](docs/event-types.md)）。兩個變數預設都關閉，不影響正常監聽。
 - `CHAT_MONITOR_RAW_CAPTURE_SKIP`：逗號分隔的 `platform:eventType` 清單，列在裡面的
   事件類型即使 `CHAT_MONITOR_RAW_CAPTURE=1` 也不會寫進 `raw-capture.jsonl`——欄位對應
   已經拿真實樣本核對過的類型（[docs/event-types.md](docs/event-types.md) 標「✅ 真實
@@ -103,7 +104,7 @@ npm run package
 | YouTube | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
 | YouTube | Super Chat/Sticker | ⚠️ 沒驗證過 | 照套件型別定義寫的，沒收過真實 Super Chat 確認金額/顏色欄位 |
 | YouTube | 會員留言（`isMembership`） | ✅ 驗證過 | 129 則真實會員聊天，欄位正確 |
-| YouTube | 會員月數（`membershipMonths`，來自 `badge.label`） | ✅ 驗證過 | 237 筆真實會員留言，正則 100% 正確解析「New member」/「Member (N months)」 |
+| YouTube | 會員月數（`membershipMonths`，來自 `badge.label`） | ✅ 驗證過 | 237 筆真實會員留言，正則 100% 正確解析「New member」/「Member (N months)」；2026-08-14 額外抓到「Member (1 year)」格式（滿一年後改用「年」當單位），已補上解析，換算成 12 個月 |
 | YouTube | 里程碑通知文字（`membershipHeader`，來自 `headerSubtext`） | ⚠️ 沒驗證過 | patch 邏輯有跑，但只確認「一般會員聊天正確回傳 null」，沒遇過真正的里程碑事件確認欄位內容；現在只是補充來源，不是主要依賴 |
 | YouTube | 訂閱／贈送訂閱 | 🚫 不支援 | `youtube-chat-next` 資料源頭沒有這個資訊，是已知限制不是漏測 |
 | Twitch | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
@@ -174,7 +175,11 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
   正確的文字/表情片段）仍然只用手動模擬資料驗證過，還沒拿這筆真實訊息實際跑過 `demo.js`
   確認渲染結果正確**。
 - **SOOP**：查過官方文件跟第三方擴充套件都沒找到表情符號圖片網址的規則，`emoticon` 事件
-  目前只有 `emoticonId` 文字，沒有做圖片渲染，不確定的東西不猜。
+  目前只有 `emoticonId` 文字，沒有做圖片渲染，不確定的東西不猜。2026-08-14 額外發現：一般
+  `chat` 訊息裡也可以直接打 `/코드명/`（例如 `/하트/`、`/하트뿜뿜/`）這種斜線包住的表情符號
+  代碼，在真正的 SOOP 網頁上會被換成貼圖圖片，我們目前只存/顯示原始文字代碼——這批是人類
+  可讀字串，跟獨立 `emoticon` 事件的數字/雜湊 `emoticonId` 不是同一套系統，細節見
+  [docs/event-types.md](docs/event-types.md) 的 SOOP `chat` 章節。
 
 ## 已知限制
 
@@ -182,9 +187,14 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
   贈禮」（官方 API 才有這個分類）。**月數本身查得到**——2026-08-13 用
   `CHAT_MONITOR_RAW_CAPTURE` 實測 237 筆真實會員留言發現 `author.badge.label` 每則都有
   「New member」/「Member (N months)」文字，已改成從這裡解析 `extra.membershipMonths`；
-  但「這個月是不是剛好是贈禮/里程碑那一則」還是分不出來，只知道當下累積月數。Super Chat/
-  Sticker 也只有金額字串跟顏色，沒有官方 API 的 tier 數字。細節見
-  [connectors/youtube.js](connectors/youtube.js) 開頭註解。
+  滿一年後格式會變成「Member (N year(s))」（2026-08-14 真實抓到「Member (1 year)」才發現，
+  已補上解析，換算成 12 的倍數）。「這個月是不是剛好是贈禮/里程碑那一則」還是分不出來，
+  只知道當下累積月數。Super Chat/Sticker 也只有金額字串跟顏色，沒有官方 API 的 tier 數字。
+  細節見 [connectors/youtube.js](connectors/youtube.js) 開頭註解。
+- 同一則訊息同時是 Super Chat**又**是會員（`superchat` 跟 `isMembership` 兩個欄位都為真，
+  2026-08-14 真實遇到過）時，目前 `classifyItem()` 只會走 `superchat` 分支——`event_type`
+  是 `superchat`，`extra` 完全沒有 `membershipMonths`/`membershipBadge` 這幾個欄位，
+  demo 頁看不出這位付費的人同時是會員、也看不出月數。還沒有處理，屬於已知落差。
 - SOOP 官方 API 模式沒有實作（`yuupeek/` 裡目前也還沒有這個串接的文件可抄）。
 - SOOP 的 `gift_item`（贈送禮物）不是 `soop-extension` 有支援的事件類型，是自己抓封包反推
   格式接上去的（2026-08-13，用 `CHAT_MONITOR_DEBUG=1` 抓包 + 比對實際截圖核對），沒有官方

@@ -42,13 +42,18 @@ function patchMembershipHeaders() {
 }
 patchMembershipHeaders();
 
-// author.badge.label 目前只見過這兩種格式(2026-08-13,237 筆真實樣本):「New member」/
-// 「Member (N months)」。格式不認得就回傳 null,不要亂猜。
+// author.badge.label 目前見過三種格式:「New member」/「Member (N months)」(2026-08-13,237
+// 筆真實樣本)/「Member (N year(s))」(2026-08-13 額外抓到一筆「Member (1 year)」,YouTube 滿一年
+// 後改用「年」當單位,不是一直累加月份——原本只認 months,這種格式會被漏判成格式不認得的 null)。
+// 格式不認得就回傳 null,不要亂猜。
 function parseMembershipMonths(badgeLabel) {
   if (!badgeLabel) return null;
   if (/new member/i.test(badgeLabel)) return 0;
-  const match = badgeLabel.match(/member\s*\((\d+)\s*months?\)/i);
-  return match ? Number(match[1]) : null;
+  const monthsMatch = badgeLabel.match(/member\s*\((\d+)\s*months?\)/i);
+  if (monthsMatch) return Number(monthsMatch[1]);
+  const yearsMatch = badgeLabel.match(/member\s*\((\d+)\s*years?\)/i);
+  if (yearsMatch) return Number(yearsMatch[1]) * 12;
+  return null;
 }
 
 function createYoutubeConnector({ channel }, onEvent, onStatus) {
