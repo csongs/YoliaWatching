@@ -83,6 +83,9 @@ npm run package
 各類型的中文標籤與「等級/金額怎麼看」的說明集中在 [public/labels.js](public/labels.js)
 （server 與前端共用同一份，避免兩邊漂移），demo 頁面下方也有一份可讀版本。
 
+每種事件的原始資料長怎樣、對應哪個 `event_type`、demo 頁怎麼渲染，細節版整理在
+[docs/event-types.md](docs/event-types.md)。
+
 ## 各事件類型驗證狀態（2026-08-13）
 
 「驗證過」指的是實際連上真實頻道、看過真實事件跑過一次確認欄位正確——不是「程式碼邏輯看起來
@@ -100,9 +103,10 @@ npm run package
 | Twitch | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
 | Twitch | Bits 抖內（`cheer`） | ⚠️ 沒驗證過 | 沒有實際看過一筆真的 cheer 事件跑過 |
 | Twitch | 續訂月數（`resub`） | ⚠️ 沒驗證過 | `cumulative-months` 修法是查 `tmi.js` 原始碼推論，修完沒等到真實 resub 事件確認顯示結果 |
-| Twitch | 新訂閱（`sub`） | ❌ 完全沒測過 | 寫完就沒特別驗證 |
-| Twitch | 贈送訂閱（`subgift`/`submysterygift`） | ⚠️ 沒驗證過 | 「→ 收禮者」顯示邏輯寫了，沒有真實事件確認 |
-| Twitch | 公告（`announcement`/`usernotice_other`） | ❌ 完全沒測過 | 剛加上去就因為測試環境撞到正式資料庫緊急關掉，連跑都沒跑過 |
+| Twitch | 新訂閱（`sub`） | ⚠️ 部分驗證 | 2026-08-13 已用 `CHAT_MONITOR_RAW_CAPTURE` 抓到真實 `sub` 封包（Prime 與付費 Tier 1 各一筆），`msg-param-sub-plan` 欄位存在且正確，但沒有實際在 demo 頁看過渲染結果 |
+| Twitch | 贈送訂閱（`subgift`/`submysterygift`） | ⚠️ 部分驗證 | 2026-08-13 抓到真實連續贈送（5 筆 `subgift` + 1 筆 `submysterygift`），`msg-param-recipient-user-name`/`msg-param-mass-gift-count` 欄位都在，但沒有實際在 demo 頁看過渲染結果 |
+| Twitch | 公告（`announcement`） | ⚠️ 部分驗證 | 2026-08-13 抓到真實公告封包（來自 StreamBoostMaxBot，`msg-param-color` 存在），證實真的是原生 `/announce`，但沒有實際在 demo 頁看過渲染結果 |
+| Twitch | 其他系統通知（`usernotice_other`） | ⚠️ 部分驗證 | 2026-08-13 抓到一種先前完全沒見過的類型 `viewermilestone`（連續觀看場次里程碑），確認有正確落入這個備援分類，但沒有針對性驗證過其他 `msgid` 子類型 |
 | SOOP | 一般聊天 | ✅ 驗證過 | 大量真實訊息 |
 | SOOP | 訂閱月數（`subscribe`） | ⚠️ 沒驗證過 | `res.amount` 修法用模擬封包跑過 `parseSubscribe()` 解構邏輯確認位置，沒有真實訂閱事件驗證顯示結果 |
 | SOOP | 抖內（`text_donation`/`video_donation`/`ad_balloon_donation`） | ❌ 完全沒測過 | 連接器邏輯一開始就寫了，沒有 specifically 見過真實抖內事件跑過 |
@@ -157,9 +161,12 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
   `node_modules/tmi.js/lib/parser.js` 的 `parseComplexTag`）算出文字/表情的交錯位置，
   圖片網址用 Twitch 官方公開、多年沒變的 CDN 規則自己組
   （`https://static-cdn.jtvnw.net/emoticons/v2/{id}/default/dark/{scale}.0`，跟
-  Helix `Get Channel/Global Emotes` API 回傳的網址同樣式）。**只用手動模擬資料驗證過切割
-  邏輯，沒有真實 Twitch 表情符號訊息核對過**——已經把「帶表情符號的一般聊天」也加進
-  `CHAT_MONITOR_RAW_CAPTURE` 的收錄範圍（原本只收特殊事件），下次真的遇到再驗證。
+  Helix `Get Channel/Global Emotes` API 回傳的網址同樣式）。2026-08-13 用
+  `CHAT_MONITOR_RAW_CAPTURE` 抓到真實 `chat_highlight` 訊息（帶新格式的長雜湊 emote id
+  `emotesv2_893ee80f475246b0bd0a3fa5205f33cc`），curl 驗證過 CDN 網址對這個真實 id 回傳
+  `200 image/png`，證實網址規則對新舊兩種 id 格式都成立；但**切割邏輯本身（位置區間對應到
+  正確的文字/表情片段）仍然只用手動模擬資料驗證過，還沒拿這筆真實訊息實際跑過 `demo.js`
+  確認渲染結果正確**。
 - **SOOP**：查過官方文件跟第三方擴充套件都沒找到表情符號圖片網址的規則，`emoticon` 事件
   目前只有 `emoticonId` 文字，沒有做圖片渲染，不確定的東西不猜。
 
