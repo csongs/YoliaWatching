@@ -45,12 +45,8 @@ const { createSoopConnector } = require('./connectors/soop');
 const PORT = process.env.CHAT_MONITOR_PORT || 3100;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-// 第一次啟動(settings 表是空的)用 db.js 的 DEFAULT_CONFIG 當預設值就好;如果 chat-monitor
-// 自己的 .env 有設 TWITCH_OAUTH,額外拿來當 Twitch OAuth Token 的預設值(純粹圖方便,不填也
-// 完全能用,進「平台設定」分頁貼上去存檔就好)。
-db.seedSettingsIfEmpty(
-  process.env.TWITCH_OAUTH ? { twitch: { config: { oauthToken: process.env.TWITCH_OAUTH } } } : {}
-);
+// 第一次啟動(settings 表是空的)用 db.js 的 DEFAULT_CONFIG 當預設值就好。
+db.seedSettingsIfEmpty();
 
 // ── 連線管理:每平台最多一個 connector 實例,設定變更時整組換新的 ─────────────
 const CONNECTOR_FACTORIES = {

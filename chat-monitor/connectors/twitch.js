@@ -37,7 +37,7 @@ function buildEmoteMessageParts(message, emotesTag) {
 }
 
 // tags.id 是 Twitch IRC 幫每則訊息/USERNOTICE 蓋的訊息 UUID,拿來當 dedup key 最穩。
-function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
+function createTwitchConnector({ channel }, onEvent, onStatus) {
   let client = null;
 
   function emitChat(tags, message) {
@@ -71,6 +71,11 @@ function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
 
   function start() {
     if (!channel) { onStatus({ connected: false, error: '未設定 Twitch 頻道名稱' }); return; }
+    // 畫面上不再提供 Token 輸入欄位(2026-08-14 拿掉)——匿名模式已經修好、能正常運作(見下面
+    // identity 判斷邏輯),一般使用不需要 Token。真的需要認證連線(例如想直接驗證 cheer/sub 在
+    // 已登入狀態下的行為)可以在 chat-monitor/.env 設 TWITCH_OAUTH,純粹給進階/除錯用途,
+    // 不會出現在設定頁面上。
+    //
     // tmi.js 真正的匿名模式需要 username 符合 justinfan##### 格式,配上它內部固定送出的特殊密碼
     // (見 node_modules/tmi.js/lib/client.js:1180 的 _.justinfan() 與 1199-1201 的
     // isJustinfan 判斷)——完全不能自己指定 username。原本沒 token 時仍然把 identity.username
@@ -79,7 +84,7 @@ function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
     // 還連帶讓整個伺服器當機)——「留空可匿名讀取」這個功能其實從來沒有真的成立過。
     // 改成沒有 token 時完全不傳 identity,讓 tmi.js 自己產生 justinfan 使用者名稱走它內建
     // 的匿名登入流程。
-    const token = oauthToken || process.env.TWITCH_OAUTH;
+    const token = process.env.TWITCH_OAUTH;
     client = new tmi.Client({
       ...(token ? { identity: { username: channel, password: token } } : {}),
       channels: [channel],

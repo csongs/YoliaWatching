@@ -145,7 +145,7 @@ function getStats() {
 // 依賴 yuupeek/ 資料夾同時存在才能 seed;協作者要測別的頻道,進「平台設定」分頁改掉存檔即可。
 // 啟用開關預設仍是 false,不會一解壓縮就自動連線。
 const DEFAULT_CONFIG = {
-  twitch: { channel: 'altheayolia', oauthToken: '' },
+  twitch: { channel: 'altheayolia' },
   youtube: { channel: '@altheayolia' },
   soop: { channel: 'altheayolia', apiMode: 'community' },
 };

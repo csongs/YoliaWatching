@@ -14,19 +14,19 @@ npm start        # http://127.0.0.1:3100
 ```
 
 打開 `http://127.0.0.1:3100` 後，左側「平台設定」分頁（Twitch / YouTube / SOOP）就是
-唯一要設定的地方——頻道名稱、金鑰（Twitch OAuth Token）、SOOP 連線方式、啟用開關，填完按
-「儲存並套用」即可，全部存進 SQLite 的 `settings` 表，不用手動編輯任何 `.env` 或 `.json` 檔。
-第一次啟動（`settings` 表是空的）頻道名稱會帶入 `db.js` 內建的預設值（這個專案自己的實況主
-`altheayolia`）；如果 `chat-monitor/.env` 有設 `TWITCH_OAUTH`，Twitch 的金鑰也會一併帶入，
-純粹圖方便，不填一樣能用。改設定一律回到這個頁面改。右側是聊天視窗，每則訊息前面標
-`[平台][類型]`。
+唯一要設定的地方——頻道名稱、SOOP 連線方式、啟用開關，填完按「儲存並套用」即可，全部存進
+SQLite 的 `settings` 表，不用手動編輯任何 `.env` 或 `.json` 檔。第一次啟動（`settings`
+表是空的）頻道名稱會帶入 `db.js` 內建的預設值（這個專案自己的實況主 `altheayolia`）。
+改設定一律回到這個頁面改。右側是聊天視窗，每則訊息前面標 `[平台][類型]`。
 
 YouTube 這邊改用 [youtube-chat-next](https://github.com/LucasSantana-Dev/youtube-chat-next)
 （爬公開網頁聊天室，免 API Key）取代官方 `googleapis`，所以 YouTube 分頁只要填 handle
 （`@xxx`）或頻道 ID（`UCxxxx`），不用填金鑰。
 
-金鑰目前以明碼存在本機 SQLite（伺服器只綁 `127.0.0.1`，不對外開放）；如果要用不同帳號
-測試，直接在對應分頁覆寫金鑰欄位即可。
+Twitch 也不用填金鑰——匿名連線即可讀聊天（見下面「Twitch 免 Token（匿名）模式」）。畫面上
+沒有 Token 輸入欄位；真的需要用已登入身分連線（除錯/進階用途）可以在
+`chat-monitor/.env` 設 `TWITCH_OAUTH`，連接器會直接讀這個環境變數，不會存進 SQLite
+也不會顯示在畫面上。
 
 ## 打包給別人測試
 
