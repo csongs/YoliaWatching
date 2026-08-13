@@ -163,13 +163,19 @@ const server = http.createServer(async (req, res) => {
     const q = (url.searchParams.get('q') || '').trim();
     const from = (url.searchParams.get('from') || '').trim();
     const to = (url.searchParams.get('to') || '').trim();
-    // eventType 是逗號分隔的類型清單(demo 頁的特殊類型下拉選單是複選,OR 條件),空字串
-    // split 完會變成 [''],用 filter(Boolean) 濾掉。
-    const eventTypes = (url.searchParams.get('eventType') || '').split(',').map((s) => s.trim()).filter(Boolean);
+    // type 是逗號分隔的 "平台:類型" 或 "平台:*"(該平台全部訊息,含一般聊天)清單(demo 頁的
+    // 類型下拉選單是複選,OR 條件),拆成 { platform, eventType } 陣列給 db.js;eventType 是
+    // null 代表「不限這個平台的類型」。空字串 split 完會變成 [''],用 filter(Boolean) 濾掉。
+    const typeFilters = (url.searchParams.get('type') || '')
+      .split(',').map((s) => s.trim()).filter(Boolean)
+      .map((token) => {
+        const [platform, eventType] = token.split(':');
+        return { platform, eventType: eventType === '*' ? null : eventType };
+      });
     // 四個條件全空就不查——不然會變成撈出全部歷史,不是「搜尋」;至少要有一個才查。
-    if (!q && !from && !to && eventTypes.length === 0) return sendJson(res, 200, []);
+    if (!q && !from && !to && typeFilters.length === 0) return sendJson(res, 200, []);
     const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 1000);
-    return sendJson(res, 200, db.searchEvents({ q, from, to, eventTypes, limit }));
+    return sendJson(res, 200, db.searchEvents({ q, from, to, typeFilters, limit }));
   }
 
   if (url.pathname === '/api/db-info' && req.method === 'GET') {

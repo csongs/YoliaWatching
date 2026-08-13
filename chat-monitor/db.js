@@ -140,18 +140,24 @@ function getRecentEvents(limit = 200) {
 //     就沒有大小寫的概念,不用另外處理。
 //   - from/to:比對 received_at(ISO 字串),呼叫端(demo.js)要先把 <input type=datetime-local>
 //     的本地時間轉成 UTC ISO 字串再送過來,字串字典順序比較就是正確的時間先後順序。
-//   - eventTypes:陣列,event_type 符合其中任一個就算(IN 子句,等同 OR 條件)——demo 頁的
-//     特殊類型下拉選單是複選(<select multiple>)。
+//   - typeFilters:陣列,每筆 { platform, eventType }(eventType 可以是 null,代表「這個平台
+//     不限類型」——demo 頁的「全部訊息(含一般聊天)」選項),符合其中任一筆就算(OR 條件)。
+//     這樣才能「YT 全部 + Twitch 只要特殊類型」這種混搭,單純比對 event_type 做不到,因為
+//     chat 這個 event_type 三個平台共用,沒辦法只用 event_type 分辨是哪個平台的一般聊天。
 // 回傳新到舊排序(呼叫端 demo.js 自己 reverse 成舊到新顯示)。
-function searchEvents({ q, from, to, eventTypes, limit = 200 } = {}) {
+function searchEvents({ q, from, to, typeFilters, limit = 200 } = {}) {
   const clauses = [];
   const params = [];
   if (q) { clauses.push('(username LIKE ? OR message LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
   if (from) { clauses.push('received_at >= ?'); params.push(from); }
   if (to) { clauses.push('received_at <= ?'); params.push(to); }
-  if (eventTypes && eventTypes.length) {
-    clauses.push(`event_type IN (${eventTypes.map(() => '?').join(',')})`);
-    params.push(...eventTypes);
+  if (typeFilters && typeFilters.length) {
+    const sub = typeFilters.map(({ platform, eventType }) => {
+      params.push(platform);
+      if (eventType) { params.push(eventType); return '(platform = ? AND event_type = ?)'; }
+      return '(platform = ?)';
+    });
+    clauses.push(`(${sub.join(' OR ')})`);
   }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   return db.prepare(`SELECT * FROM events ${where} ORDER BY id DESC LIMIT ?`).all(...params, limit);

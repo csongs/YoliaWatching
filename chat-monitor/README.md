@@ -24,12 +24,17 @@ SQLite 的 `settings` 表，不用手動編輯任何 `.env` 或 `.json` 檔。�
 - **關鍵字**：比對使用者名稱或訊息內容任一個命中。
 - **開始/結束時間**：`<input type=datetime-local>`，旁邊「現在」按鈕直接帶入當下時間，方便
   「從剛剛某個時間點開始」這種用法；兩個都留空就不限時間範圍。
-- **特殊類型**：複選下拉選單（`<select multiple>`，Ctrl/Cmd+點選可選多個），依平台分組列出
-  各平台專屬的特殊事件（例如 Twitch 的「醒目留言(頻道點數兌換)」、YouTube 的「Super
-  Chat」），選項來自 [public/labels.js](public/labels.js) 的 `EVENT_TYPE_LABELS`
-  （`platform` 欄位標哪個事件屬於哪個平台，三平台共用的一般聊天 `platform: null` 不列在
-  選單裡，要搜一般聊天內容直接用關鍵字就好）。**選多個是 OR 條件**（符合其中任一個類型就算，
-  後端用 `event_type IN (...)` 查），跟關鍵字/時間範圍之間才是 AND；什麼都不選＝不限類型。
+- **訊息類型**：複選下拉選單（`<select multiple>`，Ctrl/Cmd+點選可選多個），依平台分組，
+  每個平台第一個選項是「全部訊息(含一般聊天)」（值是 `平台:*`，跟
+  `CHAT_MONITOR_RAW_CAPTURE_SKIP` 的 `platform:*` 萬用字元同樣的慣例），其餘是該平台專屬的
+  特殊事件（例如 Twitch 的「醒目留言(頻道點數兌換)」、YouTube 的「Super Chat」，選項來自
+  [public/labels.js](public/labels.js) 的 `EVENT_TYPE_LABELS`，`platform` 欄位標哪個事件
+  屬於哪個平台）。**可以跨平台混搭選**，例如「YouTube 全部訊息」+「Twitch 醒目留言」；
+  選多個之間是 **OR 條件**（符合其中任一筆就算，後端組成 `(platform=? AND event_type=?) OR ...`
+  這種查詢，`platform:*` 只比對 `platform` 不比對 `event_type`），跟關鍵字/時間範圍之間才是
+  AND；什麼都不選＝不限類型。這個設計是因為 `chat`（一般聊天）這個 `event_type` 三個平台
+  共用，沒辦法只靠 `event_type` 分辨是哪個平台的一般聊天，所以「全部訊息」選項改成只篩
+  `platform` 欄位。
 
 四個條件全部留空按搜尋不會出東西（`server.js` 擋掉，避免變成撈出整張表）。
 

@@ -424,11 +424,13 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  // 特殊類型是複選(<select multiple>),符合其中任一個選中的類型就算(OR 條件)——只列各平台
-  // 專屬的特殊事件(例如 Twitch 的 chat_highlight、YouTube 的 superchat),依平台分組
-  // (<optgroup>),不含三平台共用的 chat(labels.js 裡 platform:null),那種情況不選任何選項
-  // (=不限類型)+ 打關鍵字搜就好。不用「全部類型」這種佔位選項——複選模式下「什麼都不選」
-  // 本身就代表不篩選,選了又跟真正的類型選項混在一起反而容易誤會成也要篩「全部類型」這個值。
+  // 類型下拉選單依平台分組(<optgroup>),每個平台底下第一個選項是「全部訊息(含一般聊天)」
+  // (值是 "平台:*",跟 CHAT_MONITOR_RAW_CAPTURE_SKIP 的 platform:* 萬用字元同樣的慣例),
+  // 用來支援「YT 全部 + Twitch 只要特殊類型」這種混搭——因為 chat 這個 event_type 三個平台
+  // 共用(labels.js 標 platform:null),沒辦法只靠 event_type 分辨「這是哪個平台的一般聊天」,
+  // 「全部訊息」選項改用「只篩平台、不篩 event_type」的方式達成同樣效果。其餘選項是各平台
+  // 專屬的特殊事件(例如 Twitch 的 chat_highlight、YouTube 的 superchat),值是 "平台:類型"。
+  // 複選模式下「什麼都不選」本身就代表不篩選,不用另外一個「不限類型」佔位選項。
   function buildSearchEventTypeOptions() {
     const groups = {};
     for (const [type, info] of Object.entries(L.EVENT_TYPE_LABELS)) {
@@ -437,9 +439,9 @@
     }
     let html = '';
     for (const p of PLATFORMS) {
-      if (!groups[p]?.length) continue;
       html += `<optgroup label="${escapeHtml(L.platformLabel(p))}">`;
-      for (const { type, label } of groups[p]) html += `<option value="${escapeHtml(type)}">${escapeHtml(label)}</option>`;
+      html += `<option value="${p}:*">全部訊息(含一般聊天)</option>`;
+      for (const { type, label } of (groups[p] || [])) html += `<option value="${p}:${escapeHtml(type)}">${escapeHtml(label)}</option>`;
       html += '</optgroup>';
     }
     $searchEventType.innerHTML = html;
@@ -456,11 +458,12 @@
     const q = $keywordInput.value.trim();
     const fromIso = localDateTimeToIso($searchFrom.value);
     const toIso = localDateTimeToIso($searchTo.value);
-    // 複選:選中的每個 <option> 都算,用逗號接成一個字串送給後端(跟 CHAT_MONITOR_RAW_CAPTURE_SKIP
-    // 同樣的逗號分隔慣例),db.js 那邊會組成 event_type IN (...) 的 OR 條件。
-    const eventTypes = Array.from($searchEventType.selectedOptions).map((o) => o.value);
+    // 複選:選中的每個 <option> 值都是 "平台:類型" 或 "平台:*"(全部訊息),用逗號接成一個
+    // 字串送給後端(跟 CHAT_MONITOR_RAW_CAPTURE_SKIP 同樣的逗號分隔慣例),db.js 那邊組成
+    // OR 條件——這樣才能「YT 全部 + Twitch 只要特殊類型」這樣混搭選,不是單純比對 event_type。
+    const typeTokens = Array.from($searchEventType.selectedOptions).map((o) => o.value);
     $searchResults.innerHTML = '';
-    if (!q && !fromIso && !toIso && eventTypes.length === 0) {
+    if (!q && !fromIso && !toIso && typeTokens.length === 0) {
       $searchResultHint.textContent = '輸入至少一個條件後按搜尋，或按 Enter。';
       return;
     }
@@ -469,7 +472,7 @@
     if (q) params.set('q', q);
     if (fromIso) params.set('from', fromIso);
     if (toIso) params.set('to', toIso);
-    if (eventTypes.length) params.set('eventType', eventTypes.join(','));
+    if (typeTokens.length) params.set('type', typeTokens.join(','));
     let rows;
     try {
       rows = await (await fetch(`/api/search?${params}`)).json();
