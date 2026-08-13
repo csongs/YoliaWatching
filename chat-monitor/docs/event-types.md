@@ -42,6 +42,33 @@ demo 頁（[demo.js](../public/demo.js) 的 `renderLine()`）怎麼把一列事�
 
 Connector：[connectors/twitch.js](../connectors/twitch.js)（`tmi.js`，IRC）。
 
+### 填了 Twitch OAuth Token 會多出什麼（2026-08-14 註記）
+
+**結論：目前完全沒有差別。** 這裡列的所有事件都是走 IRC（`tmi.js`），而 IRC 層級的能力
+匿名連線跟有 Token 連線是**一樣的**——`tmi.js` 在送 `PASS`/`NICK` 之前就已經無條件送出
+`CAP REQ`（IRC 擴充能力宣告），不會因為有沒有認證而縮減，這是「Twitch 免 Token（匿名）
+模式」那次修復時查證過的（見 [README.md](../README.md) 同名章節）。也就是說：`chat`、
+`cheer`、`sub`、`resub`、`subgift`、`submysterygift`、`raid`、`announcement` 這些事件，
+理論上有沒有 Token 收到的內容完全一樣（cheer/sub/resub/raid 在純匿名模式下的實際接收情況
+還沒有真實驗證過，見 README 驗證狀態表，但差異點不在「有沒有 Token」，是這幾種事件本身
+還沒等到真實案例）。
+
+Token 唯一可能有意義的地方，是**完全獨立於 IRC 之外的另一條管道**：Twitch EventSub
+（需要對應授權範圍的 OAuth token，用 WebSocket 訂閱，不是 `tmi.js`）。這裡目前**沒有實作**
+EventSub，所以就算填了 Token 也不會多任何功能——這份筆記只是先記錄「如果之後要做，能多什麼」：
+
+- **頻道點數兌換（沒有附聊天訊息的那種）**：2026-08-14 使用者截圖實際遇到（「Csongs 兌換了
+  『安안』200 點」，沒有文字輸入的兌換項目）——這種不會出現在 IRC 聊天訊息裡（跟已經支援的
+  `chat_highlight` 不同，`chat_highlight` 是「兌換時**有**附文字」的情況，走一般 PRIVMSG 帶
+  `custom-reward-id` tag，不需要 EventSub 就能收到），需要 EventSub 的
+  `channel.channel_points_custom_reward_redemption.add`，授權範圍
+  `channel:read:redemptions`。
+- 其他 EventSub 才有的事件類別（沒有具體核對過細節，只是列出 Twitch EventSub 文件裡存在
+  這些類別，供之後評估要不要做）：極限開播（Hype Train）進度、頻道投票（Poll）、頻道預測
+  （Prediction）、新關注者（Follow，需要 `moderator:read:followers`）。訂閱/續訂/贈送訂閱
+  這幾個 EventSub 也有對應事件，但這裡已經用 IRC USERNOTICE 拿到了，改用 EventSub 拿同樣的
+  資訊沒有額外好處。
+
 ### chat — 一般訊息
 
 分類：`chat`。純文字聊天訊息，`tags.bits` 沒有值、也不是頻道點數兌換訊息時的預設分類。
