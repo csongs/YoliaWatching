@@ -373,8 +373,14 @@ Connector：[connectors/soop.js](../connectors/soop.js)（`soop-extension`，社
 
 存進 `events` 表：`message` = `res.comment`；`amount` = `null`；`extra` = `{ userId: res.userId, messageParts }`。
 
-**2026-08-14 發現＋接上圖片渲染**：SOOP 的表情符號不是只有獨立的 `emoticon` 事件才會出現——使用者也可以在一般聊天訊息裡直接打 `/코드명/` 這種斜線包住的代碼（例如 `/하트/`、`/하트뿜뿜/`，同一則訊息裡常常重複打好幾次），在真正的 SOOP 網頁上這些代碼會被客戶端換成圖片貼圖。找到 SOOP 網頁前端自己在用的公開靜態目錄
-`https://res.sooplive.com/images/chat/emoticon/big/list.json`（`{ "/代碼/": "檔名.png" }`，123 筆「經典」表情符號）後，`connectors/soop.js` 的 [`buildEmoticonMessageParts()`](../connectors/soop.js) 會掃描 `res.comment` 裡的 `/代碼/` 片段，對得上目錄的換成 `{type:'emoji', url, alt}`，對不上的（例如上面範例的 `/하트뿜뿜/`，屬於還沒找到目錄的新版 `_s` 表情符號包）保留原始文字——上面範例裡的 `/하트/` 全部三個都能換成圖片（`79.png`），但完整的 `/하트//하트//하트/` 訊息如果混著 `_s` 版代碼，也只有認得的那幾個會變圖片，其他照樣是文字。目錄是連線時背景抓一次、整個程序共用，抓不到就整段退回純文字，不影響聊天監聽本身。
+**2026-08-14 發現＋接上圖片渲染（兩套目錄都接了）**：SOOP 的表情符號不是只有獨立的 `emoticon` 事件才會出現——使用者也可以在一般聊天訊息裡直接打 `/코드명/` 這種斜線包住的代碼（例如 `/하트/`、`/락/`，同一則訊息裡常常重複打好幾次），在真正的 SOOP 網頁上這些代碼會被客戶端換成圖片貼圖。SOOP 實際上有**兩套完全獨立的代碼目錄**，`connectors/soop.js` 的 [`buildEmoticonMessageParts()`](../connectors/soop.js) 會把兩套合併成同一份 `{ "/代碼/": 完整圖片網址 }` 查表：
+
+1. **全站共用「經典表情符號」**：公開靜態 JSON，跟頻道無關，`https://res.sooplive.com/images/chat/emoticon/big/list.json`（`{ "/代碼/": "檔名.png" }`，123 筆，例如 `/하트/`→`79.png`）。
+2. **主播專屬「signature emoticon」**：2026-08-14 使用者從瀏覽器開發者工具「網路」分頁找到的真實 API，要照目前連線的頻道 id 分開抓——
+   `https://live.sooplive.com/api/signature_emoticon_api.php?work=list&v=tier&szBjId={streamerId}`，
+   回傳 `{ result, data: { tier1, tier2 }, img_path, ... }`，每筆 `{ title, mobile_img, tier_type, move_img, ... }`，圖片網址 = `img_path + mobile_img`；`tier2` 且 `move_img==='Y'` 的是動畫（webp）——之前使用者截圖看到「`/하트뿜뿜/` 是動畫、不在經典目錄裡」，原因就是它屬於這一套，不是第三套系統。以測試頻道 `rud9281`為例，這套目錄有 44 筆，涵蓋 `/락/`、`/ㅗㅜㅑ/`、`/갱응원/` 這些之前對不上的代碼。
+
+兩套目錄合併起來（測試頻道當下共 167 筆）之後，之前對不上的 `/ㅗㅜㅑ//락//ㅗㅜㅑ//락/` 全部四段都能正確換成圖片了，網址也 curl 驗證過真的能載入。經典目錄跟頻道無關只抓一次、整個程序共用；signature emoticon 目錄照 `channel` 設定抓，換頻道（`restartConnector()`）會重新抓。兩套都對不上的代碼（目前已知只剩 OGQ 貼圖市集那套，見下面 `emoticon` 章節）才會保留原始文字。抓不到任一目錄（離線/API 失效）就整段退回純文字，不影響聊天監聽本身。
 
 UI 呈現：無類型標籤（`chat` 省略）；`messageParts` 有值時，認得的 `/代碼/` 片段會渲染成 `<img class="chat-emoji">`（跟 Twitch/YouTube 共用同一段 `demo.js` 渲染邏輯），不認得的代碼跟其他純文字一樣直接顯示。
 
@@ -414,28 +420,33 @@ CDN 網址規則：`https://res.sooplive.com/images/chat/emoticon/big/{id}.webp`
 或找到 OGQ／SOOP 的圖片解析 API 才能繼續，**目前還沒有辦法把 `emoticonId` 換成正確的圖片網址，
 圖片渲染還沒接上**。
 
-**內建表情符號代碼 → ID 對照表找到了**：`https://res.sooplive.com/images/chat/emoticon/big/list.json`
-是一份公開的靜態 JSON（沒有認證、沒有 API key），內容是 `{ "/代碼/": "檔名.png", ... }`（少數是子
-資料夾例如 `"baseball/1.png"`），123 筆，涵蓋 `/하트/`、`/최고/`、`/ㅋㅋ/`、`/사랑/`、`/짱/` 這類
-「經典」表情符號（加一組棒球隊徽）。**但不包含**帶 `_s` 後綴的表情符號（`/댄스2_s/`、
-`/응원3_s/`、`/축하해_s/`、`/하트뿜뿜/`、`/갱응원/` 這種）——2026-08-14 使用者截圖確認
-`/하트뿜뿜/` 在真正的 SOOP 網頁上顯示的是**動畫（GIF）**，不是靜態圖。
+**表情符號代碼 → 圖片網址對照表，兩套都找到了**（2026-08-14，完整過程見上面 `chat` 章節）：
 
-同一天使用者又截到 `/갱응원/` 的真實 DOM，找到**第三套完全獨立的表情符號系統**：
-`https://static.file.sooplive.com/signature_emoticon/{streamerId}/{hash}.webp`（curl 驗證過
-真的能載入，`.png` 版本的 hash 值跟 `.webp` 不一樣，不是單純副檔名替換）——網址路徑裡帶著
-**主播 ID**（這筆是 `rud9281`，剛好是目前測試頻道），叫做「signature emoticon」（簽名／專屬
-表情符號），推測是**每個主播自己專屬的表情符號包**，`_s` 後綴很可能就是 signature 的縮寫。
-跟前面的「經典」全站共用目錄是不同系統——這套沒有找到 `list.json` 這種公開清單（試了幾個
-合理猜測的路徑都 404，包括 `signature_emoticon/{streamerId}/list.json`），猜測是要另外呼叫
-API 用主播 ID 換清單，不是純靜態檔案，還沒找到那個 API 網址。
+1. 全站共用「經典表情符號」：`https://res.sooplive.com/images/chat/emoticon/big/list.json`，
+   公開靜態 JSON，123 筆，例如 `/하트/`、`/최고/`、`/ㅋㅋ/`。
+2. 主播專屬「signature emoticon」：`https://live.sooplive.com/api/signature_emoticon_api.php?work=list&v=tier&szBjId={streamerId}`，
+   使用者從瀏覽器開發者工具「網路」分頁找到的真實 API，回傳該主播的完整表情符號清單（含
+   動畫版，`tier2`/`move_img==='Y'`）；`/하트뿜뿜/`、`/갱응원/`、`/락/`、`/ㅗㅜㅑ/` 這些
+   之前對不上「經典」目錄的代碼，全部都在這一套裡面（不是第三套系統，是誤以為的）。
 
-已經接上 `connectors/soop.js`（見下面）的是**經典靜態圖那 123 筆**；`_s`／signature 表情符號
-（不管是動畫還是主播專屬的）都還沒有對照表，繼續顯示原始文字。比較務實的下一步：使用者從
-瀏覽器開發者工具「網路」分頁，篩選 XHR/Fetch 或圖片/媒體類型的請求，找主播專屬表情符號跳出
-來時實際打了哪個網址（尤其是回傳 JSON 的那種，很可能就是清單 API）。
+兩套都已經接上 `connectors/soop.js`（見上面 `chat` 章節的 `buildEmoticonMessageParts()`），
+但都是**針對 `chat` 事件裡打字輸入的 `/代碼/`**。獨立的 `emoticon` 事件（上面範例，`emoticonId`
+是雜湊字串）**還是沒有圖片渲染**——這個事件對應 SOOP 協定裡的 `OGQ_EMOTICON`（協定類型
+`109`），跟前面兩套代碼系統完全無關，是第三方 OGQ 貼圖市集：
 
-UI 呈現：「表情訊息」標籤，`message` 是 `null`，demo 頁這行**只會顯示使用者名稱，看不到表情符號本身**——這個獨立的 `emoticon` 事件（OGQ 雜湊 ID）本身沒有解決，跟下面 `chat` 事件裡的 `/代碼/` 圖片渲染是兩回事，不要搞混。
+找到另一個不同語言的 SOOP 聊天協定重寫專案交叉核對後確認了原因：
+[getCurrentThread/soopapi](https://github.com/getCurrentThread/soopapi)（非官方 Java 函式庫，
+獨立反推同一套 WebSocket 協定，附完整協定類型代碼對照表，比這裡用的 `soop-extension` 詳細
+很多）——`emoticonId` 給的是 OGQ（第三方貼圖／表情符號市集，被 SOOP 整合進聊天室）的
+`groupId`（雜湊格式）。soopapi 的文件指出：真正帶圖片網址的是「贈送 OGQ 表情符號包」事件
+（協定類型 `118`，`OGQ_EMOTICON_GIFT`，`soop-extension` 沒有實作，會落到 `UNKNOWN`），它的
+`ogqImageUrl` 欄位範例長這樣：`//ogq-sticker-global-cdn-z01.sooplive.com/...`——**是完全
+不同的 CDN 網域**，不是 `res.sooplive.com`／`static.file.sooplive.com`。也就是說一般「使用
+表情符號」的封包（我們的 `emoticon` 事件）本身並不包含圖片網址，圖片網址只有在「整包贈送」
+的封包裡才會出現；`emoticonId`（OGQ 的 `groupId`）本身無法單獨換成圖片網址，**這部分依然
+沒有解法**，還需要知道對應的 `subId`/`version` 或找到 OGQ／SOOP 的圖片解析 API 才能繼續。
+
+UI 呈現：「表情訊息」標籤，`message` 是 `null`，demo 頁這行**只會顯示使用者名稱，看不到表情符號本身**——這個獨立的 `emoticon` 事件（OGQ 雜湊 ID）本身沒有解決，跟上面 `chat` 事件裡的 `/代碼/` 圖片渲染是兩回事，不要搞混。
 
 ### text_donation — 文字/語音抖內(별풍선)
 
@@ -550,7 +561,7 @@ UI 呈現：「系統通知」標籤，灰色斜體行，沒有使用者名稱�
 
 - SOOP `subscribe`/`notification` 還沒抓到真實資料（`chat`/`emoticon`/`text_donation` 已經有真實樣本了，見上面對應章節），上面沒有 ✅ 標記的範例都是程式碼推導，欄位型別（尤其是 `amount` 是字串還是數字）有可能猜錯。
 - SOOP `subscribe` 事件可能只在「續訂」時觸發，「新訂閱」可能是完全沒被監聽到的另一個協定類型（`0091`），見 `subscribe` 章節的說明——還沒確認。
-- SOOP 一般聊天訊息裡的 `/代碼/` 表情符號（2026-08-14 已接上圖片渲染，見 `chat` 章節）只涵蓋找得到目錄的 123 個「經典」代碼，帶 `_s` 後綴的新版表情符號包還沒找到對照表，一樣是純文字；獨立的 `emoticon` 事件（OGQ 雜湊 ID）完全沒有圖片渲染，見 `emoticon` 章節。
+- SOOP 一般聊天訊息裡的 `/代碼/` 表情符號（2026-08-14 已接上圖片渲染，見 `chat` 章節）涵蓋「經典」全站共用目錄（123 筆）+ 主播專屬 signature emoticon 目錄（照頻道抓，測試頻道 44 筆）兩套；獨立的 `emoticon` 事件（OGQ 雜湊 ID）仍然完全沒有圖片渲染，見 `emoticon` 章節，是目前唯一還沒解掉的表情符號缺口。
 - YouTube `supersticker` 沒有真實範例，貼圖圖片本身也沒有渲染進 `messageParts`。
 - YouTube 同一則訊息「既是 Super Chat 又是會員」時，`extra` 目前不會帶會員資訊，見 `superchat` 章節。
 - Twitch `raid`／`cheer`／`resub` 沒有真實範例。

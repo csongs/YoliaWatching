@@ -120,7 +120,7 @@ npm run package
 | SOOP | 文字/語音抖內（`text_donation`） | ✅ 部分驗證 | 2026-08-14 抓到真實連續送星球封包（27 顆，同一人），`amount`/`fromUsername`/`fanClubOrdinal` 欄位都正確，但沒有實際在 demo 頁看過渲染結果 |
 | SOOP | 抖內（`video_donation`/`ad_balloon_donation`） | ❌ 完全沒測過 | 欄位結構跟已驗證的 `text_donation` 相同（只是抖內管道不同），但這兩種管道本身沒有實測過 |
 | SOOP | 表情訊息（`emoticon`） | ⚠️ 部分驗證 | 2026-08-14 抓到真實封包，`emoticonId`/`userId`/`username` 欄位都在，但查出這個 `emoticonId` 是 OGQ 雜湊 ID，換不出圖片網址，圖片渲染沒接上（跟下面 `chat` 訊息裡的 `/代碼/` 圖片渲染是不同系統） |
-| SOOP | 聊天內建表情符號圖片渲染（`chat` 的 `/代碼/`） | ⚠️ 部分驗證 | 2026-08-14 用真實抓到的 `/하트//하트//하트/` 訊息＋真實目錄資料驗證過轉換邏輯正確、圖片網址也 curl 驗證過能載入，但沒有實際在 demo 頁看過渲染結果；只涵蓋目錄裡的 123 個代碼，帶 `_s` 後綴的新版表情符號不在裡面 |
+| SOOP | 聊天表情符號圖片渲染（`chat` 的 `/代碼/`） | ⚠️ 部分驗證 | 2026-08-14 用真實抓到的 `/하트//하트//하트/`（經典目錄）、`/ㅗㅜㅑ//락//ㅗㅜㅑ//락/`（signature emoticon 目錄）驗證過兩套目錄合併後轉換邏輯都正確、圖片網址也 curl 驗證過能載入，但沒有實際在 demo 頁看過渲染結果 |
 | SOOP | 贈送禮物（`gift_item`） | ✅ 部分驗證 | 送禮者/收禮者暱稱對照過真實截圖確認正確；2026-08-14 交叉核對 soopapi 修正了送禮者/收禮者 userId 欄位（原本誤標）、補上 `itemType` 欄位，但 `itemType` 數字對應的道具名稱、`amount` 欄位還是不知道 |
 
 ## 避免 restart 後重複寫入
@@ -178,16 +178,17 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
   `200 image/png`，證實網址規則對新舊兩種 id 格式都成立；但**切割邏輯本身（位置區間對應到
   正確的文字/表情片段）仍然只用手動模擬資料驗證過，還沒拿這筆真實訊息實際跑過 `demo.js`
   確認渲染結果正確**。
-- **SOOP**：一般 `chat` 訊息裡可以直接打 `/코드명/`（例如 `/하트/`）這種斜線包住的內建表情符號
-  代碼，2026-08-14 找到 SOOP 網頁前端自己在用的公開靜態目錄
-  `res.sooplive.com/images/chat/emoticon/big/list.json`（123 筆代碼→檔名對照，沒有認證，
-  curl 驗證過抓到的檔名真的能載入圖片），**已經接上圖片渲染**（`connectors/soop.js` 的
-  `buildEmoticonMessageParts()`，連線時背景抓一次、整個程序共用）——認得的代碼會變成
-  `<img>`，不認得的（例如帶 `_s` 後綴的新版表情符號 `/댄스2_s/`、`/하트뿜뿜/`，還沒找到
-  對照表）照樣顯示原始文字，不是全有全無。獨立的 `emoticon` 事件（`emoticonId`）是完全不同
-  的系統——查到那是 OGQ（第三方貼圖市集）的雜湊 ID，跟上面內建代碼用的小整數 ID 對不起來，
-  OGQ 圖片網域也不一樣（`ogq-sticker-global-cdn-z01.sooplive.com`），這部分還是沒有圖片
-  渲染。細節見 [docs/event-types.md](docs/event-types.md) 的 `chat`／`emoticon` 章節。
+- **SOOP**：一般 `chat` 訊息裡可以直接打 `/코드명/`（例如 `/하트/`、`/갱응원/`）這種斜線包住的
+  表情符號代碼，2026-08-14 找到兩套目錄、**都已經接上圖片渲染**（`connectors/soop.js` 的
+  `buildEmoticonMessageParts()`，連線時背景抓一次）：全站共用的「經典」靜態目錄
+  `res.sooplive.com/images/chat/emoticon/big/list.json`（123 筆）＋主播專屬的
+  「signature emoticon」API `live.sooplive.com/api/signature_emoticon_api.php`（使用者從
+  瀏覽器開發者工具「網路」分頁找到的真實請求，照目前連線頻道抓，測試頻道另外 44 筆，含動畫
+  版）——兩套合併後，認得的代碼會變成 `<img>`，不認得的照樣顯示原始文字，不是全有全無。
+  獨立的 `emoticon` 事件（`emoticonId`）是完全不同的系統——查到那是 OGQ（第三方貼圖市集）的
+  雜湊 ID，跟上面兩套代碼都對不起來，OGQ 圖片網域也不一樣
+  （`ogq-sticker-global-cdn-z01.sooplive.com`），這部分還是沒有圖片渲染，是目前唯一還沒解掉
+  的表情符號缺口。細節見 [docs/event-types.md](docs/event-types.md) 的 `chat`／`emoticon` 章節。
 
 ## 已知限制
 
@@ -218,10 +219,10 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
   在 soopapi 裡叫 `FOLLOW_ITEM_EFFECT`（續訂），真正的「New Subscription」是另一個類型
   91（`FOLLOW_ITEM`），`soop-extension` 沒有處理，還沒確認實際行為，見
   [docs/event-types.md](docs/event-types.md) 的 `subscribe` 章節。
-- SOOP 一般聊天訊息裡的 `/代碼/` 內建表情符號已經接上圖片渲染（2026-08-14，見上面「表情符號
-  圖片」章節），但只涵蓋找得到目錄的 123 個「經典」代碼；帶 `_s` 後綴的新版表情符號包、以及
-  獨立的 `emoticon` 事件（OGQ 雜湊 ID，網域是完全不同的
-  `ogq-sticker-global-cdn-z01.sooplive.com`）都還沒有圖片渲染，細節見
+- SOOP 一般聊天訊息裡的 `/代碼/` 表情符號已經接上圖片渲染（2026-08-14，見上面「表情符號
+  圖片」章節），涵蓋全站共用「經典」目錄＋主播專屬 signature emoticon 目錄兩套；獨立的
+  `emoticon` 事件（OGQ 雜湊 ID，網域是完全不同的 `ogq-sticker-global-cdn-z01.sooplive.com`）
+  還是沒有圖片渲染，是唯一還沒解掉的表情符號缺口，細節見
   [docs/event-types.md](docs/event-types.md) 的 `chat`／`emoticon` 章節。
 - Twitch 的頻道點數兌換只能偵測「醒目留言」這種會出現在一般聊天訊息裡、帶
   `custom-reward-id` tag 的兌換項目；不會出現在聊天訊息裡的其他兌換（例如純粹的音效/
