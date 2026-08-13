@@ -127,9 +127,12 @@ function buildEmoticonMessageParts(comment, manifest) {
 // 欄位——查另一個獨立反推同一套協定的非官方 Java 函式庫 soopapi 的 ChatMessageEvent
 // (randomNicknameColor/randomNicknameColorDarkmode),換算索引(該函式庫的 parts 陣列比這裡的
 // packet.split(SEPARATOR) 少一格,因為它先把封包表頭拆掉了)對應到這裡的 parts[9]/parts[10]。
-// 沒有真實封包核對過(一般 chat 事件沒有開 RAW_CAPTURE),只用其他已核對過的欄位(comment/
-// userId/username 分別對上 parts[1]/[2]/[6])間接驗證過索引換算方式是對的——如果哪天發現顏色
-// 不準,回頭查這裡。monkey-patch SoopChat.prototype.parseChat 補回這個欄位,不影響原本
+// **已用真實封包驗證過**(2026-08-14,開 RAW_CAPTURE 抓了約 20 筆真實訊息核對):parts[9]/[10]
+// 穩定是同一個人、同色系的兩種深淺(例如 "158304"/"63B566"、"0B6D82"/"6CABCF"),猜測分別是
+// 一般模式/深色模式用的版本,demo 頁是深色主題所以優先用 [10]。**但格式是 6 碼十六進位色碼,
+// 沒有前面的 "#"**(例如 "63B566" 不是 "#63B566")——第一次接上時忘了補這個符號,demo.js 的
+// hex color 格式驗證會直接擋掉沒有 "#" 開頭的字串,畫面上完全沒有顏色(user 實測回報過),
+// 這裡補上。monkey-patch SoopChat.prototype.parseChat 補回這個欄位,不影響原本
 // userId/comment/username 的行為;這是修補第三方套件的內部實作細節,不是公開 API,套件更新後
 // 這段可能需要跟著調整。
 function patchChatColor(SoopChatCtor, SEPARATOR) {
@@ -140,13 +143,8 @@ function patchChatColor(SoopChatCtor, SEPARATOR) {
     const parts = packet.split(SEPARATOR);
     // demo 頁是深色主題,優先用 darkmode 版本的顏色,沒有才退回一般版本,兩個都沒有就是 null
     // (不上色,demo.js 那邊退回 CSS 預設文字色)。
-    result.color = parts[10] || parts[9] || null;
-    // 2026-08-14:實測畫面上完全沒有顏色——先前只用其他已核對過的欄位間接驗證索引換算方式,
-    // 沒有真的拿一筆真實封包核對過 parts[9]/[10] 本身。開 RAW_CAPTURE 時把完整 parts 存下來
-    // (用專門的 chat_debug_fields 這個 key,目前不在 .env 的 CHAT_MONITOR_RAW_CAPTURE_SKIP
-    // 清單裡,才會真的寫進 raw-capture.jsonl),方便比對真實欄位長怎樣——等核對完、要嘛修正
-    // 索引要嘛確認這個欄位本來就不是每則訊息都有,這段診斷就可以拿掉。
-    if (RAW_CAPTURE) rawCapture('soop', 'chat_debug_fields', { parts, derivedColor: result.color });
+    const rawColor = parts[10] || parts[9] || null;
+    result.color = rawColor ? `#${rawColor}` : null;
     return result;
   };
   SoopChatCtor.prototype.__yoliaPatchedForColor = true;

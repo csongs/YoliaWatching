@@ -122,7 +122,7 @@ npm run package
 | SOOP | 影片抖內（`video_donation`） | ❌ 完全沒測過 | 欄位結構跟已驗證的 `text_donation`/`ad_balloon_donation` 相同（只是抖內管道不同），這個管道本身還沒實測過 |
 | SOOP | 表情訊息（`emoticon`） | ⚠️ 部分驗證 | 2026-08-14 抓到真實封包，`emoticonId`/`userId`/`username` 欄位都在，但查出這個 `emoticonId` 是 OGQ 雜湊 ID，換不出圖片網址，圖片渲染沒接上（跟下面 `chat` 訊息裡的 `/代碼/` 圖片渲染是不同系統） |
 | SOOP | 聊天表情符號圖片渲染（`chat` 的 `/代碼/`） | ⚠️ 部分驗證 | 2026-08-14 用真實抓到的 `/하트//하트//하트/`（經典目錄）、`/ㅗㅜㅑ//락//ㅗㅜㅑ//락/`（signature emoticon 目錄）驗證過兩套目錄合併後轉換邏輯都正確、圖片網址也 curl 驗證過能載入，但沒有實際在 demo 頁看過渲染結果 |
-| SOOP | 使用者名稱顏色（`chat` 的 `extra.color`） | ❌ 完全沒測過 | monkey-patch `parseChat()` 補回 `randomNicknameColorDarkmode` 欄位，用其他已核對過的欄位間接驗證過封包索引換算方式正確，但沒有真實封包核對過顏色這個欄位本身，也沒有在 demo 頁看過實際顏色 |
+| SOOP | 使用者名稱顏色（`chat` 的 `extra.color`） | ✅ 驗證過 | 2026-08-14 抓了約 20 筆真實訊息核對，`parts[9]`/`[10]` 欄位索引正確；發現並修正一個真的 bug：SOOP 原始格式沒有 `#` 前綴，第一次接上時漏補，demo.js 的格式驗證直接擋掉，畫面完全沒顏色（user 實測回報過），已修正 |
 | Twitch | 使用者名稱顏色（`chat`/`cheer` 的 `extra.color`） | ❌ 完全沒測過 | `tags.color` 是 IRC 原生欄位，程式碼邏輯上直接讀，沒有實際在 demo 頁看過渲染結果 |
 | SOOP | 贈送禮物（`gift_item`） | ✅ 部分驗證 | 送禮者/收禮者暱稱對照過真實截圖確認正確；2026-08-14 交叉核對 soopapi 修正了送禮者/收禮者 userId 欄位（原本誤標）、補上 `itemType` 欄位，但 `itemType` 數字對應的道具名稱、`amount` 欄位還是不知道 |
 
