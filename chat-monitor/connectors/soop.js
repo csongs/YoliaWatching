@@ -141,6 +141,12 @@ function patchChatColor(SoopChatCtor, SEPARATOR) {
     // demo 頁是深色主題,優先用 darkmode 版本的顏色,沒有才退回一般版本,兩個都沒有就是 null
     // (不上色,demo.js 那邊退回 CSS 預設文字色)。
     result.color = parts[10] || parts[9] || null;
+    // 2026-08-14:實測畫面上完全沒有顏色——先前只用其他已核對過的欄位間接驗證索引換算方式,
+    // 沒有真的拿一筆真實封包核對過 parts[9]/[10] 本身。開 RAW_CAPTURE 時把完整 parts 存下來
+    // (用專門的 chat_debug_fields 這個 key,目前不在 .env 的 CHAT_MONITOR_RAW_CAPTURE_SKIP
+    // 清單裡,才會真的寫進 raw-capture.jsonl),方便比對真實欄位長怎樣——等核對完、要嘛修正
+    // 索引要嘛確認這個欄位本來就不是每則訊息都有,這段診斷就可以拿掉。
+    if (RAW_CAPTURE) rawCapture('soop', 'chat_debug_fields', { parts, derivedColor: result.color });
     return result;
   };
   SoopChatCtor.prototype.__yoliaPatchedForColor = true;
