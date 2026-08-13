@@ -200,7 +200,10 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
     // SoopChat 物件上,WebSocket 也還開著,只丟掉參考不會讓連線斷掉,訊息會繼續進來、繼續呼叫
     // onEvent(使用者回報「關閉監聽後訊息還是一直進來」就是這個 bug)。改成真的呼叫 disconnect()
     // 把底層 ws 關掉;disconnect() 內部會 emit DISCONNECT,但 stopped 已經是 true,不會誤觸發重連。
-    soopChat?.disconnect();
+    // disconnect() 是 async function,理論上會 reject(例如它內部 emit(DISCONNECT) 時,我們自己
+    // 掛的其中一個監聽器丟例外)——沒接 .catch() 就是未處理的 rejection,Node 預設會讓整個程序
+    // 當掉(同一次修正見 connectors/twitch.js 的 stop(),那邊已經實測撞到真的當機)。
+    soopChat?.disconnect().catch((e) => debugLog('soop', 'disconnect() threw', { message: e?.message }));
     soopChat = null;
   }
 

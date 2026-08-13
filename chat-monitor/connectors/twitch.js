@@ -138,7 +138,11 @@ function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
   }
 
   function stop() {
-    client?.disconnect();
+    // tmi.js 的 disconnect() 回傳 Promise,連線已經在關閉中(例如剛因為 auth 失敗被伺服器踢掉)
+    // 又呼叫一次會 reject(「Cannot disconnect from server. Socket is not opened or connection
+    // is already closing.」)——原本沒接 .catch(),變成未處理的 rejection,Node 預設行為是直接
+    // 讓整個程序當掉(不只 Twitch,YouTube/SOOP 一起死,user 實測回報過整個 server 崩潰)。
+    client?.disconnect().catch((e) => debugLog('twitch', 'disconnect() threw', { message: e?.message }));
     client = null;
   }
 
