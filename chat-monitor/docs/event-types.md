@@ -32,6 +32,7 @@ demo 頁（[demo.js](../public/demo.js) 的 `renderLine()`）怎麼把一列事�
 - **整行底色**：`category === 'donation'` → 淡橘色底 + 左邊橘色豎線；`category === 'system'` → 灰色斜體；`category === 'chat'` → 無特殊底色。
 - **金額**：`formatAmount()` —— `event_type` 是 `resub` 或 SOOP `subscribe` 時顯示「已訂閱 N 個月」，其他有 `amount` 的事件顯示「+N」（橘色粗體）。
 - **訊息內容**：`renderMessageBody()` —— 有 `extra.messageParts`（文字/表情圖片交錯陣列）就渲染 `<img class="chat-emoji">` 圖片，否則退回純文字 `message` 欄位。
+- **換行**：`message` 欄位可能包含真的換行字元（2026-08-14 確認：SOOP 的 `res.comment` 對某些使用者用「巨集/多行留言」功能送出的訊息，例如裝飾用的 ASCII art 邊框，會帶真實的 `\r\n`，不是我們自己加的），`.chat-line` 的 CSS 加了 `white-space: pre-wrap` 讓這些換行真的顯示出來，而不是被瀏覽器預設行為擠成一行。
 - **時間戳**：一律同色（`.time`），要不要顯示由工具列「顯示時間戳」勾選框整批切換（CSS class，不重繪）。
 
 ---
