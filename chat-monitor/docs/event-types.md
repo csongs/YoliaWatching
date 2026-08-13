@@ -472,6 +472,14 @@ UI 呈現：同 `text_donation`，標籤文字為「影片抖內」。
 
 分類：`donation`。欄位結構同上，第三種抖內管道。
 
+✅ 真實抓包範例（2026-08-14）：
+
+```json
+{ "to": "rud9281", "from": "tpgur0910", "fromUsername": "크랙왕이상호", "amount": "1", "fanClubOrdinal": "13972" }
+```
+
+存進 `events` 表：`message` = `null`；`amount` = `res.amount`；`extra` = `{ fanClubOrdinal: "13972" }`（欄位跟 `text_donation` 一致，已用真實資料驗證正確）。
+
 UI 呈現：同上，標籤文字為「廣告氣球抖內」。
 
 ### subscribe — 訂閱(구독)
