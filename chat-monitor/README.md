@@ -94,7 +94,8 @@ npm run package
 | YouTube | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
 | YouTube | Super Chat/Sticker | ⚠️ 沒驗證過 | 照套件型別定義寫的，沒收過真實 Super Chat 確認金額/顏色欄位 |
 | YouTube | 會員留言（`isMembership`） | ✅ 驗證過 | 129 則真實會員聊天，欄位正確 |
-| YouTube | 會員月數（`membershipHeader`） | ⚠️ 沒驗證過 | patch 邏輯有跑，但只確認「一般會員聊天正確回傳 null」，沒遇過真正的里程碑事件確認欄位內容 |
+| YouTube | 會員月數（`membershipMonths`，來自 `badge.label`） | ✅ 驗證過 | 237 筆真實會員留言，正則 100% 正確解析「New member」/「Member (N months)」 |
+| YouTube | 里程碑通知文字（`membershipHeader`，來自 `headerSubtext`） | ⚠️ 沒驗證過 | patch 邏輯有跑，但只確認「一般會員聊天正確回傳 null」，沒遇過真正的里程碑事件確認欄位內容；現在只是補充來源，不是主要依賴 |
 | YouTube | 訂閱／贈送訂閱 | 🚫 不支援 | `youtube-chat-next` 資料源頭沒有這個資訊，是已知限制不是漏測 |
 | Twitch | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
 | Twitch | Bits 抖內（`cheer`） | ⚠️ 沒驗證過 | 沒有實際看過一筆真的 cheer 事件跑過 |
@@ -127,8 +128,11 @@ YouTube 這邊是即時輪詢（`youtube-chat-next`），不會回放開播以�
 ## 已知限制
 
 - YouTube 改用 `youtube-chat-next` 爬公開網頁聊天室後，分不出會員留言是「新加入/連續/
-  贈禮」（官方 API 才有這個分類），只能知道 `isMembership` 是不是會員；Super Chat/Sticker
-  也只有金額字串跟顏色，沒有官方 API 的 tier 數字。細節見
+  贈禮」（官方 API 才有這個分類）。**月數本身查得到**——2026-08-13 用
+  `CHAT_MONITOR_RAW_CAPTURE` 實測 237 筆真實會員留言發現 `author.badge.label` 每則都有
+  「New member」/「Member (N months)」文字，已改成從這裡解析 `extra.membershipMonths`；
+  但「這個月是不是剛好是贈禮/里程碑那一則」還是分不出來，只知道當下累積月數。Super Chat/
+  Sticker 也只有金額字串跟顏色，沒有官方 API 的 tier 數字。細節見
   [connectors/youtube.js](connectors/youtube.js) 開頭註解。
 - SOOP 官方 API 模式沒有實作（`yuupeek/` 裡目前也還沒有這個串接的文件可抄）。
 - SOOP 的 `gift_item`（贈送禮物）不是 `soop-extension` 有支援的事件類型，是自己抓封包反推

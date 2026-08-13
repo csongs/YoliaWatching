@@ -42,6 +42,15 @@ function patchMembershipHeaders() {
 }
 patchMembershipHeaders();
 
+// author.badge.label 目前只見過這兩種格式(2026-08-13,237 筆真實樣本):「New member」/
+// 「Member (N months)」。格式不認得就回傳 null,不要亂猜。
+function parseMembershipMonths(badgeLabel) {
+  if (!badgeLabel) return null;
+  if (/new member/i.test(badgeLabel)) return 0;
+  const match = badgeLabel.match(/member\s*\((\d+)\s*months?\)/i);
+  return match ? Number(match[1]) : null;
+}
+
 function createYoutubeConnector({ channel }, onEvent, onStatus) {
   let stopped = true;
   let liveChat = null;
@@ -69,16 +78,22 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
       };
     }
     if (item.isMembership) {
-      // membershipHeader 是上面 patchMembershipHeaders() 補回來的(例如「已加入會員 46 個月」),
-      // 跟使用者自己打的留言(text)是兩件事,一起顯示但用括號分開,不要混成一句話誤導。
+      // 2026-08-13 用 CHAT_MONITOR_RAW_CAPTURE 實測 237 筆真實會員留言發現:author.badge.label
+      // 每一則會員訊息都有(不用等罕見的加入/里程碑系統通知),格式穩定只有「New member」/
+      // 「Member (N months)」兩種,比 membershipHeader(patchMembershipHeaders() 補的
+      // headerSubtext,同一批樣本一次都沒出現過,因為那個欄位只有系統通知才有)可靠得多,
+      // 改成主要來源;membershipHeader 保留當補充,萬一哪天真的遇到系統通知可能有更完整的文字。
+      const badgeLabel = item.author?.badge?.label ?? null;
+      const months = parseMembershipMonths(badgeLabel);
       const header = item.membershipHeader ? String(item.membershipHeader).trim() : '';
-      const displayMessage = header ? (text ? `[${header}] ${text}` : header) : text;
+      const monthsText = months === 0 ? '新加入會員' : months !== null ? `會員 ${months} 個月` : (header || null);
+      const displayMessage = monthsText ? (text ? `[${monthsText}] ${text}` : `[${monthsText}]`) : text;
       return {
         ...base,
         eventType: 'chat',
         message: displayMessage,
         amount: null,
-        extra: { isMembership: true, membershipHeader: header || null },
+        extra: { isMembership: true, membershipMonths: months, membershipBadge: badgeLabel, membershipHeader: header || null },
       };
     }
     return { ...base, eventType: 'chat', message: text, amount: null, extra: null };
