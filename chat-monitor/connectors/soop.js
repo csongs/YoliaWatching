@@ -35,11 +35,18 @@ function dedupKeyFor(type, res) {
 
 // soop-extension 的 ChatType enum 裡沒有「贈送禮物」(快播Plus/訂閱禮物券等道具型贈禮,跟已經有
 // 支援的星氣球/影片/廣告氣球抖內是不同的封包類型)這種事件,收到會直接落到 UNKNOWN,內容整個被丟掉。
-// 2026-08-13 用 CHAT_MONITOR_DEBUG 抓包 + 比對使用者截圖(快播Plus 7天券,from 미오탱 to 정글대마법사)
-// 反推出來的欄位對應——沒有官方文件,只有這一筆樣本核對過,[6]/[7] 意義不明,所以 extra 裡把完整
-// 原始欄位陣列(raw)也存起來,萬一猜錯之後還查得到:
-//   parts[0] 開頭(含 type code "0045") / [1] 疑似房間或直播編號 / [2] 頻道 ID /
-//   [3] 送禮者暱稱 / [4] 送禮者 userId / [5] 收禮者暱稱 / [6][7] 意義不明(可能是禮物項目/數量代碼)
+// 2026-08-13 一開始用 CHAT_MONITOR_DEBUG 抓包 + 比對使用者截圖(快播Plus 7天券,from 미오탱
+// to 정글대마법사)反推出欄位對應,但只核對過送禮者/收禮者暱稱,[6]/[7] 當時意義不明。
+// 2026-08-14 找到另一個不同語言的 SOOP 聊天協定重寫專案(github.com/getCurrentThread/soopapi,
+// 非官方 Java 函式庫,獨立反推同一套協定)交叉核對:它的 ChatEvent enum 把 type code 45 命名為
+// SEND_QUICK_VIEW(「Send Quick View Gift」),對應的 QuickViewEvent 欄位是
+// senderId/senderNickname/receiverId/receiverNickname/itemType(int)——這個函式庫的 decoder
+// 陣列索引比這裡的 parts 少 1(它拿到的 parts 已經被拆掉最前面的封包表頭,這裡的 parts 還留著),
+// 換算回來後跟這裡原本用截圖核對過的「送禮者/收禮者暱稱」位置([3]/[5])完全吻合,間接證實了
+// index 對應是對的,但也發現原本 [4] 標成「送禮者 userId」其實是**收禮者** userId(對照組是
+// senderId/senderNickname/receiverId/receiverNickname 兩兩一組,[2]才是送禮者 userId、[4]
+// 才是收禮者 userId,原本漏抓 [2]、把 [4] 誤標成送禮者)——已修正,並且原本「意義不明」的 [6]
+// 現在確定是 itemType(整數,代表贈送的道具種類,例如快播Plus 幾天券,目前不知道數字對應表)。
 const GIFT_ITEM_TYPE = '0045';
 
 function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStatus) {
@@ -120,13 +127,21 @@ function createSoopConnector({ channel, apiMode = 'community' }, onEvent, onStat
         if (RAW_CAPTURE) rawCapture('soop', `unknown_${type}`, parts);
         if (type !== GIFT_ITEM_TYPE) return;
         const receivedTime = new Date().toISOString();
+        // 欄位對應見檔頭說明(2026-08-14 拿 soopapi 這個 Java 函式庫的 QuickViewEvent 交叉核對過):
+        // [2]送禮者 userId / [3]送禮者暱稱 / [4]收禮者 userId / [5]收禮者暱稱 / [6]itemType(整數,
+        // 禮物種類代碼,目前不知道數字對應的道具名稱)。原本把 [4] 誤標成「送禮者 userId」,已修正成
+        // 收禮者 userId,並補上原本「意義不明」的 [6](itemType)。禮物項目名稱本身(「1個月訂閱贈送券」
+        // 之類的文字)還是沒解出來,只有數字代碼。
+        const fromUserId = parts[2] ?? null;
+        const fromUsername = parts[3] ?? null;
+        const toUserId = parts[4] ?? null;
         const toUsername = parts[5] ?? null;
-        // 禮物項目名稱(「1個月訂閱贈送券」之類的文字)沒解出來,[6]/[7] 意義不明(見檔頭說明);
-        // 送禮者→收禮者是唯一確認過的資訊,比照 Twitch subgift(見 connectors/twitch.js)同樣
+        const itemType = parts[6] ?? null;
+        // 送禮者→收禮者是最直觀確認過的資訊,比照 Twitch subgift(見 connectors/twitch.js)同樣
         // 用「→ 收禮者」當 message,demo 頁面才看得出來是送給誰,不是只顯示送禮者一個人名字。
-        emit('gift_item', { receivedTime, fromUsername: parts[3] }, {
-          username: parts[3] ?? null, message: toUsername ? `→ ${toUsername}` : null, amount: null,
-          extra: { toUsername, fromUserId: parts[4] ?? null, raw: parts },
+        emit('gift_item', { receivedTime, fromUsername }, {
+          username: fromUsername, message: toUsername ? `→ ${toUsername}` : null, amount: null,
+          extra: { toUsername, fromUserId, toUserId, itemType, raw: parts },
         });
       });
 

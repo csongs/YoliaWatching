@@ -395,12 +395,22 @@ CDN 網址規則：`https://res.sooplive.com/images/chat/emoticon/big/{id}.webp`
 回傳 `200 image/webp`/`200 image/png`，`id=1`、`id=999999` 回傳 `404`，證實是一份固定的
 表情符號目錄，不是任意數字都成立。**但這個網址規則對不上我們實際抓到的 `emoticonId`**：
 上面兩筆真實樣本的 `emoticonId` 是類似雜湊值的字串（`65863a0325db1`），curl 這兩個值一樣
-回傳 `404`。推測 SOOP 有至少兩套表情符號 ID 系統——內建表情符號用小整數 ID（`233` 這種,
-`onerror` fallback 到的 `ogq_default.svg` 暗示另一套可能是 OGQ 這個第三方貼圖市集的雜湊
-ID），`soop-extension` 的 `SoopChatEvent.EMOTICON`（協定類型 `0109`,見
-`parseEmoticon()`)給的剛好是雜湊 ID 那一套,不是能直接套用上面網址規則的小整數 ID。
-**目前還沒有辦法把 `emoticonId` 換成正確的圖片網址,圖片渲染還沒接上**,需要再找到
-雜湊 ID 系統的網址規則(或 OGQ 的圖片解析方式)才能繼續。
+回傳 `404`。
+
+找到另一個不同語言的 SOOP 聊天協定重寫專案交叉核對後確認了原因：
+[getCurrentThread/soopapi](https://github.com/getCurrentThread/soopapi)（非官方 Java 函式庫，
+獨立反推同一套 WebSocket 協定，附完整協定類型代碼對照表，比這裡用的 `soop-extension` 詳細
+很多）——`soop-extension` 的 `EMOTICON` 事件其實對應協定類型 `109`（`OGQ_EMOTICON`），
+`emoticonId` 給的是 OGQ（一個第三方貼圖／表情符號市集，被 SOOP 整合進聊天室）的
+`groupId`（雜湊格式），跟畫面上打 `/댄스2_s/` 這種內建表情符號代碼用的小整數 ID 是**完全不同的
+兩套系統、不同的圖片來源**。soopapi 的文件進一步指出：真正帶圖片網址的是「贈送 OGQ 表情符號包」
+事件（協定類型 `118`，`OGQ_EMOTICON_GIFT`，`soop-extension` 沒有實作，會落到 `UNKNOWN`），
+它的 `ogqImageUrl` 欄位範例長這樣：`//ogq-sticker-global-cdn-z01.sooplive.com/...`——
+**是完全不同的 CDN 網域**，不是 `res.sooplive.com`。也就是說一般「使用表情符號」的封包
+（我們的 `emoticon` 事件）本身並不包含圖片網址，圖片網址只有在「整包贈送」的封包裡才會出現；
+`emoticonId`（OGQ 的 `groupId`）本身無法單獨換成圖片網址，還需要知道對應的 `subId`/`version`
+或找到 OGQ／SOOP 的圖片解析 API 才能繼續，**目前還沒有辦法把 `emoticonId` 換成正確的圖片網址，
+圖片渲染還沒接上**。
 
 已確認的內建表情符號代碼 → 小整數 ID 對照（使用者從真實 DOM 截圖比對出來的，目前只有這一組）：
 `/댄스2_s/` → `233`。`/응원3_s/`、`/응원5_s/`、`/축하해_s/` 這幾個也在真實聊天室看過對應的圖示，
@@ -415,15 +425,15 @@ UI 呈現：「表情訊息」標籤，`message` 是 `null`，demo 頁這行**�
 
 分類：`donation`。
 
-🔧 程式碼推導範例：
+✅ 真實抓包範例（2026-08-14，同一位使用者連續送出 1～27 顆星球，這裡取其中一筆）：
 
+```json
+{ "to": "rud9281", "from": "raira8383", "fromUsername": "한갱S2굼씨", "amount": "7", "fanClubOrdinal": "0" }
 ```
-{ fromUsername: "somedonor", amount: "10", fanClubOrdinal: 3 }
-```
 
-存進 `events` 表：`message` = `null`；`amount` = `res.amount`（星球數量字串）；`extra` = `{ fanClubOrdinal }`（粉絲團加入順位，數字越小代表越早加入）。
+存進 `events` 表：`message` = `null`；`amount` = `res.amount`（星球數量，字串格式的整數）；`extra` = `{ fanClubOrdinal }`（粉絲團加入順位，這筆是 `"0"`，數字越小代表越早加入）。欄位對應跟原本推導的一致，已用真實資料驗證過。
 
-UI 呈現：「文字/語音抖內(별풍선)」標籤 + 橘色底 + `+10`。
+UI 呈現：「文字/語音抖內(별풍선)」標籤 + 橘色底 + `+7`。
 
 ### video_donation — 影片抖內
 
@@ -451,21 +461,27 @@ UI 呈現：同上，標籤文字為「廣告氣球抖內」。
 
 UI 呈現：「訂閱(구독)」標籤 + 橘色底 + **「已訂閱 2 個月」**（`formatAmount()` 對 `subscribe` 的特殊格式，跟 Twitch `resub` 共用同一段邏輯，不是 `+2`）。
 
+**2026-08-14 交叉核對 [soopapi](https://github.com/getCurrentThread/soopapi)（另一個獨立反推同一套協定的 Java 函式庫）發現的疑點**：`soop-extension` 的 `SUBSCRIBE` 對應協定類型 `93`，但 soopapi 把 `93` 標成 `FOLLOW_ITEM_EFFECT`（「Continuous Subscription」/續訂），**真正的「New Subscription」（首次訂閱）是另一個類型 `91`（`FOLLOW_ITEM`）**——`soop-extension` 沒有處理類型 `91`，會落到 `UNKNOWN`（如果真的發生，應該會被我們的 `RAW_CAPTURE` 記成 `unknown_0091`，但目前還沒抓到過）。也就是說：**這裡的 `subscribe` 事件說不定只在「續訂」時觸發，第一次訂閱可能完全沒有被監聽到**，兩個獨立函式庫（`soop-extension`／`soopapi`）對協定類型 `93` 的定性不一致，目前無法判斷哪個對，需要真的抓到一筆「新訂閱」跟一筆「續訂」分別核對協定類型才能確認，先記錄這個疑點。
+
 ### gift_item — 贈送禮物（快播Plus/訂閱禮物券等）
 
-分類：`donation`。**`soop-extension` 完全沒有解析這個事件類型**——它的 `ChatType` enum 沒有涵蓋道具型贈禮（跟已支援的星球/影片/廣告氣球抖內是不同的封包類型 `0045`），收到時整個內容會直接落到 `UNKNOWN` 事件、被套件丟掉。這是自己反推封包格式接上去的：
+分類：`donation`。**`soop-extension` 完全沒有解析這個事件類型**——它的 `ChatType` enum 沒有涵蓋道具型贈禮（跟已支援的星球/影片/廣告氣球抖內是不同的封包類型 `0045`／十進位 `45`），收到時整個內容會直接落到 `UNKNOWN` 事件、被套件丟掉。這是自己反推封包格式接上去的：
 
-> 2026-08-13 用 `CHAT_MONITOR_DEBUG` 抓包 + 比對使用者截圖（快播Plus 7天券，from 미오탱 to 정글대마법사）反推出來的欄位對應——**只有這一筆真實樣本核對過**，沒有官方文件，`parts[6]`/`parts[7]` 意義不明（可能是禮物項目/數量代碼），所以完整原始欄位陣列會存進 `extra.raw`，之後想重新解讀還查得到。
+> 2026-08-13 一開始用 `CHAT_MONITOR_DEBUG` 抓包 + 比對使用者截圖（快播Plus 7天券，from 미오탱 to 정글대마법사）反推出欄位對應，只核對過送禮者/收禮者暱稱，`parts[6]`/`parts[7]` 當時意義不明。
+>
+> 2026-08-14 用 [getCurrentThread/soopapi](https://github.com/getCurrentThread/soopapi)（另一個獨立反推同一套協定的非官方 Java 函式庫）交叉核對：它把協定類型 `45` 命名為 `SEND_QUICK_VIEW`（「Send Quick View Gift」），對應的 `QuickViewEvent` 欄位是 `senderId`/`senderNickname`/`receiverId`/`receiverNickname`/`itemType`（整數）。這個函式庫拿到的 `parts` 陣列比這裡少一格（它已經把封包最前面的表頭拆掉，這裡的 `parts` 還留著表頭在 `[0]`），換算索引後跟原本用截圖核對過的「送禮者/收禮者暱稱」位置（`[3]`/`[5]`）完全吻合——但也發現原本把 `parts[4]` 誤標成「送禮者 userId」，其實對應的是**收禮者** userId（`senderId`/`senderNickname`、`receiverId`/`receiverNickname` 兩兩一組，送禮者 userId 其實在 `parts[2]`，原本沒有抓這個欄位）。已修正欄位對應，並補上原本「意義不明」的 `parts[6]`（`itemType`，整數的禮物種類代碼，目前不知道數字對應的道具名稱，例如快播Plus 幾天券)。
 
-🔧 程式碼推導範例（依上述反推邏輯建構的 `parts` 陣列結構，欄位順序如程式碼註解所述；`raw-capture.jsonl` 裡目前沒有保留當初那筆真實樣本，因為 RAW_CAPTURE 功能是在那之後才做的）：
+🔧 程式碼推導範例（依修正後的欄位對應建構；`raw-capture.jsonl` 裡目前沒有保留當初那筆真實樣本，因為 `RAW_CAPTURE` 功能是在那之後才做的，之後真的再抓到會補真實樣本）：
 
 ```json
-["S2026...:00450012...", "12345", "streamerId", "미오탱", "9876543", "정글대마법사", "?", "?"]
+["S2026...:00450012...", "12345", "9876543", "미오탱", "1122334", "정글대마법사", "101", "?"]
 ```
 
-存進 `events` 表：`username` = `parts[3]`（送禮者）；`message` = `` `→ ${parts[5]}` ``（`→ 收禮者`，比照 Twitch `subgift` 的呈現方式）；`amount` = `null`（禮物項目名稱/數量沒解出來）；`extra` = `{ toUsername: parts[5], fromUserId: parts[4], raw: parts }`。
+（`[1]` 疑似房間或直播編號、`[2]` 送禮者 userId、`[3]` 送禮者暱稱、`[4]` 收禮者 userId、`[5]` 收禮者暱稱、`[6]` itemType、`[7]` 意義仍不明）
 
-UI 呈現：「贈送禮物(快播Plus/訂閱禮物券等)」標籤 + 橘色底，訊息顯示「→ 정글대마법사」，**沒有金額數字**（因為 `amount` 欄位還沒解出來）。
+存進 `events` 表：`username` = `parts[3]`（送禮者暱稱）；`message` = `` `→ ${parts[5]}` ``（`→ 收禮者`，比照 Twitch `subgift` 的呈現方式）；`amount` = `null`（禮物項目名稱本身還是沒解出來，只有數字代碼）；`extra` = `{ toUsername: parts[5], fromUserId: parts[2], toUserId: parts[4], itemType: parts[6], raw: parts }`。
+
+UI 呈現：「贈送禮物(快播Plus/訂閱禮物券等)」標籤 + 橘色底，訊息顯示「→ 정글대마법사」，**沒有金額數字**（因為禮物項目名稱/數量沒解出來，只有不知道對應表的 `itemType` 數字代碼）。
 
 ### notification — 系統通知
 
@@ -483,22 +499,43 @@ UI 呈現：「系統通知」標籤，灰色斜體行，沒有使用者名稱�
 
 ### unknown_* — 未解析的封包類型（尚未接上事件系統，僅供除錯）
 
-**不是**一個正式的 `event_type`，不會出現在 `events` 表或 demo 頁裡——這是 `RAW_CAPTURE` 開啟時，`SoopChatEvent.UNKNOWN` 收到、但類型代碼不是 `gift_item` 的 `0045` 時，單純寫進 `raw-capture.jsonl` 供之後研究用的原始封包片段。目前已經抓到但還沒解出來的類型代碼：`0012`（最常見，疑似「使用者進入聊天室」廣播）／`0014`（2026-08-14 新發現，見下面樣本）／`0054`／`0090`／`0094`／`0110`（各自的欄位含義都還不知道，`raw-capture.jsonl` 裡有完整 `parts` 陣列可查）。
+**不是**一個正式的 `event_type`，不會出現在 `events` 表或 demo 頁裡——這是 `RAW_CAPTURE` 開啟時，`SoopChatEvent.UNKNOWN` 收到、但類型代碼不是 `gift_item` 的 `0045` 時，單純寫進 `raw-capture.jsonl` 供之後研究用的原始封包片段。
 
-✅ `unknown_0014` 真實抓包範例（2026-08-14）：
+**2026-08-14 用 [getCurrentThread/soopapi](https://github.com/getCurrentThread/soopapi)（另一個獨立反推同一套 SOOP 聊天 WebSocket 協定的非官方 Java 函式庫，附完整協定類型代碼對照表）交叉核對，這幾個之前完全不認識的類型代碼現在都能對上名字了**（`soop-extension` 沒有實作這些類型的 decoder，收到都會落到 `UNKNOWN`；下面每種都用真實抓到的樣本反推欄位，索引都對得上）：
+
+| 類型代碼 | soopapi 命名 | 中文意思 | 這裡的用途 |
+|---|---|---|---|
+| `0012` | `SET_USER_FLAG` | 使用者旗標變更（進場資訊/等級旗標，例如 `196640\|163840` 這種 `primary\|secondary` 格式） | 最常見，之前猜是「使用者進場」廣播，方向大致對但更精確地說是旗標變更通知，跟聊天內容無關，不打算接成正式事件 |
+| `0014` | `SET_NICKNAME` | 暱稱變更 | 見下方真實樣本，確認是「使用者改暱稱」通知，跟聊天內容無關 |
+| `0054` | `BAN_WORD` | 主播設定的禁字清單同步 | 跟聊天內容無關，不打算接 |
+| `0090` | `KICK_MSG_STATE` | 「隱藏踢人訊息」開關狀態 | 管理功能狀態，不打算接 |
+| `0094` | `TRANSLATION_STATE` | 聊天室即時翻譯功能開關狀態 | 平台功能狀態，不打算接 |
+| `0110` | `EMOTICON_TICKET` | 剛加入頻道時收到的握手回應（固定 `value=1`） | 內部連線流程的一部分，不是聊天事件 |
+
+以上都跟「聊天/抖內/特殊訊息」這個工具關心的範圍無關（使用者旗標/暱稱變更、管理功能狀態、內部握手），**決定不接成正式事件類型**，維持落在 `unknown_*` 只記錄不處理即可；記在這裡純粹是把「這是什麼」搞清楚，不再是霧裡看花的未知封包。
+
+✅ `unknown_0014`（`SET_NICKNAME`）真實抓包範例（2026-08-14），對照 `SetNicknameEvent` 欄位（`userId, newNickname, changeType, flag, oldNickname`，注意 soopapi 的 `parts` 陣列比這裡少一格，因為它已經先把封包表頭拆掉）：
 
 ```json
 ["...00140006600", "sam96645", "우한갱S2사자", "1", "2952871968|294912", "우수현S2사자", ""]
 ```
 
-`parts[1]`（`sam96645`）跟 `parts[5]`（`우수현S2사자`）分別對得上同時間點聊天記錄裡「우수현S2사자」訊息的 `userId`（`sam96645(3)`）與暱稱——`parts[2]`（`우한갱S2사자`）是另一個不同的暱稱，猜測跟粉絲團/應援團的稱號或暱稱異動有關，但只有這一筆樣本，還不確定。
+`parts[1]` = `userId`（`sam96645`，對得上同時間點聊天記錄裡「우수현S2사자」訊息的 `userId`：`sam96645(3)`）／`parts[2]` = `newNickname`（`우한갱S2사자`，改名後的新暱稱）／`parts[3]` = `changeType`（`"1"`）／`parts[4]` = `flag`（`2952871968|294912`）／`parts[5]` = `oldNickname`（`우수현S2사자`，改名前的舊暱稱——正好對得上同一場直播稍早聊天記錄裡的原本暱稱）。**完全解開了**，之前猜「跟粉絲團稱號有關」不對，是單純的改暱稱通知。
+
+✅ `unknown_0110`（`EMOTICON_TICKET`）真實抓包範例：`["...", "1", ""]`——`parts[1] = "1"`，跟 soopapi 文件描述的「頻道加入直後收到，固定 value=1」完全吻合。
+
+✅ `unknown_0012`（`SET_USER_FLAG`）真實抓包範例：`["...", "196640|163840", "ypj2004", "포이즌필", "0", "0", "65568|163840", ""]`——`parts[1]`=oldFlag、`parts[2]`=userId(`ypj2004`)、`parts[3]`=userNickname(`포이즌필`)、`parts[6]`=newFlag，`oldFlag`/`newFlag` 都是 `數字|數字` 格式（`soopapi` 的 `UserLevel` 型別用來解析這種格式，這裡沒有進一步解讀數字代表什麼等級）。
+
+✅ `unknown_0054`（`BAN_WORD`）／`unknown_0090`（`KICK_MSG_STATE`）／`unknown_0094`（`TRANSLATION_STATE`）也都抓到過真實樣本，欄位結構跟 soopapi 的對應 decoder 一致，細節不逐一展開（跟聊天內容無關，不打算接成事件，有需要可以直接查 `raw-capture.jsonl`）。
 
 ---
 
 ## 已知的其他缺口
 
-- SOOP `chat`/`emoticon`/三種抖內/`subscribe`/`notification` 都還沒抓到真實資料，上面的範例全部是程式碼推導，欄位型別（尤其是 `amount` 是字串還是數字）有可能猜錯。
-- SOOP 表情符號沒有實作圖片渲染（`messageParts`），因為沒找到公開的圖片網址規則。
+- SOOP `subscribe`/`notification` 還沒抓到真實資料（`chat`/`emoticon`/`text_donation` 已經有真實樣本了，見上面對應章節），上面沒有 ✅ 標記的範例都是程式碼推導，欄位型別（尤其是 `amount` 是字串還是數字）有可能猜錯。
+- SOOP `subscribe` 事件可能只在「續訂」時觸發，「新訂閱」可能是完全沒被監聽到的另一個協定類型（`0091`），見 `subscribe` 章節的說明——還沒確認。
+- SOOP 表情符號沒有實作圖片渲染（`messageParts`），已知 CDN 網域（內建表情符號用 `res.sooplive.com`，OGQ 貼圖用 `ogq-sticker-global-cdn-z01.sooplive.com`），但我們實際抓到的 `emoticonId` 換不出正確網址，見 `emoticon` 章節。
 - YouTube `supersticker` 沒有真實範例，貼圖圖片本身也沒有渲染進 `messageParts`。
+- YouTube 同一則訊息「既是 Super Chat 又是會員」時，`extra` 目前不會帶會員資訊，見 `superchat` 章節。
 - Twitch `raid`／`cheer`／`resub` 沒有真實範例。
 - Twitch 完全匿名模式下 cheer/sub/resub/raid 是否正常接收，只驗證過協定邏輯（tmi.js 不因認證方式改變 CAP REQ 範圍），沒有在真正匿名連線下實測收到過這幾種事件。

@@ -67,10 +67,11 @@ npm run package
   回應物件（`res`/`tags`/`ChatItem`），不是我們自己篩選/重新命名過的欄位，所以像 SOOP
   `subscribe` 那種「我們自己讀錯欄位名稱」的 bug，比對這份原始紀錄就看得出來，不用像
   `gift_item`/徽章那幾次一樣，另外寫一次性診斷腳本連線抓包。SOOP 這邊額外會把完全不認識
-  的封包類型（`unknown_<type code>`）也記下來，方便之後補齊套件沒解析的事件（已知的舊
-  類型見「已知限制」的 `gift_item` 說明；2026-08-13 實測另外抓到一個新的 `unknown_0012`，
-  疑似「使用者進入聊天室」的廣播通知，尚未解讀；2026-08-14 又新抓到一個 `unknown_0014`，
-  細節見 [docs/event-types.md](docs/event-types.md)）。兩個變數預設都關閉，不影響正常監聽。
+  的封包類型（`unknown_<type code>`）也記下來，方便之後補齊套件沒解析的事件（`gift_item`
+  的 `0045` 見「已知限制」；其餘常見的 `unknown_0012`/`0014`/`0054`/`0090`/`0094`/`0110`
+  2026-08-14 已經對照另一個獨立反推同一套協定的 Java 函式庫查出真實身分——都是使用者旗標/
+  暱稱變更、管理功能狀態、內部握手之類跟聊天內容無關的封包，決定不接成正式事件，細節見
+  [docs/event-types.md](docs/event-types.md)）。兩個變數預設都關閉，不影響正常監聽。
 - `CHAT_MONITOR_RAW_CAPTURE_SKIP`：逗號分隔的 `platform:eventType` 清單，列在裡面的
   事件類型即使 `CHAT_MONITOR_RAW_CAPTURE=1` 也不會寫進 `raw-capture.jsonl`——欄位對應
   已經拿真實樣本核對過的類型（[docs/event-types.md](docs/event-types.md) 標「✅ 真實
@@ -115,9 +116,11 @@ npm run package
 | Twitch | 公告（`announcement`） | ⚠️ 部分驗證 | 2026-08-13 抓到真實公告封包（來自 StreamBoostMaxBot，`msg-param-color` 存在），證實真的是原生 `/announce`，但沒有實際在 demo 頁看過渲染結果 |
 | Twitch | 其他系統通知（`usernotice_other`） | ⚠️ 部分驗證 | 2026-08-13 抓到一種先前完全沒見過的類型 `viewermilestone`（連續觀看場次里程碑），確認有正確落入這個備援分類，但沒有針對性驗證過其他 `msgid` 子類型 |
 | SOOP | 一般聊天 | ✅ 驗證過 | 大量真實訊息 |
-| SOOP | 訂閱月數（`subscribe`） | ⚠️ 沒驗證過 | `res.amount` 修法用模擬封包跑過 `parseSubscribe()` 解構邏輯確認位置，沒有真實訂閱事件驗證顯示結果 |
-| SOOP | 抖內（`text_donation`/`video_donation`/`ad_balloon_donation`） | ❌ 完全沒測過 | 連接器邏輯一開始就寫了，沒有 specifically 見過真實抖內事件跑過 |
-| SOOP | 贈送禮物（`gift_item`） | ✅ 部分驗證 | 送禮者/收禮者暱稱對照過真實截圖確認正確，但金額/禮物項目名稱是空的、原始封包 `[6]`/`[7]` 欄位意義不明，這部分沒驗證 |
+| SOOP | 訂閱月數（`subscribe`） | ⚠️ 沒驗證過 | `res.amount` 修法用模擬封包跑過 `parseSubscribe()` 解構邏輯確認位置，沒有真實訂閱事件驗證顯示結果；另外發現這個事件可能只在續訂觸發，新訂閱是另一個協定類型，見「已知限制」 |
+| SOOP | 文字/語音抖內（`text_donation`） | ✅ 部分驗證 | 2026-08-14 抓到真實連續送星球封包（27 顆，同一人），`amount`/`fromUsername`/`fanClubOrdinal` 欄位都正確，但沒有實際在 demo 頁看過渲染結果 |
+| SOOP | 抖內（`video_donation`/`ad_balloon_donation`） | ❌ 完全沒測過 | 欄位結構跟已驗證的 `text_donation` 相同（只是抖內管道不同），但這兩種管道本身沒有實測過 |
+| SOOP | 表情訊息（`emoticon`） | ⚠️ 部分驗證 | 2026-08-14 抓到真實封包，`emoticonId`/`userId`/`username` 欄位都在，但查出這個 `emoticonId` 是 OGQ 雜湊 ID，換不出圖片網址，圖片渲染沒接上 |
+| SOOP | 贈送禮物（`gift_item`） | ✅ 部分驗證 | 送禮者/收禮者暱稱對照過真實截圖確認正確；2026-08-14 交叉核對 soopapi 修正了送禮者/收禮者 userId 欄位（原本誤標）、補上 `itemType` 欄位，但 `itemType` 數字對應的道具名稱、`amount` 欄位還是不知道 |
 
 ## 避免 restart 後重複寫入
 
@@ -174,12 +177,15 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
   `200 image/png`，證實網址規則對新舊兩種 id 格式都成立；但**切割邏輯本身（位置區間對應到
   正確的文字/表情片段）仍然只用手動模擬資料驗證過，還沒拿這筆真實訊息實際跑過 `demo.js`
   確認渲染結果正確**。
-- **SOOP**：查過官方文件跟第三方擴充套件都沒找到表情符號圖片網址的規則，`emoticon` 事件
-  目前只有 `emoticonId` 文字，沒有做圖片渲染，不確定的東西不猜。2026-08-14 額外發現：一般
-  `chat` 訊息裡也可以直接打 `/코드명/`（例如 `/하트/`、`/하트뿜뿜/`）這種斜線包住的表情符號
-  代碼，在真正的 SOOP 網頁上會被換成貼圖圖片，我們目前只存/顯示原始文字代碼——這批是人類
-  可讀字串，跟獨立 `emoticon` 事件的數字/雜湊 `emoticonId` 不是同一套系統，細節見
-  [docs/event-types.md](docs/event-types.md) 的 SOOP `chat` 章節。
+- **SOOP**：2026-08-14 查到部分網址規則——內建表情符號的 CDN 是
+  `res.sooplive.com/images/chat/emoticon/big/{小整數id}.webp`（curl 驗證過真的能載入圖片），
+  第三方 OGQ 貼圖市集是完全不同的網域 `ogq-sticker-global-cdn-z01.sooplive.com`，但我們
+  `emoticon` 事件實際抓到的 `emoticonId` 是 OGQ 那套的雜湊 ID，換不出對應的圖片網址，
+  `emoticon` 事件目前還是只有 `emoticonId` 文字，沒有做圖片渲染，不確定的東西不猜。額外
+  發現：一般 `chat` 訊息裡也可以直接打 `/코드명/`（例如 `/하트/`、`/하트뿜뿜/`）這種斜線包住的
+  表情符號代碼（用的是內建那套小整數 ID 系統，例如已知 `/댄스2_s/` = `233`），在真正的 SOOP
+  網頁上會被換成貼圖圖片，我們目前只存/顯示原始文字代碼。細節見
+  [docs/event-types.md](docs/event-types.md) 的 `emoticon` 章節。
 
 ## 已知限制
 
@@ -197,10 +203,23 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
   demo 頁看不出這位付費的人同時是會員、也看不出月數。還沒有處理，屬於已知落差。
 - SOOP 官方 API 模式沒有實作（`yuupeek/` 裡目前也還沒有這個串接的文件可抄）。
 - SOOP 的 `gift_item`（贈送禮物）不是 `soop-extension` 有支援的事件類型，是自己抓封包反推
-  格式接上去的（2026-08-13，用 `CHAT_MONITOR_DEBUG=1` 抓包 + 比對實際截圖核對），沒有官方
-  文件，只驗證過送禮者／收禮者暱稱正確；`amount` 欄位目前是空的（原始封包裡還有兩個意義不明
-  的欄位，猜測跟禮物項目/數量有關，但沒把握，都存在 `extra.raw` 裡供之後回頭查）。細節見
-  [connectors/soop.js](connectors/soop.js) 的 `GIFT_ITEM_TYPE` 註解。
+  格式接上去的（2026-08-13，用 `CHAT_MONITOR_DEBUG=1` 抓包 + 比對實際截圖核對）。2026-08-14
+  用另一個獨立反推同一套協定的非官方 Java 函式庫
+  [getCurrentThread/soopapi](https://github.com/getCurrentThread/soopapi) 交叉核對，補上/修正了
+  幾個欄位（原本誤標成「送禮者 userId」的其實是收禮者 userId；原本「意義不明」的欄位其實是
+  `itemType` 整數代碼），但禮物項目本身的文字名稱（例如「快播Plus 7天券」）跟 `itemType`
+  數字對應表還是不知道，`amount` 欄位仍然是空的。細節見
+  [connectors/soop.js](connectors/soop.js) 的 `GIFT_ITEM_TYPE` 註解與
+  [docs/event-types.md](docs/event-types.md)。
+- SOOP `subscribe` 事件可能只在「續訂」時觸發，「新訂閱」可能是完全沒被監聽到的另一個協定
+  類型——2026-08-14 交叉核對 soopapi 發現 `soop-extension` 認定的 `SUBSCRIBE`（協定類型 93）
+  在 soopapi 裡叫 `FOLLOW_ITEM_EFFECT`（續訂），真正的「New Subscription」是另一個類型
+  91（`FOLLOW_ITEM`），`soop-extension` 沒有處理，還沒確認實際行為，見
+  [docs/event-types.md](docs/event-types.md) 的 `subscribe` 章節。
+- SOOP 表情符號的圖片網址規則有查到一部分（2026-08-14）：內建表情符號用
+  `res.sooplive.com`，OGQ（第三方貼圖市集）用完全不同的網域
+  `ogq-sticker-global-cdn-z01.sooplive.com`，但我們目前抓到的 `emoticonId` 換不出正確網址，
+  圖片渲染還沒接上，細節見 [docs/event-types.md](docs/event-types.md) 的 `emoticon` 章節。
 - Twitch 的頻道點數兌換只能偵測「醒目留言」這種會出現在一般聊天訊息裡、帶
   `custom-reward-id` tag 的兌換項目；不會出現在聊天訊息裡的其他兌換（例如純粹的音效/
   特效類獎勵）不會被聽到，因為那些不走 IRC 聊天訊息，需要另外接 EventSub。
