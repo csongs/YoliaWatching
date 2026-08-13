@@ -131,6 +131,28 @@ function getRecentEvents(limit = 200) {
   return db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT ?').all(limit).reverse();
 }
 
+// 歷史訊息搜尋(demo 頁的「🔍 搜尋歷史訊息」彈跳視窗)——查的是整個 SQLite events 表,不是只有
+// 前端目前已經載入在記憶體裡的那批,所以是獨立的查詢而不是重用 getRecentEvents() 的結果篩選。
+// 四個條件(關鍵字/開始時間/結束時間/事件類型)都選用,任填幾個就用幾個組 WHERE,呼叫端
+// (server.js)要保證至少有一個非空,不然這裡會變成 SELECT * FROM events LIMIT n 撈出全部
+// 歷史,不是「搜尋」該有的行為。
+//   - q:比對 username 或 message 任一個命中就算,LIKE 對英數字不分大小寫,中日韓文字本來
+//     就沒有大小寫的概念,不用另外處理。
+//   - from/to:比對 received_at(ISO 字串),呼叫端(demo.js)要先把 <input type=datetime-local>
+//     的本地時間轉成 UTC ISO 字串再送過來,字串字典順序比較就是正確的時間先後順序。
+//   - eventType:精確比對 event_type 欄位。
+// 回傳新到舊排序(呼叫端 demo.js 自己 reverse 成舊到新顯示)。
+function searchEvents({ q, from, to, eventType, limit = 200 } = {}) {
+  const clauses = [];
+  const params = [];
+  if (q) { clauses.push('(username LIKE ? OR message LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+  if (from) { clauses.push('received_at >= ?'); params.push(from); }
+  if (to) { clauses.push('received_at <= ?'); params.push(to); }
+  if (eventType) { clauses.push('event_type = ?'); params.push(eventType); }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  return db.prepare(`SELECT * FROM events ${where} ORDER BY id DESC LIMIT ?`).all(...params, limit);
+}
+
 function getStats() {
   const row = db.prepare('SELECT COUNT(*) AS count FROM events').get();
   let fileSizeBytes = 0;
@@ -202,7 +224,7 @@ function savePrefs(patch) {
 }
 
 module.exports = {
-  insertEvent, getRecentEvents, getStats,
+  insertEvent, getRecentEvents, searchEvents, getStats,
   get DB_PATH() { return DB_PATH; },
   getLocationInfo, switchLocation, confirmDefaultLocation,
   seedSettingsIfEmpty, getSettings, saveSettings,

@@ -17,7 +17,19 @@ npm start        # http://127.0.0.1:3100
 唯一要設定的地方——頻道名稱、SOOP 連線方式、啟用開關，填完按「儲存並套用」即可，全部存進
 SQLite 的 `settings` 表，不用手動編輯任何 `.env` 或 `.json` 檔。第一次啟動（`settings`
 表是空的）頻道名稱會帶入 `db.js` 內建的預設值（這個專案自己的實況主 `altheayolia`）。
-改設定一律回到這個頁面改。右側是聊天視窗，每則訊息前面標 `[平台][類型]`。
+改設定一律回到這個頁面改。右側是聊天視窗，每則訊息前面標 `[平台][類型]`。工具列的
+「🔍 搜尋歷史訊息」會開一個獨立彈跳視窗，查 SQLite 裡**全部**歷史紀錄（`GET /api/search`），
+不是只在畫面上目前這批即時訊息裡篩選，也不會影響右側正在即時顯示的內容——兩個是分開的 UI。
+四個條件都選用，任填幾個就用幾個（AND 組合）：
+- **關鍵字**：比對使用者名稱或訊息內容任一個命中。
+- **開始/結束時間**：`<input type=datetime-local>`，旁邊「現在」按鈕直接帶入當下時間，方便
+  「從剛剛某個時間點開始」這種用法；兩個都留空就不限時間範圍。
+- **特殊類型**：下拉選單依平台分組列出各平台專屬的特殊事件（例如 Twitch 的「醒目留言(頻道
+  點數兌換)」、YouTube 的「Super Chat」），選項來自 [public/labels.js](public/labels.js) 的
+  `EVENT_TYPE_LABELS`（`platform` 欄位標哪個事件屬於哪個平台，三平台共用的一般聊天
+  `platform: null` 不列在下拉選單裡，要搜一般聊天內容直接用關鍵字就好）。
+
+四個條件全部留空按搜尋不會出東西（`server.js` 擋掉，避免變成撈出整張表）。
 
 YouTube 這邊改用 [youtube-chat-next](https://github.com/LucasSantana-Dev/youtube-chat-next)
 （爬公開網頁聊天室，免 API Key）取代官方 `googleapis`，所以 YouTube 分頁只要填 handle

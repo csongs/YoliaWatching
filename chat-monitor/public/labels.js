@@ -12,31 +12,34 @@
   };
 
   // event_type -> 中文標籤 + 分類(chat=一般聊天可能觸發互動 / donation=金流 / system=進出場等)
+  // + platform(哪個平台專屬的特殊類型,給「搜尋歷史訊息」視窗的類型下拉選單分組用;chat 是
+  // 三個平台共用的一般聊天,不屬於任何單一平台,platform 留 null,下拉選單不會單獨列出來——
+  // 使用者要搜一般聊天內容,直接留空「全部類型」+ 打關鍵字就好)。
   const EVENT_TYPE_LABELS = {
     // --- Twitch ---
-    chat:                 { label: '一般訊息', category: 'chat' },
-    chat_highlight:       { label: '醒目留言(頻道點數兌換)', category: 'chat' },
-    cheer:                { label: 'Bits 抖內', category: 'donation' },
-    sub:                  { label: '新訂閱', category: 'donation' },
-    resub:                { label: '續訂', category: 'donation' },
-    subgift:               { label: '贈送訂閱', category: 'donation' },
-    submysterygift:        { label: '神秘箱訂閱(大量贈送)', category: 'donation' },
-    raid:                  { label: '突襲(Raid)', category: 'system' },
-    announcement:           { label: '公告(/announce)', category: 'system' },
-    usernotice_other:       { label: '其他系統通知(未分類)', category: 'system' },
+    chat:                 { label: '一般訊息', category: 'chat', platform: null },
+    chat_highlight:       { label: '醒目留言(頻道點數兌換)', category: 'chat', platform: 'twitch' },
+    cheer:                { label: 'Bits 抖內', category: 'donation', platform: 'twitch' },
+    sub:                  { label: '新訂閱', category: 'donation', platform: 'twitch' },
+    resub:                { label: '續訂', category: 'donation', platform: 'twitch' },
+    subgift:               { label: '贈送訂閱', category: 'donation', platform: 'twitch' },
+    submysterygift:        { label: '神秘箱訂閱(大量贈送)', category: 'donation', platform: 'twitch' },
+    raid:                  { label: '突襲(Raid)', category: 'system', platform: 'twitch' },
+    announcement:           { label: '公告(/announce)', category: 'system', platform: 'twitch' },
+    usernotice_other:       { label: '其他系統通知(未分類)', category: 'system', platform: 'twitch' },
 
     // --- YouTube ---
-    superchat:              { label: 'Super Chat(付費醒目訊息)', category: 'donation' },
-    supersticker:           { label: 'Super Sticker(付費貼圖)', category: 'donation' },
+    superchat:              { label: 'Super Chat(付費醒目訊息)', category: 'donation', platform: 'youtube' },
+    supersticker:           { label: 'Super Sticker(付費貼圖)', category: 'donation', platform: 'youtube' },
 
     // --- SOOP ---
-    emoticon:               { label: '表情訊息', category: 'chat' },
-    text_donation:          { label: '文字/語音抖內(별풍선)', category: 'donation' },
-    video_donation:          { label: '影片抖內', category: 'donation' },
-    ad_balloon_donation:     { label: '廣告氣球抖內', category: 'donation' },
-    subscribe:               { label: '訂閱(구독)', category: 'donation' },
-    gift_item:               { label: '贈送禮物(快播Plus/訂閱禮物券等)', category: 'donation' },
-    notification:            { label: '系統通知', category: 'system' },
+    emoticon:               { label: '表情訊息', category: 'chat', platform: 'soop' },
+    text_donation:          { label: '文字/語音抖內(별풍선)', category: 'donation', platform: 'soop' },
+    video_donation:          { label: '影片抖內', category: 'donation', platform: 'soop' },
+    ad_balloon_donation:     { label: '廣告氣球抖內', category: 'donation', platform: 'soop' },
+    subscribe:               { label: '訂閱(구독)', category: 'donation', platform: 'soop' },
+    gift_item:               { label: '贈送禮物(快播Plus/訂閱禮物券等)', category: 'donation', platform: 'soop' },
+    notification:            { label: '系統通知', category: 'system', platform: 'soop' },
   };
 
   function labelFor(eventType) {

@@ -47,6 +47,18 @@
   const $filterPlatform = document.getElementById('filterPlatform');
   const $filterCategory = document.getElementById('filterCategory');
   const $toggleTimestamps = document.getElementById('toggleTimestamps');
+  const $btnKeywordFilter = document.getElementById('btnKeywordFilter');
+  const $keywordModalOverlay = document.getElementById('keywordModalOverlay');
+  const $keywordInput = document.getElementById('keywordInput');
+  const $btnKeywordApply = document.getElementById('btnKeywordApply');
+  const $btnKeywordClose = document.getElementById('btnKeywordClose');
+  const $searchResults = document.getElementById('searchResults');
+  const $searchResultHint = document.getElementById('searchResultHint');
+  const $searchFrom = document.getElementById('searchFrom');
+  const $searchTo = document.getElementById('searchTo');
+  const $btnSearchFromNow = document.getElementById('btnSearchFromNow');
+  const $btnSearchToNow = document.getElementById('btnSearchToNow');
+  const $searchEventType = document.getElementById('searchEventType');
 
   function statusDotClass(platform) {
     const s = status[platform] || {};
@@ -390,6 +402,100 @@
 
   $filterPlatform.onchange = () => { filterPlatform = $filterPlatform.value; renderChatLog(); };
   $filterCategory.onchange = () => { filterCategory = $filterCategory.value; renderChatLog(); };
+
+  // 歷史訊息搜尋:獨立的彈跳視窗,不影響右側主聊天視窗正在即時顯示的內容——輸入條件後
+  // 直接查 SQLite 全部歷史(GET /api/search,見 server.js),不是只在瀏覽器目前已經載入的
+  // 這批事件裡篩選,搜尋結果顯示在視窗自己的清單裡,跟主畫面的即時聊天記錄是分開的兩份 UI。
+  // 四個條件(關鍵字/開始時間/結束時間/特殊類型)都選用,任填幾個就送幾個,伺服器端(db.js
+  // searchEvents())組成 AND 條件。
+
+  // <input type=datetime-local> 給的是「本地時間、不帶時區」的字串(例如 "2026-08-14T02:30"),
+  // 用 new Date() 建構子解析這種格式時,規範上就是當本地時間處理,再用 toISOString() 轉成
+  // 資料庫存的 UTC ISO 格式,不用自己手算時區位移。
+  function localDateTimeToIso(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString();
+  }
+  // 「現在」按鈕反過來:把目前本地時間格式化成 datetime-local 看得懂的 "YYYY-MM-DDTHH:mm"。
+  function nowForDateTimeLocal() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  // 特殊類型下拉選單只列各平台專屬的特殊事件(例如 Twitch 的 chat_highlight、YouTube 的
+  // superchat),依平台分組(<optgroup>)——不含三平台共用的 chat(labels.js 裡 platform:null),
+  // 那種情況直接留空「全部類型」+ 打關鍵字搜就好,不用另外選。
+  function buildSearchEventTypeOptions() {
+    const groups = {};
+    for (const [type, info] of Object.entries(L.EVENT_TYPE_LABELS)) {
+      if (!info.platform) continue;
+      (groups[info.platform] ??= []).push({ type, label: info.label });
+    }
+    let html = '<option value="">全部類型</option>';
+    for (const p of PLATFORMS) {
+      if (!groups[p]?.length) continue;
+      html += `<optgroup label="${escapeHtml(L.platformLabel(p))}">`;
+      for (const { type, label } of groups[p]) html += `<option value="${escapeHtml(type)}">${escapeHtml(label)}</option>`;
+      html += '</optgroup>';
+    }
+    $searchEventType.innerHTML = html;
+  }
+
+  function openSearchModal() {
+    $keywordModalOverlay.hidden = false;
+    $keywordInput.focus();
+    $keywordInput.select();
+  }
+  function closeSearchModal() { $keywordModalOverlay.hidden = true; }
+
+  async function runSearch() {
+    const q = $keywordInput.value.trim();
+    const fromIso = localDateTimeToIso($searchFrom.value);
+    const toIso = localDateTimeToIso($searchTo.value);
+    const eventType = $searchEventType.value;
+    $searchResults.innerHTML = '';
+    if (!q && !fromIso && !toIso && !eventType) {
+      $searchResultHint.textContent = '輸入至少一個條件後按搜尋，或按 Enter。';
+      return;
+    }
+    $searchResultHint.textContent = '搜尋中…';
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (fromIso) params.set('from', fromIso);
+    if (toIso) params.set('to', toIso);
+    if (eventType) params.set('eventType', eventType);
+    let rows;
+    try {
+      rows = await (await fetch(`/api/search?${params}`)).json();
+    } catch (e) {
+      $searchResultHint.textContent = '搜尋失敗：' + e.message;
+      return;
+    }
+    if (rows.length === 0) {
+      $searchResultHint.textContent = '沒有符合條件的訊息。';
+      return;
+    }
+    $searchResultHint.textContent = `共 ${rows.length} 筆結果（最新的在最下面）：`;
+    const frag = document.createDocumentFragment();
+    for (const evt of rows.reverse()) frag.appendChild(renderLine(evt));
+    $searchResults.appendChild(frag);
+    $searchResults.scrollTop = $searchResults.scrollHeight;
+  }
+
+  $btnKeywordFilter.onclick = openSearchModal;
+  $btnKeywordApply.onclick = runSearch;
+  $btnKeywordClose.onclick = closeSearchModal;
+  $btnSearchFromNow.onclick = () => { $searchFrom.value = nowForDateTimeLocal(); };
+  $btnSearchToNow.onclick = () => { $searchTo.value = nowForDateTimeLocal(); };
+  $keywordInput.onkeydown = (e) => {
+    if (e.key === 'Enter') runSearch();
+    else if (e.key === 'Escape') closeSearchModal();
+  };
+  // 點遮罩本身(不是點裡面的視窗內容)才關閉,避免點視窗裡的空白處誤觸關閉。
+  $keywordModalOverlay.onclick = (e) => { if (e.target === $keywordModalOverlay) closeSearchModal(); };
+  buildSearchEventTypeOptions();
   $toggleTimestamps.onchange = () => {
     const checked = $toggleTimestamps.checked;
     $chatLog.classList.toggle('hide-timestamps', !checked);

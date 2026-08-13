@@ -67,6 +67,31 @@
   .chat-toolbar { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
   .chat-toolbar select { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 12px; }
   .toggle-label { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+  .keyword-filter-btn { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .keyword-filter-btn:hover { border-color: var(--accent); }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal-overlay[hidden] { display: none; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; width: min(360px, 90vw); }
+  .modal h3 { margin: 0 0 12px; font-size: 14px; color: var(--text); }
+  .modal input[type=text] { width: 100%; padding: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 13px; }
+  .modal-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+  .search-modal { width: min(560px, 92vw); }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input[type=text] { flex: 1; }
+  .search-row button { padding: 0 16px; border-radius: 6px; font-size: 13px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+  .search-row button:hover { filter: brightness(1.1); }
+  .search-results { height: 40vh; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .search-results:empty { display: flex; align-items: center; justify-content: center; }
+  .search-filters { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; }
+  .search-filter-row { display: flex; align-items: center; gap: 6px; }
+  .search-filter-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .search-filter-row input[type=datetime-local], .search-filter-row select { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 6px; font-size: 12px; }
+  .now-btn { padding: 4px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid var(--border); background: var(--panel2); color: var(--muted); }
+  .now-btn:hover { border-color: var(--accent); color: var(--text); }
+  .modal-actions button { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--panel2); color: var(--text); }
+  .modal-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .modal-actions button.primary:hover { filter: brightness(1.1); }
   .chat-log { flex: 1; overflow-y: auto; padding: 10px 14px; font-size: 13px; line-height: 1.7; }
   .chat-line { padding: 3px 0; word-wrap: break-word; white-space: pre-wrap; }
   .tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 4px; color: #fff; }
@@ -138,9 +163,41 @@
           <option value="system">系統事件</option>
         </select>
         <label class="toggle-label"><input type="checkbox" id="toggleTimestamps" checked> 顯示時間戳</label>
+        <button type="button" class="keyword-filter-btn" id="btnKeywordFilter">🔍 搜尋歷史訊息</button>
         <span id="wsState" style="margin-left:auto;color:var(--muted);">連線中…</span>
       </div>
       <div class="chat-log" id="chatLog"><div class="empty-hint">尚無訊息，啟用左側平台設定後開始監聽</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="keywordModalOverlay" hidden>
+  <div class="modal search-modal">
+    <h3>歷史訊息搜尋</h3>
+    <div class="search-row">
+      <input type="text" id="keywordInput" placeholder="符合使用者名稱或訊息內容任一個就顯示（可留空，跟下面條件擇一或合併使用）">
+      <button type="button" class="primary" id="btnKeywordApply">搜尋</button>
+    </div>
+    <div class="search-filters">
+      <div class="search-filter-row">
+        <label for="searchFrom">開始時間</label>
+        <input type="datetime-local" id="searchFrom">
+        <button type="button" class="now-btn" id="btnSearchFromNow" title="帶入現在時間">現在</button>
+      </div>
+      <div class="search-filter-row">
+        <label for="searchTo">結束時間</label>
+        <input type="datetime-local" id="searchTo">
+        <button type="button" class="now-btn" id="btnSearchToNow" title="帶入現在時間">現在</button>
+      </div>
+      <div class="search-filter-row">
+        <label for="searchEventType">特殊類型</label>
+        <select id="searchEventType"><option value="">全部類型</option></select>
+      </div>
+    </div>
+    <div class="modal-hint" id="searchResultHint">輸入至少一個條件後按搜尋，或按 Enter。查的是 SQLite 全部歷史，不是只有畫面上目前顯示的這批。</div>
+    <div class="chat-log search-results" id="searchResults"></div>
+    <div class="modal-actions">
+      <button type="button" id="btnKeywordClose">關閉</button>
     </div>
   </div>
 </div>

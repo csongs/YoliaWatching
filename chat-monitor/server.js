@@ -159,6 +159,17 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, db.getRecentEvents(limit));
   }
 
+  if (url.pathname === '/api/search' && req.method === 'GET') {
+    const q = (url.searchParams.get('q') || '').trim();
+    const from = (url.searchParams.get('from') || '').trim();
+    const to = (url.searchParams.get('to') || '').trim();
+    const eventType = (url.searchParams.get('eventType') || '').trim();
+    // 四個條件全空就不查——不然會變成撈出全部歷史,不是「搜尋」;至少要有一個才查。
+    if (!q && !from && !to && !eventType) return sendJson(res, 200, []);
+    const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 1000);
+    return sendJson(res, 200, db.searchEvents({ q, from, to, eventType, limit }));
+  }
+
   if (url.pathname === '/api/db-info' && req.method === 'GET') {
     return sendJson(res, 200, db.getStats());
   }
