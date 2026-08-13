@@ -424,16 +424,18 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  // 特殊類型下拉選單只列各平台專屬的特殊事件(例如 Twitch 的 chat_highlight、YouTube 的
-  // superchat),依平台分組(<optgroup>)——不含三平台共用的 chat(labels.js 裡 platform:null),
-  // 那種情況直接留空「全部類型」+ 打關鍵字搜就好,不用另外選。
+  // 特殊類型是複選(<select multiple>),符合其中任一個選中的類型就算(OR 條件)——只列各平台
+  // 專屬的特殊事件(例如 Twitch 的 chat_highlight、YouTube 的 superchat),依平台分組
+  // (<optgroup>),不含三平台共用的 chat(labels.js 裡 platform:null),那種情況不選任何選項
+  // (=不限類型)+ 打關鍵字搜就好。不用「全部類型」這種佔位選項——複選模式下「什麼都不選」
+  // 本身就代表不篩選,選了又跟真正的類型選項混在一起反而容易誤會成也要篩「全部類型」這個值。
   function buildSearchEventTypeOptions() {
     const groups = {};
     for (const [type, info] of Object.entries(L.EVENT_TYPE_LABELS)) {
       if (!info.platform) continue;
       (groups[info.platform] ??= []).push({ type, label: info.label });
     }
-    let html = '<option value="">全部類型</option>';
+    let html = '';
     for (const p of PLATFORMS) {
       if (!groups[p]?.length) continue;
       html += `<optgroup label="${escapeHtml(L.platformLabel(p))}">`;
@@ -454,9 +456,11 @@
     const q = $keywordInput.value.trim();
     const fromIso = localDateTimeToIso($searchFrom.value);
     const toIso = localDateTimeToIso($searchTo.value);
-    const eventType = $searchEventType.value;
+    // 複選:選中的每個 <option> 都算,用逗號接成一個字串送給後端(跟 CHAT_MONITOR_RAW_CAPTURE_SKIP
+    // 同樣的逗號分隔慣例),db.js 那邊會組成 event_type IN (...) 的 OR 條件。
+    const eventTypes = Array.from($searchEventType.selectedOptions).map((o) => o.value);
     $searchResults.innerHTML = '';
-    if (!q && !fromIso && !toIso && !eventType) {
+    if (!q && !fromIso && !toIso && eventTypes.length === 0) {
       $searchResultHint.textContent = '輸入至少一個條件後按搜尋，或按 Enter。';
       return;
     }
@@ -465,7 +469,7 @@
     if (q) params.set('q', q);
     if (fromIso) params.set('from', fromIso);
     if (toIso) params.set('to', toIso);
-    if (eventType) params.set('eventType', eventType);
+    if (eventTypes.length) params.set('eventType', eventTypes.join(','));
     let rows;
     try {
       rows = await (await fetch(`/api/search?${params}`)).json();

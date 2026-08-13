@@ -85,8 +85,12 @@
   .search-results:empty { display: flex; align-items: center; justify-content: center; }
   .search-filters { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; }
   .search-filter-row { display: flex; align-items: center; gap: 6px; }
+  .search-filter-row.stacked { flex-direction: column; align-items: stretch; width: 100%; }
   .search-filter-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .search-filter-row.stacked label { white-space: normal; margin-bottom: 4px; }
   .search-filter-row input[type=datetime-local], .search-filter-row select { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 6px; font-size: 12px; }
+  .search-filter-row select[multiple] { width: 100%; }
+  .search-filter-row select[multiple] option:checked { background: var(--accent) linear-gradient(0deg, var(--accent) 0%, var(--accent) 100%); color: #fff; }
   .now-btn { padding: 4px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid var(--border); background: var(--panel2); color: var(--muted); }
   .now-btn:hover { border-color: var(--accent); color: var(--text); }
   .modal-actions button { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--panel2); color: var(--text); }
@@ -189,9 +193,9 @@
         <input type="datetime-local" id="searchTo">
         <button type="button" class="now-btn" id="btnSearchToNow" title="帶入現在時間">現在</button>
       </div>
-      <div class="search-filter-row">
-        <label for="searchEventType">特殊類型</label>
-        <select id="searchEventType"><option value="">全部類型</option></select>
+      <div class="search-filter-row stacked">
+        <label for="searchEventType">特殊類型（可複選＝符合其中任一個；Ctrl/Cmd+點選可多選，不選＝不限類型）</label>
+        <select id="searchEventType" multiple size="6"></select>
       </div>
     </div>
     <div class="modal-hint" id="searchResultHint">輸入至少一個條件後按搜尋，或按 Enter。查的是 SQLite 全部歷史，不是只有畫面上目前顯示的這批。</div>
