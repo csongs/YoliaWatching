@@ -36,8 +36,17 @@ function createTwitchConnector({ channel, oauthToken }, onEvent, onStatus) {
 
   function start() {
     if (!channel) { onStatus({ connected: false, error: '未設定 Twitch 頻道名稱' }); return; }
+    // tmi.js 真正的匿名模式需要 username 符合 justinfan##### 格式,配上它內部固定送出的特殊密碼
+    // (見 node_modules/tmi.js/lib/client.js:1180 的 _.justinfan() 與 1199-1201 的
+    // isJustinfan 判斷)——完全不能自己指定 username。原本沒 token 時仍然把 identity.username
+    // 設成頻道名稱、password 留空,兩邊都不符合 tmi.js 判斷「這是匿名連線」的條件,變成
+    // 送出沒有 PASS 的 NICK,Twitch 直接回「Improperly formatted auth」(user 實測撞到過,
+    // 還連帶讓整個伺服器當機)——「留空可匿名讀取」這個功能其實從來沒有真的成立過。
+    // 改成沒有 token 時完全不傳 identity,讓 tmi.js 自己產生 justinfan 使用者名稱走它內建
+    // 的匿名登入流程。
+    const token = oauthToken || process.env.TWITCH_OAUTH;
     client = new tmi.Client({
-      identity: { username: channel, password: oauthToken || process.env.TWITCH_OAUTH },
+      ...(token ? { identity: { username: channel, password: token } } : {}),
       channels: [channel],
     });
 

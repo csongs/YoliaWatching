@@ -125,6 +125,24 @@ YouTube 這邊是即時輪詢（`youtube-chat-next`），不會回放開播以�
   `connect()` 錯誤路徑。真的連線失敗等非預期錯誤才會落到 try/catch，這種情況
   soop-extension 自己仍會印一份 log（外部無法關掉），但 demo 頁的狀態列一樣看得到乾淨訊息。
 
+## Twitch 免 Token（匿名）模式
+
+**2026-08-13 之前這個模式其實是壞的**，不是「能用但功能少」：`tmi.js` 的匿名登入需要
+username 符合 `justinfan#####` 格式、由套件自己產生，配上它內部固定送出的特殊密碼
+（見 `node_modules/tmi.js/lib/client.js` 的 `_.justinfan()`/`isJustinfan()`）；原本沒填
+Token 時，程式碼仍然把 `identity.username` 設成頻道名稱、密碼留空，兩邊都不符合「匿名連線」
+的判斷條件，變成送出沒有 `PASS` 的 `NICK`，Twitch 直接回「Improperly formatted auth」
+（user 實測撞到過，還連帶讓整個伺服器當機——見 stop() 那個未接 `.catch()` 的修復）。
+已修正：沒有 Token 時完全不傳 `identity`，讓 `tmi.js` 自己走內建的匿名登入流程，實測
+（隔離環境）確認連線穩定、不再報錯。
+
+**修好之後匿名模式收得到什麼**：連線本身確認正常。訂閱/Bits 等 `USERNOTICE`/帶 `bits` tag
+的 `PRIVMSG` 依 Twitch IRC 協定是廣播給聊天室裡所有人的，不是只有登入的使用者看得到，
+理論上匿名連線應該跟有 Token 一樣收得到——但這是根據協定推論，**這個 session 沒有實際
+等到一筆真實 cheer/sub 事件在匿名連線下跑過確認**，測試當下頻道剛好沒人聊天/斗內。
+之前 UI 上「留空可匿名讀取聊天，但收不到訂閱/Bits 以外資訊」這句話的說法沒有查證來源，
+既然连線機制本身都是壞的，這個附帶說法的可信度也存疑，已從畫面上拿掉。
+
 ## 已知限制
 
 - YouTube 改用 `youtube-chat-next` 爬公開網頁聊天室後，分不出會員留言是「新加入/連續/

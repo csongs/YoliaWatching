@@ -5,7 +5,7 @@
   const FIELD_DEFS = {
     twitch: [
       { key: 'channel', label: 'Twitch 頻道名稱', placeholder: '例如 altheayolia', type: 'text' },
-      { key: 'oauthToken', label: 'OAuth Token（選填，留空可匿名讀取聊天，但收不到訂閱/Bits 以外資訊）', placeholder: 'oauth:xxxxxxxx', type: 'password' },
+      { key: 'oauthToken', label: 'OAuth Token（選填，留空可匿名讀取聊天，2026-08-13 前這個模式其實是壞的，見 README）', placeholder: 'oauth:xxxxxxxx', type: 'password' },
     ],
     youtube: [
       { key: 'channel', label: 'YouTube handle 或頻道 ID(免 API Key)', placeholder: '例如 @altheayolia 或 UCxxxx', type: 'text' },
