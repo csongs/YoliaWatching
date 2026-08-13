@@ -7,7 +7,11 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
-const OUT_NAME = 'YoliaChatMonitor-source';
+// 版號的唯一來源是 package.json 的 "version" 欄位(server.js 的 /api/version、demo 頁面右上角
+// 版本號都是讀這裡)——打包輸出的資料夾/zip 檔名也帶上版號,拿到壓縮檔的人不用另外去問「這是
+// 哪個版本」,兩個舊版 zip 也不會因為同名互相覆蓋。
+const VERSION = require(path.join(ROOT, 'package.json')).version;
+const OUT_NAME = `YoliaChatMonitor-source-v${VERSION}`;
 const RELEASE_DIR = path.join(ROOT, 'release');
 const OUT_DIR = path.join(RELEASE_DIR, OUT_NAME);
 const OUT_ZIP = path.join(RELEASE_DIR, `${OUT_NAME}.zip`);

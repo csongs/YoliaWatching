@@ -34,11 +34,13 @@ Twitch 也不用填金鑰——匿名連線即可讀聊天（見下面「Twitch 
 npm run package
 ```
 
-輸出到 `release/YoliaChatMonitor-source/`（資料夾版）與同目錄的
-`YoliaChatMonitor-source.zip`——都被 `.gitignore` 排除，不會被 commit。裡面是完整原始碼
-＋`install.bat`（自動抓 Node.js、裝套件）＋`start.bat`（啟動並開瀏覽器）＋中文使用說明，
-拿到的人不用裝 Node.js、不用 clone repo，解壓縮後雙擊 `install.bat` 再雙擊 `start.bat`
-即可。`install.bat`/`start.bat`/使用說明.txt 的可編輯來源在
+輸出到 `release/YoliaChatMonitor-source-v{版號}/`（資料夾版）與同目錄的
+`YoliaChatMonitor-source-v{版號}.zip`——都被 `.gitignore` 排除，不會被 commit。版號讀
+[package.json](package.json) 的 `"version"` 欄位（跟 demo 頁右上角、`/api/version` 顯示的
+是同一個來源，只有這裡一個地方要改），檔名帶版號方便拿到的人一眼看出版本、多個版本的 zip
+也不會互相覆蓋。裡面是完整原始碼＋`install.bat`（自動抓 Node.js、裝套件）＋`start.bat`
+（啟動並開瀏覽器）＋中文使用說明，拿到的人不用裝 Node.js、不用 clone repo，解壓縮後雙擊
+`install.bat` 再雙擊 `start.bat` 即可。`install.bat`/`start.bat`/使用說明.txt 的可編輯來源在
 [packaging/](packaging/)——改這三個檔案，不要直接改 `release/` 底下打包出來的副本
 （下次 `npm run package` 會整個蓋掉）。
 
