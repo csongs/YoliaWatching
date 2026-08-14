@@ -28,9 +28,24 @@ function isSkipped(platform, eventType) {
   return SKIP_SET.has(`${platform}:${eventType}`) || SKIP_SET.has(`${platform}:*`);
 }
 
+// 2026-08-15:capturedAt 原本用 toISOString()(固定 UTC,"Z" 結尾)——比對畫面上看到的時間點
+// (例如查降落事件是不是真的漏抓)每次都要手動加 8 小時,容易算錯。改成帶當地時區位移的 ISO
+// 字串(例如 +08:00),直接跟系統時鐘對得上,不用再換算;仍然是合法 ISO 8601,new Date(...)
+// 照樣能正確還原成同一個絕對時間點。這台機器在哪個時區就自動用哪個位移,不寫死 +08:00。
+function toLocalIso(date) {
+  const pad = (n, len = 2) => String(n).padStart(len, '0');
+  const offsetMin = -date.getTimezoneOffset(); // getTimezoneOffset() 是"當地時間落後 UTC 幾分鐘",取負號才是"當地時間比 UTC 快幾分鐘"
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const offH = pad(Math.floor(Math.abs(offsetMin) / 60));
+  const offM = pad(Math.abs(offsetMin) % 60);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
+    + `${sign}${offH}:${offM}`;
+}
+
 function rawCapture(platform, eventType, raw) {
   if (!RAW_CAPTURE || isSkipped(platform, eventType)) return;
-  const line = JSON.stringify({ capturedAt: new Date().toISOString(), platform, eventType, raw });
+  const line = JSON.stringify({ capturedAt: toLocalIso(new Date()), platform, eventType, raw });
   try {
     fs.mkdirSync(path.dirname(CAPTURE_PATH), { recursive: true });
     fs.appendFileSync(CAPTURE_PATH, line + '\n');
