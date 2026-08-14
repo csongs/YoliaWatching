@@ -9,7 +9,8 @@
   - **✅ 真實抓包**：從 `data/raw-capture.jsonl`（`CHAT_MONITOR_RAW_CAPTURE=1` 存下的真實事件）複製，只刪掉不影響結構的個資（頻道 ID 等不影響閱讀的留著方便核對）。
   - **🔧 程式碼推導**：目前還沒抓到真實樣本，根據 connector 程式碼的欄位對應手動建構，**未經真實資料驗證**，欄位型別/格式可能跟真實情況有出入。
   - 兩種都會標抓包/撰寫日期。清單以 2026-08-13 的 `raw-capture.jsonl`（約 330 行）為準，之後跑久了應該會補到更多真實樣本，尤其是 SOOP 的抖內/訂閱類事件。
-- 各事件類型的驗證狀態總表在 [README.md](../README.md#各事件類型驗證狀態2026-08-13)，這份文件是它的細節版（附實際 raw data）。
+- 各事件類型的驗證狀態總表（含 `event_type`、需不需要 Token/Key）**只**維護在 [README.md](../README.md#各事件類型與驗證狀態2026-08-15)——這份文件不重複記錄「驗證到什麼程度」這種判斷性結論，只放實際 raw data 跟欄位對應，兩份文件各管各的，改狀態只需要改 README 那一份。
+- 未實作的功能構想／待確認的協定細節追蹤在 [GitHub Issues](https://github.com/csongs/YoliaWatching/issues)，這份文件跟 README 都不重複列成一份清單。
 
 ## 共通結構：events 表 → UI
 

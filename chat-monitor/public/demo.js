@@ -285,7 +285,8 @@
   }
 
   // extra.messageParts 是「文字/表情圖片」交錯的陣列(YouTube/Twitch 才有,SOOP 目前只有
-  // emoticonId,沒查到公開的圖片網址規則,見 README 已知限制),沒有就退回純文字 message。
+  // emoticonId,沒查到公開的圖片網址規則,見 README「各事件類型與驗證狀態」表的 SOOP 表情訊息那列),
+  // 沒有就退回純文字 message。
   function renderMessageBody(evt) {
     const parts = getExtra(evt)?.messageParts;
     if (!parts) return evt.message ? escapeHtml(evt.message) : '';
