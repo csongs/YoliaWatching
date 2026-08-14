@@ -231,7 +231,13 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
       // CHAT_MONITOR_RAW_CAPTURE=1 才會寫,一般聊天(沒有 superchat 也不是會員)跳過,只存
       // youtube-chat-next 解析完的完整 ChatItem(比我們自己 classifyItem() 篩選過的欄位更完整,
       // 之後要查有沒有漏掉的欄位可以直接比對)。
-      if (RAW_CAPTURE && (item.superchat || item.isMembership)) rawCapture('youtube', item.superchat ? 'superchat' : 'membership', item);
+      // 2026-08-15:superchat 拆成 superchat(文字)/supersticker(貼圖)兩個 tag,不要合併——
+      // 文字版已經有真實樣本驗證過(可以加進 CHAT_MONITOR_RAW_CAPTURE_SKIP 減少灌水),貼圖版
+      // 完全沒抓到過,合併成同一個 tag 的話 skip 掉文字版會連貼圖版一起濾掉。
+      let captureTag = null;
+      if (item.superchat) captureTag = item.superchat.sticker ? 'supersticker' : 'superchat';
+      else if (item.isMembership) captureTag = 'membership';
+      if (RAW_CAPTURE && captureTag) rawCapture('youtube', captureTag, item);
       onEvent({ platform: 'youtube', dedupKey: item.id, ...classifyItem(item) });
     });
     chat.on('error', (err) => {

@@ -128,7 +128,7 @@ SOOP 另有「官方模式」（需要 SOOP 官方 API Key）完全未實作，�
 |---|---|---|---|---|---|
 | YouTube | 一般聊天 | `chat` | ✅ 驗證過 | 否 | 多次收到真實訊息 |
 | YouTube | Super Chat（文字） | `superchat` | ✅ 驗證過 | 否 | 真實樣本確認 `amount`/`color` 欄位；跟 `isMembership` 可能同時為真時目前只走 `superchat` 分支，會員資訊會遺失（已知落差，見 `docs/event-types.md`） |
-| YouTube | Super Sticker（貼圖） | `supersticker` | ⚠️ 沒驗證過 | 否 | 還沒抓到真實樣本；跟 `superchat` 共用同一個 raw capture tag，`CHAT_MONITOR_RAW_CAPTURE_SKIP` 不能加 `youtube:superchat`，否則連這個也一起濾掉 |
+| YouTube | Super Sticker（貼圖） | `supersticker` | ⚠️ 沒驗證過 | 否 | 還沒抓到真實樣本；2026-08-15 之前跟 `superchat` 共用同一個 raw capture tag，加 `youtube:superchat` 進 skip 會連這個一起濾掉——已經拆成獨立的 `youtube:supersticker` tag，現在可以只 skip 文字版、繼續收貼圖版 |
 | YouTube | 會員留言 | `chat`（`extra.isMembership`） | ✅ 驗證過 | 否 | 129 則真實會員聊天，欄位正確 |
 | YouTube | 會員月數 | `chat`（`extra.membershipMonths`） | ✅ 驗證過 | 否 | 237 筆真實驗證，含「New member」/「Member (N months)」/「Member (N year(s))」三種格式 |
 | YouTube | 里程碑通知文字 | `chat`（`extra.membershipHeader`） | ⚠️ 沒驗證過 | 否 | 只確認一般會員聊天正確回傳 `null`，沒遇過真正的里程碑事件 |
