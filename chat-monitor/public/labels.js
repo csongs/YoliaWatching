@@ -24,7 +24,7 @@
     resub:                { label: '續訂', category: 'donation', platform: 'twitch' },
     subgift:               { label: '贈送訂閱', category: 'donation', platform: 'twitch' },
     submysterygift:        { label: '神秘箱訂閱(大量贈送)', category: 'donation', platform: 'twitch' },
-    raid:                  { label: '突襲(Raid)', category: 'system', platform: 'twitch' },
+    raid:                  { label: '帶觀眾過來(Raid)', category: 'system', platform: 'twitch' },
     announcement:           { label: '公告(/announce)', category: 'system', platform: 'twitch' },
     usernotice_other:       { label: '其他系統通知(未分類)', category: 'system', platform: 'twitch' },
 

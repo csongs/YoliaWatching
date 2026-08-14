@@ -245,7 +245,7 @@ UI 呈現：「贈送訂閱」標籤 + 橘色底 + 訊息顯示「→ thomas9206
 
 UI 呈現：「神秘箱訂閱(大量贈送)」標籤 + 橘色底 + `+5`。**注意**：這個事件跟同一次贈送觸發的多筆 `subgift` 會同時出現在聊天記錄裡（各自一行），不是互斥關係。
 
-### raid — 突襲(Raid)
+### raid — 帶觀眾過來(Raid)
 
 分類：`system`。
 
@@ -259,7 +259,7 @@ username: "someraider", viewers: 42
 
 存進 `events` 表：`message` = `null`；`amount` = `String(viewers)`；`extra` = `null`；`dedupKey` 用 `` `raid:${username}:${Math.floor(Date.now()/5000)}` ``（5 秒內同一人視為同一次事件去重，因為這個事件沒有 tmi.js 提供的訊息 id）。
 
-UI 呈現：「突襲(Raid)」標籤，灰色斜體行（`system` 分類），+viewers 數字。
+UI 呈現：「帶觀眾過來(Raid)」標籤，灰色斜體行（`system` 分類），+viewers 數字。
 
 ### announcement — 公告(/announce)
 
