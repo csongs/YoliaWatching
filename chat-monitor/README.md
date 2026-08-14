@@ -89,7 +89,7 @@ npm run package
   `subscribe` 那種「我們自己讀錯欄位名稱」的 bug，比對這份原始紀錄就看得出來，不用像
   `gift_item`/徽章那幾次一樣，另外寫一次性診斷腳本連線抓包。SOOP 這邊額外會把完全不認識
   的封包類型（`unknown_<type code>`）也記下來，方便之後補齊套件沒解析的事件（`gift_item`
-  的 `0045` 見「已知限制」；其餘常見的 `unknown_0012`/`0014`/`0054`/`0090`/`0094`/`0110`
+  的 `0045` 見 [docs/event-types.md](docs/event-types.md)；其餘常見的 `unknown_0012`/`0014`/`0054`/`0090`/`0094`/`0110`
   2026-08-14 已經對照另一個獨立反推同一套協定的 Java 函式庫查出真實身分——都是使用者旗標/
   暱稱變更、管理功能狀態、內部握手之類跟聊天內容無關的封包，決定不接成正式事件，細節見
   [docs/event-types.md](docs/event-types.md)）。兩個變數預設都關閉，不影響正常監聽。
@@ -100,52 +100,66 @@ npm run package
   可以整個平台跳過。例：`CHAT_MONITOR_RAW_CAPTURE_SKIP=youtube:membership,twitch:sub`。
   之後想重新驗證某個類型，直接從這個清單刪掉那一項即可，不用改程式碼。
 
-## 三平台涵蓋的事件類型
+## 各事件類型與驗證狀態（2026-08-15）
 
-| 平台 | 一般聊天 | 特殊聊天類型 | 抖內/贊助類 |
-|---|---|---|---|
-| Twitch | `chat` | `chat_highlight`（頻道點數兌換的「醒目留言」） | `cheer`(bits)、`sub`/`resub`/`subgift`/`submysterygift`、`raid` |
-| YouTube | `chat`（會員留言會多帶 `extra.isMembership`） | — | `superchat`、`supersticker` |
-| SOOP（社群模式） | `chat`、`emoticon` | `notification`(系統通知) | `text_donation`、`video_donation`、`ad_balloon_donation`、`subscribe`、`gift_item`(快播Plus/訂閱禮物券等,自己反推封包格式接的,見已知限制) |
-| SOOP（官方模式） | 尚未實作（跟 `yuupeek/src/chatListener.js` 現況一致，需要 SOOP 官方 API key） | | |
+> 這份表是三平台事件的**唯一**權威清單——涵蓋哪些事件類型、驗證到什麼程度、需不需要
+> Token/Key，都只記在這裡，不會在別的章節重複一份。原始資料長怎樣、欄位怎麼對應，那是
+> 另一件事，記在 [docs/event-types.md](docs/event-types.md)，這份表只放連結過去，不重貼
+> raw data。還沒實作、屬於「以後可能要做」的功能構想（例如 Cheermote 圖片、頻道點數兌換
+> 無文字版），不在這份表裡——那些追蹤在 [GitHub Issues](https://github.com/csongs/YoliaWatching/issues)，
+> 這份表只收「程式碼已經有的事件類型，測到什麼程度」。
+
+「驗證過」指的是實際連上真實頻道、看過真實事件跑過一次確認欄位正確——不是「程式碼邏輯看起來
+合理」或「型別定義這樣寫」就算數。狀態欄用這幾種值：
+
+| 值 | 意思 |
+|---|---|
+| ✅ 驗證過 / ⚠️ 部分驗證 / ⚠️ 沒驗證過 / ❌ 完全沒測過 | 程度差異見各列說明 |
+| 📦 套件不支援 | 平台本身有這個概念，但目前用的函式庫/爬蟲技術上拿不到，不是漏測 |
+| 🚫 平台無此功能 | 概念上就不存在 |
 
 各類型的中文標籤與「等級/金額怎麼看」的說明集中在 [public/labels.js](public/labels.js)
 （server 與前端共用同一份，避免兩邊漂移），demo 頁面下方也有一份可讀版本。
 
+SOOP 另有「官方模式」（需要 SOOP 官方 API Key）完全未實作，跟 `yuupeek/src/chatListener.js`
+現況一致——這是整條連線模式的選擇，不是單一事件，不放進下面的表，追蹤在 GitHub Issues。
+
+| 平台 | 事件 | `event_type` | 狀態 | 需要 Token/Key？ | 說明 |
+|---|---|---|---|---|---|
+| YouTube | 一般聊天 | `chat` | ✅ 驗證過 | 否 | 多次收到真實訊息 |
+| YouTube | Super Chat（文字） | `superchat` | ✅ 驗證過 | 否 | 真實樣本確認 `amount`/`color` 欄位；跟 `isMembership` 可能同時為真時目前只走 `superchat` 分支，會員資訊會遺失（已知落差，見 `docs/event-types.md`） |
+| YouTube | Super Sticker（貼圖） | `supersticker` | ⚠️ 沒驗證過 | 否 | 還沒抓到真實樣本；跟 `superchat` 共用同一個 raw capture tag，`CHAT_MONITOR_RAW_CAPTURE_SKIP` 不能加 `youtube:superchat`，否則連這個也一起濾掉 |
+| YouTube | 會員留言 | `chat`（`extra.isMembership`） | ✅ 驗證過 | 否 | 129 則真實會員聊天，欄位正確 |
+| YouTube | 會員月數 | `chat`（`extra.membershipMonths`） | ✅ 驗證過 | 否 | 237 筆真實驗證，含「New member」/「Member (N months)」/「Member (N year(s))」三種格式 |
+| YouTube | 里程碑通知文字 | `chat`（`extra.membershipHeader`） | ⚠️ 沒驗證過 | 否 | 只確認一般會員聊天正確回傳 `null`，沒遇過真正的里程碑事件 |
+| YouTube | 訂閱（一般訂閱，非贈送） | — | 📦 套件不支援 | 否 | `youtube-chat-next` 資料源沒有這個資訊，換官方 API 才有可能；追蹤在 GitHub Issues |
+| YouTube | 贈送會籍(購買方) | `membership_gift` | ✅ 驗證過 | 否 | 2026-08-15 真實封包驗證，`amount` = 份數，`extra.planName` = 會籍方案名稱（截圖對照真實畫面確認過文字意思）；不是 `ChatItem` 欄位，繞開套件另外處理原始 action，見 `connectors/youtube.js` 的 `patchYoutubeParser()` |
+| YouTube | 贈送會籍(領取方) | `membership_gift_received` | ✅ 驗證過 | 否 | 同上，只有一筆真實樣本，贈送者名字用「message.runs 最後一個 run」抓，還沒有多筆樣本驗證這個位置一定固定 |
+| YouTube | 聊天表情符號圖片渲染 | `chat`（`extra.messageParts`） | ✅ 驗證過 | 否 | 真實 `:face-blue-smiling:` 樣本驗證過 |
+| Twitch | 一般聊天 | `chat` | ✅ 驗證過 | 否 | 多次收到真實訊息 |
+| Twitch | 頻道點數兌換（醒目留言，有文字） | `chat_highlight` | ⚠️ 沒驗證過 | 否 | 跟一般 `PRIVMSG` 走同一路徑理論上沒問題，但沒有專門拿真實兌換訊息驗證過 |
+| Twitch | Bits 抖內 | `cheer` | ⚠️ 沒驗證過 | 否 | 沒有實際看過一筆真的 cheer 事件 |
+| Twitch | 新訂閱 | `sub` | ⚠️ 部分驗證 | 否 | 抓到真實封包（Prime/付費 Tier 1），沒在 demo 頁看過渲染結果 |
+| Twitch | 續訂月數 | `resub` | ⚠️ 沒驗證過 | 否 | `cumulative-months` 修法是查 `tmi.js` 原始碼推論，沒等到真實事件確認 |
+| Twitch | 贈送訂閱 | `subgift`/`submysterygift` | ⚠️ 部分驗證 | 否 | 抓到真實連續贈送封包，沒在 demo 頁看過渲染結果 |
+| Twitch | Raid | `raid` | ⚠️ 沒驗證過 | 否 | 沒有實際看過一筆真的 raid 事件 |
+| Twitch | 公告 | `announcement` | ⚠️ 部分驗證 | 否 | 抓到真實公告封包，證實是原生 `/announce`，沒在 demo 頁看過渲染結果 |
+| Twitch | 其他系統通知 | `usernotice_other` | ⚠️ 部分驗證 | 否 | 目前只真實遇過 `viewermilestone`（連續觀看場次里程碑）這個子類型 |
+| Twitch | 使用者名稱顏色 | `chat`/`cheer`（`extra.color`） | ❌ 完全沒測過 | 否 | `tags.color` 是 IRC 原生欄位，邏輯上直接讀，沒在 demo 頁看過實際顏色 |
+| Twitch | 聊天表情符號圖片渲染 | `chat`/`cheer`（`extra.messageParts`） | ⚠️ 部分驗證 | 否 | CDN 網址規則驗證過，切割邏輯只用模擬資料測過 |
+| SOOP | 一般聊天 | `chat` | ✅ 驗證過 | 否 | 大量真實訊息 |
+| SOOP | 系統通知 | `notification` | ⚠️ 沒驗證過 | 否 | 沒有看過真實通知內容 |
+| SOOP | 表情訊息 | `emoticon` | ⚠️ 部分驗證 | 否 | `emoticonId` 是 OGQ 雜湊 ID，換不出圖片網址；圖片渲染缺口追蹤在 GitHub Issues |
+| SOOP | 訂閱月數 | `subscribe` | ⚠️ 沒驗證過 | 否 | 可能只在續訂觸發，新訂閱疑似另一協定類型；追蹤在 GitHub Issues |
+| SOOP | 文字/語音抖內 | `text_donation` | ✅ 部分驗證 | 否 | 抓到真實連續送星球封包（27 顆同一人），沒在 demo 頁看過渲染結果 |
+| SOOP | 廣告氣球抖內 | `ad_balloon_donation` | ✅ 部分驗證 | 否 | 抓到真實封包，沒在 demo 頁看過渲染結果 |
+| SOOP | 影片抖內 | `video_donation` | ❌ 完全沒測過 | 否 | 欄位結構跟已驗證的其他抖內管道相同，這個管道本身還沒實測 |
+| SOOP | 使用者名稱顏色 | `chat`（`extra.color`） | ✅ 驗證過 | 否 | 約 20 筆真實訊息核對，`parts[9]`/`[10]` 欄位索引正確 |
+| SOOP | 聊天表情符號圖片渲染（`/代碼/`） | `chat`（`extra.messageParts`） | ⚠️ 部分驗證 | 否 | 兩套目錄轉換邏輯、圖片網址都驗證過，沒在 demo 頁看過渲染結果 |
+| SOOP | 贈送禮物 | `gift_item` | ✅ 部分驗證 | 否 | 送禮者/收禮者暱稱對照真實截圖確認正確；`itemType` 對應表未知，追蹤在 GitHub Issues |
+
 每種事件的原始資料長怎樣、對應哪個 `event_type`、demo 頁怎麼渲染，細節版整理在
 [docs/event-types.md](docs/event-types.md)。
-
-## 各事件類型驗證狀態（2026-08-13）
-
-「驗證過」指的是實際連上真實頻道、看過真實事件跑過一次確認欄位正確——不是「程式碼邏輯看起來
-合理」或「型別定義這樣寫」就算數。這份清單記錄目前到哪個程度，之後遇到對應事件時可以順便驗證、
-更新這裡。
-
-| 平台 | 事件 | 狀態 | 說明 |
-|---|---|---|---|
-| YouTube | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
-| YouTube | Super Chat/Sticker | ⚠️ 沒驗證過 | 照套件型別定義寫的，沒收過真實 Super Chat 確認金額/顏色欄位 |
-| YouTube | 會員留言（`isMembership`） | ✅ 驗證過 | 129 則真實會員聊天，欄位正確 |
-| YouTube | 會員月數（`membershipMonths`，來自 `badge.label`） | ✅ 驗證過 | 237 筆真實會員留言，正則 100% 正確解析「New member」/「Member (N months)」；2026-08-14 額外抓到「Member (1 year)」格式（滿一年後改用「年」當單位），已補上解析，換算成 12 個月 |
-| YouTube | 里程碑通知文字（`membershipHeader`，來自 `headerSubtext`） | ⚠️ 沒驗證過 | patch 邏輯有跑，但只確認「一般會員聊天正確回傳 null」，沒遇過真正的里程碑事件確認欄位內容；現在只是補充來源，不是主要依賴 |
-| YouTube | 訂閱／贈送訂閱 | 🚫 不支援 | `youtube-chat-next` 資料源頭沒有這個資訊，是已知限制不是漏測 |
-| Twitch | 一般聊天 | ✅ 驗證過 | 多次收到真實訊息 |
-| Twitch | Bits 抖內（`cheer`） | ⚠️ 沒驗證過 | 沒有實際看過一筆真的 cheer 事件跑過 |
-| Twitch | 續訂月數（`resub`） | ⚠️ 沒驗證過 | `cumulative-months` 修法是查 `tmi.js` 原始碼推論，修完沒等到真實 resub 事件確認顯示結果 |
-| Twitch | 新訂閱（`sub`） | ⚠️ 部分驗證 | 2026-08-13 已用 `CHAT_MONITOR_RAW_CAPTURE` 抓到真實 `sub` 封包（Prime 與付費 Tier 1 各一筆），`msg-param-sub-plan` 欄位存在且正確，但沒有實際在 demo 頁看過渲染結果 |
-| Twitch | 贈送訂閱（`subgift`/`submysterygift`） | ⚠️ 部分驗證 | 2026-08-13 抓到真實連續贈送（5 筆 `subgift` + 1 筆 `submysterygift`），`msg-param-recipient-user-name`/`msg-param-mass-gift-count` 欄位都在，但沒有實際在 demo 頁看過渲染結果 |
-| Twitch | 公告（`announcement`） | ⚠️ 部分驗證 | 2026-08-13 抓到真實公告封包（來自 StreamBoostMaxBot，`msg-param-color` 存在），證實真的是原生 `/announce`，但沒有實際在 demo 頁看過渲染結果 |
-| Twitch | 其他系統通知（`usernotice_other`） | ⚠️ 部分驗證 | 2026-08-13 抓到一種先前完全沒見過的類型 `viewermilestone`（連續觀看場次里程碑），確認有正確落入這個備援分類，但沒有針對性驗證過其他 `msgid` 子類型 |
-| SOOP | 一般聊天 | ✅ 驗證過 | 大量真實訊息 |
-| SOOP | 訂閱月數（`subscribe`） | ⚠️ 沒驗證過 | `res.amount` 修法用模擬封包跑過 `parseSubscribe()` 解構邏輯確認位置，沒有真實訂閱事件驗證顯示結果；另外發現這個事件可能只在續訂觸發，新訂閱是另一個協定類型，見「已知限制」 |
-| SOOP | 文字/語音抖內（`text_donation`） | ✅ 部分驗證 | 2026-08-14 抓到真實連續送星球封包（27 顆，同一人），`amount`/`fromUsername`/`fanClubOrdinal` 欄位都正確，但沒有實際在 demo 頁看過渲染結果 |
-| SOOP | 廣告氣球抖內（`ad_balloon_donation`） | ✅ 部分驗證 | 2026-08-14 抓到真實封包，`fromUsername`/`amount`/`fanClubOrdinal` 欄位都正確，但沒有實際在 demo 頁看過渲染結果 |
-| SOOP | 影片抖內（`video_donation`） | ❌ 完全沒測過 | 欄位結構跟已驗證的 `text_donation`/`ad_balloon_donation` 相同（只是抖內管道不同），這個管道本身還沒實測過 |
-| SOOP | 表情訊息（`emoticon`） | ⚠️ 部分驗證 | 2026-08-14 抓到真實封包，`emoticonId`/`userId`/`username` 欄位都在，但查出這個 `emoticonId` 是 OGQ 雜湊 ID，換不出圖片網址，圖片渲染沒接上（跟下面 `chat` 訊息裡的 `/代碼/` 圖片渲染是不同系統） |
-| SOOP | 聊天表情符號圖片渲染（`chat` 的 `/代碼/`） | ⚠️ 部分驗證 | 2026-08-14 用真實抓到的 `/하트//하트//하트/`（經典目錄）、`/ㅗㅜㅑ//락//ㅗㅜㅑ//락/`（signature emoticon 目錄）驗證過兩套目錄合併後轉換邏輯都正確、圖片網址也 curl 驗證過能載入，但沒有實際在 demo 頁看過渲染結果 |
-| SOOP | 使用者名稱顏色（`chat` 的 `extra.color`） | ✅ 驗證過 | 2026-08-14 抓了約 20 筆真實訊息核對，`parts[9]`/`[10]` 欄位索引正確；發現並修正一個真的 bug：SOOP 原始格式沒有 `#` 前綴，第一次接上時漏補，demo.js 的格式驗證直接擋掉，畫面完全沒顏色（user 實測回報過），已修正 |
-| Twitch | 使用者名稱顏色（`chat`/`cheer` 的 `extra.color`） | ❌ 完全沒測過 | `tags.color` 是 IRC 原生欄位，程式碼邏輯上直接讀，沒有實際在 demo 頁看過渲染結果 |
-| SOOP | 贈送禮物（`gift_item`） | ✅ 部分驗證 | 送禮者/收禮者暱稱對照過真實截圖確認正確；2026-08-14 交叉核對 soopapi 修正了送禮者/收禮者 userId 欄位（原本誤標）、補上 `itemType` 欄位，但 `itemType` 數字對應的道具名稱、`amount` 欄位還是不知道 |
 
 ## 避免 restart 後重複寫入
 
@@ -156,23 +170,13 @@ YouTube 這邊是即時輪詢（`youtube-chat-next`），不會回放開播以�
 如果伺服器重開，重開期間漏掉的訊息不會補上（漏訊息而不是重複訊息，這個工具的用途是
 觀察格式，這個取捨可接受）。
 
-## 已知的錯誤狀態
+## 狀態列行為說明
 
 - SOOP「主播目前沒開台」不是異常，[connectors/soop.js](connectors/soop.js) 會先用
   `client.live.detail()` 自己查一次直播狀態，未開台就直接回報乾淨的狀態訊息並每 30 秒
   重新查一次，不會呼叫到 soop-extension 內部那段一定會印出完整 stack trace 的
   `connect()` 錯誤路徑。真的連線失敗等非預期錯誤才會落到 try/catch，這種情況
   soop-extension 自己仍會印一份 log（外部無法關掉），但 demo 頁的狀態列一樣看得到乾淨訊息。
-- **2026-08-14 修復**：畫面上「亮紅燈（顯示未連線/錯誤），但聊天訊息其實還在跳」——原因是
-  `attempt()`／`stop()` 之間有兩個沒防到的競態：(1) `timer = setTimeout(attempt, ...)`
-  在三個地方各自重新賦值，沒先 `clearTimeout` 掉前一個還沒觸發的計時器，同一時間可能有兩個
-  `attempt()` 都在跑，較晚失敗的那個會用自己的 `soopChat = null` 蓋掉另一個其實連線正常、
-  還在收訊息的 `soopChat`；(2) 使用者切換頻道／停用監聽（觸發 `restartConnector()`）如果
-  剛好發生在 `attempt()` 內部 `await isLive()`／`await connect()` 卡著的時候，`stop()`
-  當下 `soopChat` 可能還是空的（連線都還沒建立），等這個「已經被停用」的 `attempt()` 事後
-  才連線成功，就會變成一個 `stop()` 完全不知道、也關不掉的殭屍連線，繼續送訊息進來。已修正：
-  (1) 排下一次重試前一律先清掉舊計時器（`scheduleRetry()`）；(2) 每個 `await` 之後重新檢查
-  `stopped`，如果這段等待期間已經被停用，直接斷開／放棄，不繼續往下建立連線或回報狀態。
 
 ## Twitch 免 Token（匿名）模式
 
@@ -224,48 +228,15 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
   （`ogq-sticker-global-cdn-z01.sooplive.com`），這部分還是沒有圖片渲染，是目前唯一還沒解掉
   的表情符號缺口。細節見 [docs/event-types.md](docs/event-types.md) 的 `chat`／`emoticon` 章節。
 
-## 已知限制
+## 已知限制／未實作構想
 
-- YouTube 改用 `youtube-chat-next` 爬公開網頁聊天室後，分不出會員留言是「新加入/連續/
-  贈禮」（官方 API 才有這個分類）。**月數本身查得到**——2026-08-13 用
-  `CHAT_MONITOR_RAW_CAPTURE` 實測 237 筆真實會員留言發現 `author.badge.label` 每則都有
-  「New member」/「Member (N months)」文字，已改成從這裡解析 `extra.membershipMonths`；
-  滿一年後格式會變成「Member (N year(s))」（2026-08-14 真實抓到「Member (1 year)」才發現，
-  已補上解析，換算成 12 的倍數）。「這個月是不是剛好是贈禮/里程碑那一則」還是分不出來，
-  只知道當下累積月數。Super Chat/Sticker 也只有金額字串跟顏色，沒有官方 API 的 tier 數字。
-  細節見 [connectors/youtube.js](connectors/youtube.js) 開頭註解。
-- 同一則訊息同時是 Super Chat**又**是會員（`superchat` 跟 `isMembership` 兩個欄位都為真，
-  2026-08-14 真實遇到過）時，目前 `classifyItem()` 只會走 `superchat` 分支——`event_type`
-  是 `superchat`，`extra` 完全沒有 `membershipMonths`/`membershipBadge` 這幾個欄位，
-  demo 頁看不出這位付費的人同時是會員、也看不出月數。還沒有處理，屬於已知落差。
-- SOOP 官方 API 模式沒有實作（`yuupeek/` 裡目前也還沒有這個串接的文件可抄）。
-- SOOP 的 `gift_item`（贈送禮物）不是 `soop-extension` 有支援的事件類型，是自己抓封包反推
-  格式接上去的（2026-08-13，用 `CHAT_MONITOR_DEBUG=1` 抓包 + 比對實際截圖核對）。2026-08-14
-  用另一個獨立反推同一套協定的非官方 Java 函式庫
-  [getCurrentThread/soopapi](https://github.com/getCurrentThread/soopapi) 交叉核對，補上/修正了
-  幾個欄位（原本誤標成「送禮者 userId」的其實是收禮者 userId；原本「意義不明」的欄位其實是
-  `itemType` 整數代碼），但禮物項目本身的文字名稱（例如「快播Plus 7天券」）跟 `itemType`
-  數字對應表還是不知道，`amount` 欄位仍然是空的。細節見
-  [connectors/soop.js](connectors/soop.js) 的 `GIFT_ITEM_TYPE` 註解與
-  [docs/event-types.md](docs/event-types.md)。
-- SOOP `subscribe` 事件可能只在「續訂」時觸發，「新訂閱」可能是完全沒被監聽到的另一個協定
-  類型——2026-08-14 交叉核對 soopapi 發現 `soop-extension` 認定的 `SUBSCRIBE`（協定類型 93）
-  在 soopapi 裡叫 `FOLLOW_ITEM_EFFECT`（續訂），真正的「New Subscription」是另一個類型
-  91（`FOLLOW_ITEM`），`soop-extension` 沒有處理，還沒確認實際行為，見
-  [docs/event-types.md](docs/event-types.md) 的 `subscribe` 章節。
-- SOOP 一般聊天訊息裡的 `/代碼/` 表情符號已經接上圖片渲染（2026-08-14，見上面「表情符號
-  圖片」章節），涵蓋全站共用「經典」目錄＋主播專屬 signature emoticon 目錄兩套；獨立的
-  `emoticon` 事件（OGQ 雜湊 ID，網域是完全不同的 `ogq-sticker-global-cdn-z01.sooplive.com`）
-  還是沒有圖片渲染，是唯一還沒解掉的表情符號缺口，細節見
-  [docs/event-types.md](docs/event-types.md) 的 `chat`／`emoticon` 章節。
-- Twitch 的頻道點數兌換只能偵測「醒目留言」這種會出現在一般聊天訊息裡、帶
-  `custom-reward-id` tag 的兌換項目；不會出現在聊天訊息裡的其他兌換（例如純粹的音效/
-  特效類獎勵）不會被聽到，因為那些不走 IRC 聊天訊息，需要另外接 EventSub。
-- **Twitch cheer 目前只有 bits 數字，沒有 Cheermote 圖片/動畫**（2026-08-13 使用者提供的
-  研究方向，尚未實作，先記錄）：官方 Helix API `GET /helix/bits/cheermotes`
-  （<https://dev.twitch.tv/docs/api/reference/#get-cheermotes>）能拿到每一階 tier 對應的
-  圖片網址（dark/light、animated/static、多種尺寸），比自己畫圖或猜測可靠；更進階可以用
-  EventSub `channel.bits.use` 訂閱拿結構化事件（fragments 已經把文字跟 cheermote 位置拆好，
-  不用自己寫 regex 解析）。實作門檻：這兩者都需要 Twitch 開發者帳號的 **Client-ID**（Helix
-  App/User Access Token 都要搭 Client-ID），跟現在 `connectors/twitch.js` 只用 `tmi.js`
-  走 IRC、只填 OAuth Token 的方式不同，需要額外的憑證管理流程；使用者已決定暫不實作。
+未實作的功能構想、還需要進一步確認的協定細節，追蹤在
+[GitHub Issues](https://github.com/csongs/YoliaWatching/issues)（`enhancement`／
+`needs-verification`／`limitation` 標籤），不在這裡重複列一份——README 只保留「現在程式碼
+實際上做得到什麼」（見上面「各事件類型與驗證狀態」），至於「以後可能要做什麼」一律去
+Issues 找，避免同一件事要維護兩個地方。目前追蹤中的項目大致有：YouTube 一般會員留言分不出
+「新加入/連續/贈禮」是哪一種（贈送會籍這個動作本身已經另外接上，見上面 `membership_gift`/
+`membership_gift_received`，這裡剩下的是「已經在聊天的會員，事後回頭看是不是被贈送的」分不出來）、
+YouTube superchat+會員同時為真時的顯示落差、SOOP 官方 API 模式、SOOP `gift_item` 的
+`itemType` 對應表、SOOP `subscribe` 新訂閱協定未確認、SOOP OGQ 表情貼圖無圖片渲染、Twitch
+頻道點數兌換（無文字版）需要 EventSub、Twitch Cheermote 圖片/動畫需要 Client-ID。

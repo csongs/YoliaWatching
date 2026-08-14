@@ -9,7 +9,8 @@
   - **✅ 真實抓包**：從 `data/raw-capture.jsonl`（`CHAT_MONITOR_RAW_CAPTURE=1` 存下的真實事件）複製，只刪掉不影響結構的個資（頻道 ID 等不影響閱讀的留著方便核對）。
   - **🔧 程式碼推導**：目前還沒抓到真實樣本，根據 connector 程式碼的欄位對應手動建構，**未經真實資料驗證**，欄位型別/格式可能跟真實情況有出入。
   - 兩種都會標抓包/撰寫日期。清單以 2026-08-13 的 `raw-capture.jsonl`（約 330 行）為準，之後跑久了應該會補到更多真實樣本，尤其是 SOOP 的抖內/訂閱類事件。
-- 各事件類型的驗證狀態總表在 [README.md](../README.md#各事件類型驗證狀態2026-08-13)，這份文件是它的細節版（附實際 raw data）。
+- 各事件類型的驗證狀態總表（含 `event_type`、需不需要 Token/Key）**只**維護在 [README.md](../README.md#各事件類型與驗證狀態2026-08-15)——這份文件不重複記錄「驗證到什麼程度」這種判斷性結論，只放實際 raw data 跟欄位對應，兩份文件各管各的，改狀態只需要改 README 那一份。
+- 未實作的功能構想／待確認的協定細節追蹤在 [GitHub Issues](https://github.com/csongs/YoliaWatching/issues)，這份文件跟 README 都不重複列成一份清單。
 
 ## 共通結構：events 表 → UI
 
@@ -312,7 +313,7 @@ UI 呈現：「其他系統通知(未分類)」標籤，灰色斜體行。
 
 Connector：[connectors/youtube.js](../connectors/youtube.js)（`youtube-chat-next`，爬公開網頁聊天室，免 API Key）。
 
-**已知限制**：這個套件只給得出 `superchat`/`isMembership` 布林值等有限欄位，分不出官方 API 才有的「新加入/連續/贈禮會員」「Super Sticker vs Super Chat 的 tier」等細節，見 [labels.js](../public/labels.js) 的 `PLATFORM_DONATION_NOTES`。
+**已知限制**：這個套件只給得出 `superchat`/`isMembership` 布林值等有限欄位，分不出「Super Sticker vs Super Chat 的 tier」等細節，見 [labels.js](../public/labels.js) 的 `PLATFORM_DONATION_NOTES`。一般會員留言（見下面 `chat`）仍然分不出「新加入/連續/贈禮」是哪一種；但「贈送會籍」這個動作本身（贈送方觸發、每個實際領取的人各自觸發）已經另外接上，見下面 `membership_gift`/`membership_gift_received` 兩節——這兩個不是 `ChatItem` 的欄位，是繞開套件本身解析邏輯、直接處理原始 action 才拿到的。
 
 ### chat — 一般訊息（含會員留言）
 
@@ -380,6 +381,79 @@ UI 呈現：「Super Chat(付費醒目訊息)」標籤 + 橘色底 + `+NT$70.00`
 存進 `events` 表：`message` = `null`（貼圖沒有文字，`classifyItem()` 特意不塞純文字版本）；`amount` = 金額字串；`extra` = `{ color, sticker: superchat.sticker.alt, messageParts: null }`（貼圖圖片本身目前**沒有**渲染進 `messageParts`，只存了 `alt` 文字說明，demo 頁看不到貼圖圖片，只看得到金額跟使用者名稱）。
 
 UI 呈現：「Super Sticker(付費貼圖)」標籤 + 橘色底 + 金額，訊息內容留空。
+
+### membership_gift — 贈送會籍（購買方）
+
+分類：`donation`。原始 action 類型是 `liveChatSponsorshipsGiftPurchaseAnnouncementRenderer`，**不是** `ChatItem` 的欄位——`youtube-chat-next` 的 parser 完全沒有處理這種 renderer 的分支，遇到會直接回傳 `null`、整個事件被丟掉；這裡繞開套件本身的解析邏輯，在 [`patchYoutubeParser()`](../connectors/youtube.js) monkey-patch 裡直接重新掃一次原始 `actions`，把它組成一個「假的」`ChatItem`（帶 `giftPurchase: { count }` 標記）塞進 `items` 陣列，讓它跟其他事件走同一條 `classifyItem()` 路徑。一次贈送 N 份只會觸發**一個**這種事件（不是重複 N 次）。
+
+✅ 真實抓包範例（2026-08-14，使用者「@瓢箪_400」贈送 1 份）：
+
+```json
+{
+  "addChatItemAction": {
+    "item": {
+      "liveChatSponsorshipsGiftPurchaseAnnouncementRenderer": {
+        "id": "ChwKGkNPVFBuS3J0b0pZREZZbE1UQWdkOGhJbFVB",
+        "timestampUsec": "1786735755115732",
+        "authorExternalChannelId": "UCoQE7Td1ZVS8Z2bo2EJweQg",
+        "header": {
+          "liveChatSponsorshipsHeaderRenderer": {
+            "authorName": {"simpleText": "@瓢箪_400"},
+            "primaryText": {
+              "runs": [
+                {"text": "Sent ", "bold": true},
+                {"text": "1", "bold": true},
+                {"text": " ", "bold": true},
+                {"text": "鈴原るる【にじさんじ所属】", "bold": true},
+                {"text": " gift memberships", "bold": true}
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+`primaryText.runs` 是「Sent {count} {方案名稱} gift memberships」這種樣板文字，`count` 是獨立的一個 run（不管顯示語系怎麼變，數字本身不受語系影響）——[`extractGiftCount()`](../connectors/youtube.js) 找 `runs` 裡第一個文字內容是純數字（`/^\d+$/`）的 run，不比對樣板文字本身，跨語系應該也能用（只用一筆英文樣本驗證過，其他語系尚未實測）。`鈴原るる【にじさんじ所属】` 這段（真實樣本裡數字 run 後面、最後一個 run 前面的部分）不是頻道/社群名稱，是**會籍方案名稱**——2026-08-15 使用者截圖對照真實 YouTube 畫面（顯示「贈送了 1 個『鈴原るる【にじさんじ所属】』會籍」）確認過；[`extractGiftPlanName()`](../connectors/youtube.js) 取「數字 run 之後、最後一個 run 之前」的所有 run 文字合併，只用這一筆樣本反推位置，其他語系的樣板順序未必一樣。
+
+存進 `events` 表：`username` = 贈送者（`header.liveChatSponsorshipsHeaderRenderer.authorName.simpleText`）；`message` = `` `「鈴原るる【にじさんじ所属】」會籍` ``（抓不到方案名稱時為 `null`）；`amount` = `String(count)`（這裡是 `"1"`，只有份數，YouTube 原始封包沒有揭露單價/總金額）；`extra` = `{ planName: "鈴原るる【にじさんじ所属】" }`（抓不到方案名稱時 `extra` 為 `null`）。
+
+UI 呈現：「贈送會籍(購買方)」標籤 + 橘色底 + `+1` + 訊息顯示「「鈴原るる【にじさんじ所属】」會籍」。
+
+### membership_gift_received — 贈送會籍（領取方）
+
+分類：`donation`。原始 action 類型是 `liveChatSponsorshipsGiftRedemptionAnnouncementRenderer`，處理方式跟上面 `membership_gift` 一樣是繞開套件、直接處理原始 action。一次贈送 N 份會對應觸發 N 個這種事件，每個實際領到的人各一個，緊接在對應的 `membership_gift` 事件之後送達（這筆真實樣本相隔約 10 秒）。
+
+✅ 真實抓包範例（2026-08-14，緊接在上面 `membership_gift` 範例之後，「@cherub1189」領取）：
+
+```json
+{
+  "addChatItemAction": {
+    "item": {
+      "liveChatSponsorshipsGiftRedemptionAnnouncementRenderer": {
+        "id": "ChwKGkNOT013ckR0b0pZREZSZDVxd0lkeUhnd2xR",
+        "timestampUsec": "1786735756347018",
+        "authorExternalChannelId": "UCuQzh_trznsrVFDlLjvy9cQ",
+        "authorName": {"simpleText": "@cherub1189"},
+        "message": {
+          "runs": [
+            {"text": "received a gift membership by ", "italics": true},
+            {"text": "@瓢箪_400", "bold": true, "italics": true}
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+跟 `membership_gift` 的結構不一樣：`authorName` 本身就是**領取者**（不是贈送者），贈送者名字要從 `message.runs` 裡挖——目前的做法是直接取最後一個 run 的文字（這筆真實樣本裡就是加粗那個 `@瓢箪_400`），只用這一筆樣本驗證過位置一定是最後一個。
+
+存進 `events` 表：`username` = 領取者（`authorName.simpleText`）；`message` = `` `← @瓢箪_400` ``（贈送者名字，比照 Twitch `gift_item`/`subgift` 用箭頭指出對方的呈現方式）；`amount` = `null`；`extra` = `{ fromUsername: "@瓢箪_400" }`。
+
+UI 呈現：「贈送會籍(領取方)」標籤 + 橘色底，訊息顯示「← @瓢箪_400」，沒有金額數字。
 
 ---
 
