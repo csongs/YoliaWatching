@@ -377,7 +377,8 @@
     $appVersion.textContent = `v${version}`;
 
     const prefs = await (await fetch('/api/prefs')).json();
-    const showTimestamps = prefs.showTimestamps ?? true; // 沒存過就預設顯示
+    // OBS 疊加模式網址帶 &ts=0/1 可覆寫，優先於存起來的偏好設定(OBS 模式沒有勾選框可以按)。
+    const showTimestamps = window.OBS_TIMESTAMPS_OVERRIDE ?? (prefs.showTimestamps ?? true); // 沒存過就預設顯示
     $toggleTimestamps.checked = showTimestamps;
     $chatLog.classList.toggle('hide-timestamps', !showTimestamps);
   }
