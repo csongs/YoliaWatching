@@ -7,8 +7,12 @@
 // superChatEvent / superStickerEvent / newSponsorEvent / memberMilestoneChatEvent /
 // membershipGiftingEvent / giftMembershipReceivedEvent 六種,這個套件是爬公開網頁聊天室,ChatItem
 // 只給 superchat?:{amount,color,sticker?} 與 isMembership:boolean 兩個欄位,沒有 tier 數字也分不出
-// 「新加入/連續/贈禮」——因此這裡只留 chat(一般會員留言會多帶 extra.isMembership)、superchat、
-// supersticker 三種事件,不再產生 membership_new/_milestone/_gift/_gift_received。
+// 一般會員留言是「新加入/連續」哪一種——這部分維持只有 chat(帶 extra.isMembership)、
+// superchat、supersticker 三種事件,不產生 membership_new/_milestone。
+// 2026-08-15:贈送會籍(membershipGiftingEvent/giftMembershipReceivedEvent 對應的兩個事件)例外
+// ——用真實抓包樣本核對過,YouTube 原始封包裡這兩個是獨立的 action 類型(不是 ChatItem 的欄位,
+// 見下面 patchYoutubeParser() 的 monkey-patch),繞開套件本身的限制另外接上,產生
+// membership_gift(購買方)/membership_gift_received(領取方)兩種事件。
 const { LiveChat, NotLiveError } = require('youtube-chat-next');
 const { debugLog } = require('../lib/debugLog');
 const { RAW_CAPTURE, rawCapture } = require('../lib/rawCapture');
@@ -22,25 +26,96 @@ const NOT_LIVE_RETRY_MS = 30_000; // 套件的 start() 失敗或 loop 結束後�
 // parse 階段就把資料丟了。用 monkey-patch 補回來:parseChatData() 執行完之後,自己重新掃一次
 // 原始 actions 把 headerSubtext 文字挖出來,用 id 對回對應的 ChatItem,不影響套件原本的行為。
 // 這是修補第三方套件的內部實作細節,不是公開 API,套件更新後這段可能需要跟著調整。
-function patchMembershipHeaders() {
+//
+// 2026-08-15:同一個 monkey-patch 點順便處理「贈送會籍」。YouTube 原始封包裡贈送會籍有專屬的
+// action 類型:liveChatSponsorshipsGiftPurchaseAnnouncementRenderer(購買方,一次贈送 N 份時只
+// 觸發這一個事件)、liveChatSponsorshipsGiftRedemptionAnnouncementRenderer(領取方,每個實際
+// 領到的人各自觸發一個)。youtube-chat-next 的 rendererFromAction() 完全沒有這兩種的分支,回傳
+// null,連 ChatItem 都不會被建出來——一般的 chat.on('chat', ...) 永遠不會為這種事件觸發。
+// 2026-08-14 用 CHAT_MONITOR_RAW_CAPTURE 實測抓到真實樣本(使用者「@瓢箪_400」贈送 1 份、
+// 「@cherub1189」領取,兩個 action 相隔約 10 秒送達)核對過欄位路徑:
+//   - 購買方:header.liveChatSponsorshipsHeaderRenderer.authorName(購買者)、
+//     .primaryText.runs 是「Sent {count} {社群名稱} gift memberships」樣板,count 是純數字獨立
+//     一個 run(不管顯示語系文字部分怎麼變,數字本身跟語系無關,用「純數字」找出那個 run,不用
+//     比對樣板文字本身)。
+//   - 領取方:authorName 本身就是領取者、message.runs 是「received a gift membership by {贈送
+//     者}」,贈送者名字是最後一個 run。這兩個 renderer 直接掛在 addChatItemAction.item 底下,
+//     不像會員留言需要另外對 id——這裡直接把它們組成「假的」ChatItem 塞進 items 陣列,讓它們
+//     跟其他事件走同一條 chat.on('chat', ...) → classifyItem() 路徑,不用另外接一條 pipeline。
+function extractGiftCount(runs) {
+  const numericRun = (runs ?? []).find((r) => /^\d+$/.test((r.text ?? '').trim()));
+  return numericRun ? Number(numericRun.text.trim()) : null;
+}
+
+// 2026-08-15:唯一一筆真實樣本(英文介面)的 primaryText.runs 是「Sent {count} {方案名稱}
+// gift memberships」這種樣板,方案名稱夾在數字 run 之後、最後一個 run(結尾的「gift
+// memberships」字樣,使用者截圖對照真實 YouTube 畫面確認這段文字是「XX 會籍」的方案名稱,
+// 不是頻道/社群名稱)之前——只用這一筆樣本反推位置,其他語系的樣板文字順序未必一樣,之後抓到
+// 別的語系樣本要回頭確認這個位置假設還成不成立。
+function extractGiftPlanName(runs) {
+  if (!runs?.length) return null;
+  const countIdx = runs.findIndex((r) => /^\d+$/.test((r.text ?? '').trim()));
+  if (countIdx === -1 || countIdx + 1 >= runs.length) return null;
+  const name = runs.slice(countIdx + 1, runs.length - 1).map((r) => r.text ?? '').join('').trim();
+  return name || null;
+}
+
+function patchYoutubeParser() {
   const parserModule = require('youtube-chat-next/dist/parser.js');
-  if (parserModule.__yoliaPatchedForMembershipHeader) return;
+  if (parserModule.__yoliaPatchedYoutubeParser) return;
   const originalParseChatData = parserModule.parseChatData;
   parserModule.parseChatData = function patchedParseChatData(data) {
     const [items, continuation, timeoutMs] = originalParseChatData(data);
     const actions = data?.continuationContents?.liveChatContinuation?.actions ?? [];
     for (const action of actions) {
-      const renderer = action?.addChatItemAction?.item?.liveChatMembershipItemRenderer;
-      const runs = renderer?.headerSubtext?.runs;
-      if (!renderer?.id || !runs) continue;
-      const item = items.find((i) => i.id === renderer.id);
-      if (item) item.membershipHeader = runs.map((r) => r.text ?? '').join('');
+      const item = action?.addChatItemAction?.item;
+      const membershipRenderer = item?.liveChatMembershipItemRenderer;
+      const runs = membershipRenderer?.headerSubtext?.runs;
+      if (membershipRenderer?.id && runs) {
+        const existing = items.find((i) => i.id === membershipRenderer.id);
+        if (existing) existing.membershipHeader = runs.map((r) => r.text ?? '').join('');
+      }
+
+      const purchaseRenderer = item?.liveChatSponsorshipsGiftPurchaseAnnouncementRenderer;
+      const redemptionRenderer = item?.liveChatSponsorshipsGiftRedemptionAnnouncementRenderer;
+      if (RAW_CAPTURE && purchaseRenderer) rawCapture('youtube', 'liveChatSponsorshipsGiftPurchaseAnnouncementRenderer', action);
+      if (RAW_CAPTURE && redemptionRenderer) rawCapture('youtube', 'liveChatSponsorshipsGiftRedemptionAnnouncementRenderer', action);
+
+      const header = purchaseRenderer?.header?.liveChatSponsorshipsHeaderRenderer;
+      if (purchaseRenderer?.id && header?.authorName?.simpleText) {
+        items.push({
+          id: purchaseRenderer.id,
+          author: { name: header.authorName.simpleText, channelId: purchaseRenderer.authorExternalChannelId },
+          message: [],
+          isMembership: false,
+          isOwner: false,
+          isVerified: false,
+          isModerator: false,
+          timestamp: new Date(Number(purchaseRenderer.timestampUsec) / 1000),
+          giftPurchase: { count: extractGiftCount(header.primaryText?.runs), planName: extractGiftPlanName(header.primaryText?.runs) },
+        });
+      }
+
+      if (redemptionRenderer?.id && redemptionRenderer.authorName?.simpleText) {
+        const gifterRun = redemptionRenderer.message?.runs?.[redemptionRenderer.message.runs.length - 1];
+        items.push({
+          id: redemptionRenderer.id,
+          author: { name: redemptionRenderer.authorName.simpleText, channelId: redemptionRenderer.authorExternalChannelId },
+          message: [],
+          isMembership: false,
+          isOwner: false,
+          isVerified: false,
+          isModerator: false,
+          timestamp: new Date(Number(redemptionRenderer.timestampUsec) / 1000),
+          giftRedemption: { fromUsername: gifterRun?.text?.trim() || null },
+        });
+      }
     }
     return [items, continuation, timeoutMs];
   };
-  parserModule.__yoliaPatchedForMembershipHeader = true;
+  parserModule.__yoliaPatchedYoutubeParser = true;
 }
-patchMembershipHeaders();
+patchYoutubeParser();
 
 // author.badge.label 目前見過三種格式:「New member」/「Member (N months)」(2026-08-13,237
 // 筆真實樣本)/「Member (N year(s))」(2026-08-13 額外抓到一筆「Member (1 year)」,YouTube 滿一年
@@ -87,6 +162,24 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
     const text = messageToText(item.message);
     const messageParts = messageToParts(item.message);
 
+    if (item.giftPurchase) {
+      return {
+        ...base,
+        eventType: 'membership_gift',
+        message: item.giftPurchase.planName ? `「${item.giftPurchase.planName}」會籍` : null,
+        amount: item.giftPurchase.count != null ? String(item.giftPurchase.count) : null,
+        extra: item.giftPurchase.planName ? { planName: item.giftPurchase.planName } : null,
+      };
+    }
+    if (item.giftRedemption) {
+      return {
+        ...base,
+        eventType: 'membership_gift_received',
+        message: item.giftRedemption.fromUsername ? `← ${item.giftRedemption.fromUsername}` : null,
+        amount: null,
+        extra: { fromUsername: item.giftRedemption.fromUsername },
+      };
+    }
     if (item.superchat) {
       const isSticker = !!item.superchat.sticker;
       return {
@@ -100,7 +193,7 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
     if (item.isMembership) {
       // 2026-08-13 用 CHAT_MONITOR_RAW_CAPTURE 實測 237 筆真實會員留言發現:author.badge.label
       // 每一則會員訊息都有(不用等罕見的加入/里程碑系統通知),格式穩定只有「New member」/
-      // 「Member (N months)」兩種,比 membershipHeader(patchMembershipHeaders() 補的
+      // 「Member (N months)」兩種,比 membershipHeader(patchYoutubeParser() 補的
       // headerSubtext,同一批樣本一次都沒出現過,因為那個欄位只有系統通知才有)可靠得多,
       // 改成主要來源;membershipHeader 保留當補充,萬一哪天真的遇到系統通知可能有更完整的文字。
       const badgeLabel = item.author?.badge?.label ?? null;

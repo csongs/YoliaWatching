@@ -122,11 +122,14 @@ SOOP 另有「官方模式」（需要 SOOP 官方 API Key）完全未實作，�
 | 平台 | 事件 | `event_type` | 狀態 | 需要 Token/Key？ | 說明 |
 |---|---|---|---|---|---|
 | YouTube | 一般聊天 | `chat` | ✅ 驗證過 | 否 | 多次收到真實訊息 |
-| YouTube | Super Chat/Sticker | `superchat`/`supersticker` | ⚠️ 沒驗證過 | 否 | 照套件型別定義寫的，沒收過真實事件確認金額/顏色欄位 |
+| YouTube | Super Chat（文字） | `superchat` | ✅ 驗證過 | 否 | 真實樣本確認 `amount`/`color` 欄位；跟 `isMembership` 可能同時為真時目前只走 `superchat` 分支，會員資訊會遺失（已知落差，見 `docs/event-types.md`） |
+| YouTube | Super Sticker（貼圖） | `supersticker` | ⚠️ 沒驗證過 | 否 | 還沒抓到真實樣本；跟 `superchat` 共用同一個 raw capture tag，`CHAT_MONITOR_RAW_CAPTURE_SKIP` 不能加 `youtube:superchat`，否則連這個也一起濾掉 |
 | YouTube | 會員留言 | `chat`（`extra.isMembership`） | ✅ 驗證過 | 否 | 129 則真實會員聊天，欄位正確 |
 | YouTube | 會員月數 | `chat`（`extra.membershipMonths`） | ✅ 驗證過 | 否 | 237 筆真實驗證，含「New member」/「Member (N months)」/「Member (N year(s))」三種格式 |
 | YouTube | 里程碑通知文字 | `chat`（`extra.membershipHeader`） | ⚠️ 沒驗證過 | 否 | 只確認一般會員聊天正確回傳 `null`，沒遇過真正的里程碑事件 |
-| YouTube | 訂閱／贈送訂閱 | — | 📦 套件不支援 | 否 | `youtube-chat-next` 資料源沒有這個資訊，換官方 API 才有可能；追蹤在 GitHub Issues |
+| YouTube | 訂閱（一般訂閱，非贈送） | — | 📦 套件不支援 | 否 | `youtube-chat-next` 資料源沒有這個資訊，換官方 API 才有可能；追蹤在 GitHub Issues |
+| YouTube | 贈送會籍(購買方) | `membership_gift` | ✅ 驗證過 | 否 | 2026-08-15 真實封包驗證，`amount` = 份數，`extra.planName` = 會籍方案名稱（截圖對照真實畫面確認過文字意思）；不是 `ChatItem` 欄位，繞開套件另外處理原始 action，見 `connectors/youtube.js` 的 `patchYoutubeParser()` |
+| YouTube | 贈送會籍(領取方) | `membership_gift_received` | ✅ 驗證過 | 否 | 同上，只有一筆真實樣本，贈送者名字用「message.runs 最後一個 run」抓，還沒有多筆樣本驗證這個位置一定固定 |
 | YouTube | 聊天表情符號圖片渲染 | `chat`（`extra.messageParts`） | ✅ 驗證過 | 否 | 真實 `:face-blue-smiling:` 樣本驗證過 |
 | Twitch | 一般聊天 | `chat` | ✅ 驗證過 | 否 | 多次收到真實訊息 |
 | Twitch | 頻道點數兌換（醒目留言，有文字） | `chat_highlight` | ⚠️ 沒驗證過 | 否 | 跟一般 `PRIVMSG` 走同一路徑理論上沒問題，但沒有專門拿真實兌換訊息驗證過 |
@@ -226,7 +229,9 @@ shortcode），存在事件的 `extra.messageParts`（文字/表情圖片交錯�
 [GitHub Issues](https://github.com/csongs/YoliaWatching/issues)（`enhancement`／
 `needs-verification`／`limitation` 標籤），不在這裡重複列一份——README 只保留「現在程式碼
 實際上做得到什麼」（見上面「各事件類型與驗證狀態」），至於「以後可能要做什麼」一律去
-Issues 找，避免同一件事要維護兩個地方。目前追蹤中的項目大致有：YouTube 分不出贈禮/里程碑
-會員、YouTube superchat+會員同時為真時的顯示落差、SOOP 官方 API 模式、SOOP `gift_item` 的
+Issues 找，避免同一件事要維護兩個地方。目前追蹤中的項目大致有：YouTube 一般會員留言分不出
+「新加入/連續/贈禮」是哪一種（贈送會籍這個動作本身已經另外接上，見上面 `membership_gift`/
+`membership_gift_received`，這裡剩下的是「已經在聊天的會員，事後回頭看是不是被贈送的」分不出來）、
+YouTube superchat+會員同時為真時的顯示落差、SOOP 官方 API 模式、SOOP `gift_item` 的
 `itemType` 對應表、SOOP `subscribe` 新訂閱協定未確認、SOOP OGQ 表情貼圖無圖片渲染、Twitch
 頻道點數兌換（無文字版）需要 EventSub、Twitch Cheermote 圖片/動畫需要 Client-ID。
