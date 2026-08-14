@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <title>Chat Monitor 測試頁 — Twitch / YouTube / SOOP</title>
+<script>
+  // OBS 疊加模式：網址加 ?obs=1，只留聊天訊息、透明背景，給 OBS Browser Source 用。
+  // 寬度由 OBS Browser Source 自己的寬高設定決定(這裡沒有固定寬度/max-width),故可自由調整。
+  if (new URLSearchParams(location.search).get('obs') === '1') {
+    document.documentElement.classList.add('obs');
+  }
+</script>
 <style>
   :root {
     --bg: #0f1115; --panel: #171a21; --panel2: #1f2330; --border: #2a2f3d;
@@ -111,6 +118,16 @@
   .amount { color: var(--donation); font-weight: 700; margin-left: 6px; }
   .chat-emoji { height: 1.4em; vertical-align: middle; margin: 0 1px; }
   .empty-hint { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+
+  /* OBS 疊加模式(見上面 <head> 的 obs class 判斷)：只留聊天訊息本身,背景透明,
+     不設寬度,交給 OBS Browser Source 的寬高設定自由調整。 */
+  html.obs body { background: transparent; overflow: hidden; }
+  html.obs header, html.obs .col-side, html.obs .chat-toolbar { display: none; }
+  html.obs .layout { grid-template-columns: 1fr; gap: 0; padding: 0; height: 100vh; }
+  html.obs .chat-window { height: 100vh; background: transparent; border: none; border-radius: 0; }
+  html.obs .chat-log { background: transparent; }
+  /* 透明疊加在遊戲/攝影機畫面上時文字容易糊掉,補陰影撐可讀性。 */
+  html.obs .chat-line, html.obs .empty-hint { text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.7); }
 </style>
 </head>
 <body>
