@@ -81,6 +81,16 @@ function patchYoutubeParser() {
       if (RAW_CAPTURE && purchaseRenderer) rawCapture('youtube', 'liveChatSponsorshipsGiftPurchaseAnnouncementRenderer', action);
       if (RAW_CAPTURE && redemptionRenderer) rawCapture('youtube', 'liveChatSponsorshipsGiftRedemptionAnnouncementRenderer', action);
 
+      // 2026-08-15:「XX 和他們的觀眾剛剛加入」這種類似 Twitch Raid 的系統訊息(YT 社群俗稱
+      // 「降落」),原始封包類型是 liveChatViewerEngagementMessageRenderer——youtube-chat-next
+      // 的型別定義有列出這個 key(dist/types/yt-response.d.ts),但 rendererFromAction() 完全
+      // 沒有處理它的分支,一樣會被丟掉、chat.on('chat', ...) 不會觸發。chat-downloader 的
+      // youtube.py 註記這個 renderer 也被拿來顯示「Live Chat 重播已開啟」之類的其他系統訊息,
+      // 不是只有降落專用,還沒有真實樣本核對過欄位長怎樣、能不能分辨是哪一種——先只抓原始封包,
+      // 不嘗試解析,等真的抓到之後再回頭比照 membership_gift 的做法設計解析邏輯。
+      const engagementRenderer = item?.liveChatViewerEngagementMessageRenderer;
+      if (RAW_CAPTURE && engagementRenderer) rawCapture('youtube', 'liveChatViewerEngagementMessageRenderer', action);
+
       const header = purchaseRenderer?.header?.liveChatSponsorshipsHeaderRenderer;
       if (purchaseRenderer?.id && header?.authorName?.simpleText) {
         items.push({
