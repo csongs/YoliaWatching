@@ -117,8 +117,10 @@
   .tag.youtube { background: var(--youtube); }
   .tag.soop { background: var(--soop); }
   .tag.type { background: var(--chat); color: var(--muted); }
+  .tag.sim { background: var(--accent); }
   .chat-line.donation { background: rgba(255,176,32,.08); border-left: 2px solid var(--donation); padding-left: 8px; }
   .chat-line.system { color: var(--muted); font-style: italic; }
+  .chat-line.simulated { outline: 1px dashed var(--accent); outline-offset: -1px; }
   .time { color: inherit; opacity: .6; font-size: 11px; margin-right: 6px; cursor: default; }
   .chat-log.hide-timestamps .time { display: none; }
   .uname { font-weight: 700; margin-right: 4px; }
@@ -147,6 +149,7 @@
   <h1>Chat Monitor 測試頁</h1>
   <span class="sub">監聽 Twitch / YouTube / SOOP 的聊天、抖內、特殊訊息事件，寫入本機 SQLite</span>
   <span class="version" id="appVersion"></span>
+  <a href="/simulate.html" style="color:var(--accent);font-size:12px;text-decoration:none;">🎭 模擬事件工具</a>
 </header>
 
 <div class="layout">

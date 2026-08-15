@@ -41,6 +41,7 @@ const db = require('./db');
 const { createTwitchConnector } = require('./connectors/twitch');
 const { createYoutubeConnector } = require('./connectors/youtube');
 const { createSoopConnector } = require('./connectors/soop');
+const Labels = require('./public/labels.js');
 
 const PORT = process.env.CHAT_MONITOR_PORT || 3100;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -66,6 +67,75 @@ function handleEvent(evt) {
   const saved = db.insertEvent(evt);
   if (!saved) return; // 重複事件(dedup_key 已存在),不廣播
   broadcast({ type: 'event', data: saved });
+}
+
+// 每個 event_type 的模擬預設值——直接照抄 docs/event-types.md 記錄的真實抓包/程式碼推導格式
+// (欄位名稱、有沒有值、字串長怎樣),不是隨便塞。目的是讓使用者(或呼叫 API 的外部工具)什麼都
+// 不用填就能得到格式正確的假事件——不用自己去查文件、手寫 extra 的 JSON 結構,這是「根據處理方
+// 的格式模擬」這個要求的落地方式。username 統一用通用的「模擬XX」字樣(不直接照抄文件裡真實
+// 使用者的暱稱),避免看起來像是真的有人做了這個動作。
+// message 故意在好幾個類型明寫 null(raid/submysterygift/supersticker/emoticon/三種 SOOP 抖內/
+// subscribe)——這幾種真實情況下這個欄位就是沒有訊息文字(只有金額/人數/使用者名稱),不寫的話
+// 會落到 buildSimulatedEvent() 的通用備援文字,畫面上會多出真實事件不會出現的一句話,失去
+// 「照真實格式模擬」的意義。
+const SIMULATE_FIXTURES = {
+  // --- Twitch(見 docs/event-types.md「Twitch」章節)---
+  chat_highlight: { message: '(頻道點數兌換的醒目留言內容)' },
+  cheer: { message: 'Cheer100 加油加油！', amount: '100', extra: { badges: { bits: '1000' }, color: '#FF0000', messageParts: null } },
+  sub: { amount: null, extra: { plan: '1000', multimonthDuration: null } }, // 一般單月新訂閱沒有 amount,見 sub 章節
+  resub: { message: '感謝陪伴這麼久！', amount: '2', extra: { plan: '1000', streakMonths: 2, multimonthDuration: null } },
+  subgift: { username: '模擬贈送者', message: '→ 模擬收禮者', amount: null, extra: { recipient: '模擬收禮者' } },
+  submysterygift: { message: null, amount: '5' },
+  raid: { message: null, amount: '42' }, // amount 語意是觀眾數,不是金額
+  announcement: { message: '這是一則公告內容（原生 /announce）', extra: { msgId: 'announcement', color: 'PRIMARY' } },
+  usernotice_other: { extra: { msgId: 'viewermilestone', color: null } },
+
+  // --- YouTube(見 docs/event-types.md「YouTube」章節)---
+  superchat: { message: '這是一則 Super Chat 留言', amount: 'NT$70.00', extra: { color: '#00E5FF', sticker: null, messageParts: null } },
+  supersticker: { message: null, amount: 'NT$100.00', extra: { color: '#FF6D00', sticker: ':some-sticker:', messageParts: null } },
+  membership_gift: { username: '模擬贈送者', message: '「模擬會籍方案」會籍', amount: '1', extra: { planName: '模擬會籍方案' } },
+  membership_gift_received: { username: '模擬領取者', message: '← 模擬贈送者', amount: null, extra: { fromUsername: '模擬贈送者' } },
+
+  // --- SOOP(見 docs/event-types.md「SOOP」章節)---
+  emoticon: { message: null, extra: { userId: 'simuser(1)', emoticonId: '65863a0325db1' } },
+  text_donation: { message: null, amount: '7', extra: { fanClubOrdinal: '0' } },
+  video_donation: { message: null, amount: '7', extra: { fanClubOrdinal: '0' } },
+  ad_balloon_donation: { message: null, amount: '1', extra: { fanClubOrdinal: '13972' } },
+  subscribe: { message: null, amount: '2', extra: { tier: 1 } }, // amount 語意是月數,不是金額
+  gift_item: { username: '模擬贈送者', message: '→ 模擬收禮者', amount: null, extra: { toUsername: '模擬收禮者', fromUserId: '1234567', toUserId: '7654321', itemType: 101 } },
+  notification: { username: null, message: '主播自訂的系統通知文字' }, // 系統通知沒有發送者,見 notification 章節
+};
+
+// 模擬事件——不進 insertEvent()/SQLite(不跟真實歷史混在一起,「搜尋歷史訊息」也不會撈到假資料),
+// 直接組一個跟 db.insertEvent() 回傳列同形狀的物件,原封不動走 broadcast(),讓 demo.js 完全不用
+// 改就能照樣渲染——這是「模擬」機制存在的意義:外部工具(curl/瀏覽器 console/獨立小工具)呼叫這
+// 支 API 就能在畫面上預覽任何事件類型長怎樣,不用真的等一筆抖內或訂閱發生。
+// simulated:true 這個額外欄位是唯一跟真實事件的差異,demo.js 用它加一個「模擬」標籤區分。
+// 三層覆寫順序:呼叫端傳的 overrides > SIMULATE_FIXTURES 的格式正確預設 > 通用備援值——用
+// `!== undefined` 而不是 `??`,是因為 fixture 故意把某些欄位設成 null(例如 notification 的
+// username、sub 的 amount)代表「這個類型真實情況就是沒有這個值」,不能被 `??` 當成「沒設定」
+// 又跳到下一層備援。
+function buildSimulatedEvent(eventType, overrides = {}) {
+  const info = Labels.EVENT_TYPE_LABELS[eventType];
+  if (!info) throw new Error(`未知的 event type: ${eventType}`);
+  const fixture = SIMULATE_FIXTURES[eventType] || {};
+  const pick = (key, fallback) => (overrides[key] !== undefined ? overrides[key] : (fixture[key] !== undefined ? fixture[key] : fallback));
+  const now = new Date().toISOString();
+  const extra = pick('extra', null);
+  return {
+    id: `sim-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    platform: overrides.platform || info.platform || 'youtube',
+    source_detail: null,
+    event_type: eventType,
+    dedup_key: null,
+    username: pick('username', '模擬使用者'),
+    message: pick('message', `這是「${info.label}」的模擬訊息，用來預覽樣式`),
+    amount: pick('amount', info.category === 'donation' ? '100' : null),
+    extra_json: extra ? JSON.stringify(extra) : null,
+    received_at: now,
+    created_at: now,
+    simulated: true,
+  };
 }
 
 function handleStatus(platform, patch) {
@@ -145,6 +215,18 @@ const server = http.createServer(async (req, res) => {
       const saved = db.saveSettings(platform, body);
       restartConnector(platform);
       return sendJson(res, 200, saved);
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  if (url.pathname.startsWith('/api/simulate/') && req.method === 'POST') {
+    const eventType = decodeURIComponent(url.pathname.split('/')[3] || '');
+    try {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const evt = buildSimulatedEvent(eventType, body);
+      broadcast({ type: 'event', data: evt });
+      return sendJson(res, 200, evt);
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }

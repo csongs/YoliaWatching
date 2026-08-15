@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Chat Monitor — 模擬事件</title>
+<style>
+  :root { --bg: #0f1115; --panel: #171a21; --border: #2a2f3d; --text: #e6e8ee; --muted: #8891a3; --accent: #5b8cff; --err: #ff7a7a; --ok: #33d17a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system,"Segoe UI",Roboto,"Noto Sans TC",sans-serif; padding: 20px; }
+  a.back { color: var(--accent); font-size: 12px; text-decoration: none; }
+  h1 { font-size: 16px; margin: 12px 0 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; max-width: 560px; line-height: 1.6; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; max-width: 560px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select, .field textarea { width: 100%; padding: 7px 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 13px; font-family: inherit; }
+  .field textarea { resize: vertical; min-height: 56px; }
+  button.send { width: 100%; padding: 9px; background: var(--accent); border: none; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  button.send:hover { filter: brightness(1.1); }
+  .status-line { font-size: 12px; margin-top: 8px; min-height: 16px; color: var(--muted); }
+  .status-line.ok { color: var(--ok); }
+  .status-line.err { color: var(--err); }
+  .log { margin-top: 16px; max-width: 560px; }
+  .log h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 8px; }
+  .log-entry { font-size: 12px; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .log-entry b { color: var(--text); }
+  .log-entry:empty::before { content: ''; }
+  #logList:empty::after { content: '（還沒送出過）'; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<a class="back" href="/">← 回聊天監控頁</a>
+<h1>模擬事件</h1>
+<div class="sub">
+  呼叫 <code>POST /api/simulate/&lt;event_type&gt;</code>（見 server.js），跟真實事件走同一條
+  WebSocket 廣播路徑——另外開一個分頁開著 <a class="back" href="/" style="display:inline">聊天監控頁</a>
+  （或 <a class="back" href="/?obs=1" style="display:inline">OBS 疊加頁</a>）就能立刻看到渲染結果。
+  <strong>不會寫進 SQLite</strong>，畫面上會多一個「模擬」標籤跟虛線外框，不會跟真實訊息搞混。
+  下面三個欄位都選填留空即可——每個事件類型背後已經照著 <code>docs/event-types.md</code>
+  記錄的真實格式帶好對應的預設值（例如選「Super Chat」會自動帶金額/顏色，不用自己去查欄位長怎樣）。
+</div>
+
+<div class="panel">
+  <div class="field">
+    <label for="eventType">事件類型</label>
+    <select id="eventType"></select>
+  </div>
+  <div class="field">
+    <label for="username">使用者名稱（留空用預設）</label>
+    <input type="text" id="username" placeholder="模擬使用者">
+  </div>
+  <div class="field">
+    <label for="message">訊息內容（留空用該類型的預設文字）</label>
+    <input type="text" id="message" placeholder="留空 = 自動帶入預設訊息">
+  </div>
+  <div class="field">
+    <label for="amount">金額/數量（留空用該類型的真實格式預設值，例如 Super Chat 會帶 "NT$70.00"）</label>
+    <input type="text" id="amount" placeholder="留空 = 自動帶入">
+  </div>
+  <button type="button" class="send" id="btnSend">送出模擬事件</button>
+  <div class="status-line" id="statusLine"></div>
+</div>
+
+<div class="log">
+  <h2>本頁已送出（不是伺服器端記錄，重新整理就清空）</h2>
+  <div id="logList"></div>
+</div>
+
+<script src="labels.js"></script>
+<script>
+(function () {
+  const L = window.ChatMonitorLabels;
+  const PLATFORMS = ['twitch', 'youtube', 'soop'];
+
+  const $eventType = document.getElementById('eventType');
+  const $username = document.getElementById('username');
+  const $message = document.getElementById('message');
+  const $amount = document.getElementById('amount');
+  const $btnSend = document.getElementById('btnSend');
+  const $statusLine = document.getElementById('statusLine');
+  const $logList = document.getElementById('logList');
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // 分組方式跟 demo.js 的 buildSearchEventTypeOptions() 一致(依 EVENT_TYPE_LABELS 的 platform
+  // 欄位分組),但這裡是單選(送一個事件),不用像搜尋那邊多一個「全部訊息」萬用選項。
+  function buildOptions() {
+    const groups = {};
+    for (const [type, info] of Object.entries(L.EVENT_TYPE_LABELS)) {
+      if (!info.platform) continue;
+      (groups[info.platform] ??= []).push({ type, label: info.label });
+    }
+    let html = `<option value="chat">一般訊息（所有平台共用）</option>`;
+    for (const p of PLATFORMS) {
+      html += `<optgroup label="${escapeHtml(L.platformLabel(p))}">`;
+      for (const { type, label } of (groups[p] || [])) html += `<option value="${escapeHtml(type)}">${escapeHtml(label)}</option>`;
+      html += `</optgroup>`;
+    }
+    $eventType.innerHTML = html;
+  }
+
+  function prependLog(evt) {
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    const time = new Date(evt.received_at).toLocaleTimeString('zh-TW', { hour12: false });
+    // notification(SOOP 系統通知)之類的類型 username 本來就是 null(見 server.js 的
+    // SIMULATE_FIXTURES),不是資料遺漏,不要顯示成字面上的 "null"。
+    div.innerHTML = `${time} <b>${escapeHtml(L.platformLabel(evt.platform))} / ${escapeHtml(L.labelFor(evt.event_type))}</b>`
+      + (evt.username ? ` — ${escapeHtml(evt.username)}` : '')
+      + (evt.message ? '：' + escapeHtml(evt.message) : '');
+    $logList.prepend(div);
+    while ($logList.children.length > 30) $logList.lastChild.remove();
+  }
+
+  async function send() {
+    const eventType = $eventType.value;
+    // username/message/amount 沒填就不放進 body,讓 server.js 的 SIMULATE_FIXTURES 接手決定
+    // 這個類型的真實格式預設值(見 server.js buildSimulatedEvent())——這個頁面完全不用碰
+    // extra 欄位的 JSON 結構,想覆寫的進階用法交給 curl 直接打 API(見 README)。
+    const body = {};
+    if ($username.value.trim()) body.username = $username.value.trim();
+    if ($message.value.trim()) body.message = $message.value.trim();
+    if ($amount.value.trim()) body.amount = $amount.value.trim();
+
+    $statusLine.textContent = '送出中…';
+    $statusLine.className = 'status-line';
+    $btnSend.disabled = true;
+    try {
+      const res = await fetch(`/api/simulate/${encodeURIComponent(eventType)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { $statusLine.textContent = '失敗：' + data.error; $statusLine.className = 'status-line err'; return; }
+      $statusLine.textContent = `✓ 已送出「${L.labelFor(eventType)}」`;
+      $statusLine.className = 'status-line ok';
+      prependLog(data);
+    } catch (e) {
+      $statusLine.textContent = '失敗：' + e.message;
+      $statusLine.className = 'status-line err';
+    } finally {
+      $btnSend.disabled = false;
+    }
+  }
+
+  $btnSend.onclick = send;
+  buildOptions();
+})();
+</script>
+</body>
+</html>

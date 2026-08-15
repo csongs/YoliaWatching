@@ -322,7 +322,7 @@
   function renderLine(evt) {
     const cat = eventCategory(evt);
     const div = document.createElement('div');
-    div.className = 'chat-line' + (cat === 'donation' ? ' donation' : cat === 'system' ? ' system' : '');
+    div.className = 'chat-line' + (cat === 'donation' ? ' donation' : cat === 'system' ? ' system' : '') + (evt.simulated ? ' simulated' : '');
     const dt = new Date(evt.received_at);
     const time = dt.toLocaleTimeString('zh-TW', { hour12: false });
     const fullDateTime = dt.toLocaleString('zh-TW', { hour12: false }); // hover 用,含日期,跨天監聽也看得出來
@@ -331,6 +331,9 @@
     // 一般聊天訊息(event_type 'chat')每則都會重複同一個灰色「一般訊息」標籤,量大時是純雜訊,
     // 省略不顯示;抖內/會員/系統通知等特殊事件的類型標籤還是保留,因為那才是使用者想一眼看到的資訊。
     const typeTag = evt.event_type === 'chat' ? '' : `<span class="tag type">${eventLabel(evt)}</span>`;
+    // 模擬事件(見 server.js 的 buildSimulatedEvent()/POST /api/simulate/:eventType)跟真實事件
+    // 走同一條 renderLine() 渲染路徑,唯一差異是這個標籤,避免使用者誤把測試訊息當成真實訊息看。
+    const simTag = evt.simulated ? `<span class="tag sim">模擬</span>` : '';
     // 2026-08-15:YouTube 會籍徽章圖示(extra.membershipBadgeIcon)——月數文字前綴已經被拿掉
     // (見上面 formatAmount 附近的說明),圖示放在使用者名稱前面,不是取代文字前綴,是額外的
     // 視覺標記,滑鼠移上去用 title 顯示文字版徽章說明(例如「Member (1 year)」)方便對照。
@@ -341,6 +344,7 @@
     // 每行時間戳顏色一致,要不要顯示交給使用者用工具列的「顯示時間戳」勾選框控制
     // (CSS 用 .chat-log.hide-timestamps .time { display:none } 整批切換,不用重繪)。
     div.innerHTML = `<span class="time" title="${fullDateTime}">${time}</span>`
+      + simTag
       + `<span class="tag ${evt.platform}">${L.platformLabel(evt.platform)}</span>`
       + typeTag
       + (evt.username ? `<span class="uname"${usernameColorStyle(evt)}>${badgeIcon}${escapeHtml(evt.username)}</span>` : '')
@@ -412,7 +416,7 @@
       const msg = JSON.parse(ev.data);
       if (msg.type === 'event') {
         appendEvent(msg.data);
-        refreshDbInfo();
+        if (!msg.data.simulated) refreshDbInfo(); // 模擬事件沒寫進 SQLite,筆數/檔案大小不會變
       } else if (msg.type === 'status') {
         status[msg.platform] = msg.data;
         renderTabs();

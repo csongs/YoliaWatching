@@ -100,6 +100,38 @@ npm run package
   可以整個平台跳過。例：`CHAT_MONITOR_RAW_CAPTURE_SKIP=youtube:membership,twitch:sub`。
   之後想重新驗證某個類型，直接從這個清單刪掉那一項即可，不用改程式碼。
 
+## 模擬事件（不用等真實訊息就能預覽渲染效果）
+
+`POST /api/simulate/<event_type>`——`event_type` 是 [public/labels.js](public/labels.js)
+`EVENT_TYPE_LABELS` 裡任一個鍵（例如 `superchat`／`sub`／`gift_item`）。伺服器組一筆假事件，
+直接走跟真實事件相同的 WebSocket 廣播路徑，demo 頁完全不用改就會照樣渲染——用途是想看某個
+事件類型（尤其抖內/會員這種平常要等很久才出現一次的）畫面上長怎樣時，不用真的等它發生。
+
+```bash
+curl -X POST http://127.0.0.1:3100/api/simulate/superchat \
+  -H "Content-Type: application/json" \
+  -d '{"username":"測試用戶","message":"hi","amount":"100"}'
+```
+
+body 全部欄位都選填（`username`/`message`/`amount`/`platform`/`extra`）——**不用自己查文件湊
+JSON**，`server.js` 的 `SIMULATE_FIXTURES` 已經照 [docs/event-types.md](docs/event-types.md)
+記錄的真實抓包/程式碼推導格式，幫每個 `event_type` 準備好格式正確的預設值（例如
+`superchat` 自動帶 `amount: "NT$70.00"`＋`extra: {color, sticker, messageParts}`，
+`notification` 自動帶 `username: null`），沒填的欄位都會落到這份預設值，只有想覆寫成特定內容
+時才需要帶對應欄位（`platform` 沒填會用 `EVENT_TYPE_LABELS` 記的平台）。**不會寫進 SQLite**
+（不跟真實歷史混在一起，「🔍 搜尋歷史訊息」也查不到假資料），只在畫面上即時顯示一次，訊息
+前面會多一個「模擬」標籤（灰底，跟真實訊息的平台/類型標籤並列）＋整行虛線外框，避免跟真實
+訊息搞混。故意不在 demo 頁面上放觸發按鈕——這支 API 本身就是給外部工具（curl／瀏覽器
+console／獨立小工具）呼叫用的，decouple 於 demo 頁的 UI。
+
+想用網頁介面觸發，開 [public/simulate.html](public/simulate.html)（`http://127.0.0.1:3100/simulate.html`，
+demo 頁右上角也有連結）：選事件類型，`username`/`message`/`amount` 三個欄位選填留空即可
+（就是用上面說的格式正確預設值），按送出就打上面這支 API。**故意沒有 `extra` 的 JSON 輸入框**
+——那是留給 fixture 自動處理的部分，這個頁面只暴露「一般人會想改」的三個欄位；真的需要覆寫
+`extra` 才需要跳出這個頁面直接用 curl 打 API。這個頁面本身不算「demo 頁的 UI」——它是獨立的
+靜態頁，跟 demo.html/demo.js 零耦合（只共用 labels.js 的事件類型清單），純粹是「呼叫 API 的
+其中一種方式」，另開分頁開著聊天監控頁（或 `?obs=1` 疊加頁）才看得到送出後的渲染結果。
+
 ## 各事件類型與驗證狀態（2026-08-15）
 
 > 這份表是三平台事件的**唯一**權威清單——涵蓋哪些事件類型、驗證到什麼程度、需不需要
