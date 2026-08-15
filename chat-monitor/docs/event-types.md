@@ -318,13 +318,13 @@ UI 呈現：「其他系統通知(未分類)」標籤，灰色斜體行。
 
 Connector：[connectors/youtube.js](../connectors/youtube.js)（`youtube-chat-next`，爬公開網頁聊天室，免 API Key）。
 
-**已知限制**：這個套件只給得出 `superchat`/`isMembership` 布林值等有限欄位，分不出「Super Sticker vs Super Chat 的 tier」等細節，見 [labels.js](../public/labels.js) 的 `PLATFORM_DONATION_NOTES`。一般會員留言（見下面 `chat`）仍然分不出「新加入/連續/贈禮」是哪一種；但「贈送會籍」這個動作本身（贈送方觸發、每個實際領取的人各自觸發）已經另外接上，見下面 `membership_gift`/`membership_gift_received` 兩節——這兩個不是 `ChatItem` 的欄位，是繞開套件本身解析邏輯、直接處理原始 action 才拿到的。
+**已知限制**：這個套件只給得出 `superchat`/`isMembership` 布林值等有限欄位，分不出「Super Sticker vs Super Chat 的 tier」等細節，見 [labels.js](../public/labels.js) 的 `PLATFORM_DONATION_NOTES`。一般會籍留言（見下面 `chat`）仍然分不出「新加入/連續/贈禮」是哪一種；但「贈送會籍」這個動作本身（贈送方觸發、每個實際領取的人各自觸發）已經另外接上，見下面 `membership_gift`/`membership_gift_received` 兩節——這兩個不是 `ChatItem` 的欄位，是繞開套件本身解析邏輯、直接處理原始 action 才拿到的。
 
-### chat — 一般訊息（含會員留言）
+### chat — 一般訊息（含會籍留言）
 
-分類：`chat`。YouTube 沒有獨立的「會員留言」`event_type`——會員留言仍然是 `event_type: 'chat'`，靠 `extra.isMembership` 旗標區分，不是另外分類，因為套件給的資訊不足以支撐一個獨立事件類型（沒有金額、沒有明確的「加入」時刻）。2026-08-14 之前 `message` 會被加上 `[會員 N 個月]`/`[新加入會員]` 這種文字前綴，使用者反應每則訊息都重複顯示太雜訊，已經拿掉——現在 `message` 就是單純的留言文字本身，跟一般聊天訊息顯示方式一致，月數/徽章資料只留在 `extra` 裡。
+分類：`chat`。YouTube 沒有獨立的「會籍留言」`event_type`——會籍留言仍然是 `event_type: 'chat'`，靠 `extra.isMembership` 旗標區分，不是另外分類，因為套件給的資訊不足以支撐一個獨立事件類型（沒有金額、沒有明確的「加入」時刻）。2026-08-14 之前 `message` 會被加上 `[會籍 N 個月]`/`[新加入會籍]` 這種文字前綴，使用者反應每則訊息都重複顯示太雜訊，已經拿掉——現在 `message` 就是單純的留言文字本身，跟一般聊天訊息顯示方式一致，月數/徽章資料只留在 `extra` 裡。
 
-✅ 真實抓包範例（2026-08-13，一般會員留言，非新加入/里程碑）：
+✅ 真實抓包範例（2026-08-13，一般會籍留言，非新加入/里程碑）：
 
 ```json
 {
@@ -345,9 +345,9 @@ Connector：[connectors/youtube.js](../connectors/youtube.js)（`youtube-chat-ne
 - `amount` = `null`
 - `extra` = `{ isMembership: true, membershipMonths: 0, membershipBadge: "New member", membershipHeader: null, messageParts }`（`messageParts` 就是訊息本身的表情符號交錯陣列，沒有額外塞前綴 part）
 
-一般非會員聊天（無表情符號）：`extra` 直接是 `null`；帶表情符號則 `extra: { messageParts }`。
+一般非會籍聊天（無表情符號）：`extra` 直接是 `null`；帶表情符號則 `extra: { messageParts }`。
 
-UI 呈現：無類型標籤（`chat` 省略），會員留言在畫面上**跟一般聊天訊息完全一樣**，看不出誰是會員／第幾個月——這是使用者明確要求拿掉前綴後的結果，月數資料還在 `extra.membershipMonths`，之後如果要重新顯示（例如做成一個小徽章而不是文字前綴）可以直接從那裡取。
+UI 呈現：無類型標籤（`chat` 省略），會籍留言在畫面上**跟一般聊天訊息完全一樣**，看不出誰有會籍／第幾個月——這是使用者明確要求拿掉前綴後的結果，月數資料還在 `extra.membershipMonths`，之後如果要重新顯示（例如做成一個小徽章而不是文字前綴）可以直接從那裡取。
 
 ### superchat — Super Chat（付費醒目訊息）
 
@@ -367,7 +367,7 @@ UI 呈現：無類型標籤（`chat` 省略），會員留言在畫面上**跟�
 
 UI 呈現：「Super Chat(付費醒目訊息)」標籤 + 橘色底 + `+NT$70.00`（`formatAmount()` 對非 `resub`/`subscribe` 類型的通用 `+amount` 格式，注意這裡是原始幣別字串直接接在 `+` 後面，不是重新格式化過的數字）。
 
-**已知落差**：`item.superchat` 跟 `item.isMembership`可能同時為真（2026-08-14 真實遇到過，一位「Member (1 year)」的會員發了一筆 `¥500` 的 Super Chat）——`classifyItem()` 目前優先走 `superchat` 分支直接 `return`，不會再檢查 `isMembership`，所以這種情況 `extra` 完全沒有 `membershipMonths`/`membershipBadge`，demo 頁看不出這位付費者同時是會員。
+**已知落差**：`item.superchat` 跟 `item.isMembership`可能同時為真（2026-08-14 真實遇到過，一位有「Member (1 year)」會籍的人發了一筆 `¥500` 的 Super Chat）——`classifyItem()` 目前優先走 `superchat` 分支直接 `return`，不會再檢查 `isMembership`，所以這種情況 `extra` 完全沒有 `membershipMonths`/`membershipBadge`，demo 頁看不出這位付費者同時有會籍。
 
 ### supersticker — Super Sticker（付費貼圖）
 
@@ -688,6 +688,6 @@ UI 呈現：「系統通知」標籤，灰色斜體行，沒有使用者名稱�
 - SOOP `subscribe` 事件可能只在「續訂」時觸發，「新訂閱」可能是完全沒被監聽到的另一個協定類型（`0091`），見 `subscribe` 章節的說明——還沒確認。
 - SOOP 一般聊天訊息裡的 `/代碼/` 表情符號（2026-08-14 已接上圖片渲染，見 `chat` 章節）涵蓋「經典」全站共用目錄（123 筆）+ 主播專屬 signature emoticon 目錄（照頻道抓，測試頻道 44 筆）兩套；獨立的 `emoticon` 事件（OGQ 雜湊 ID）仍然完全沒有圖片渲染，見 `emoticon` 章節，是目前唯一還沒解掉的表情符號缺口。
 - YouTube `supersticker` 沒有真實範例，貼圖圖片本身也沒有渲染進 `messageParts`。
-- YouTube 同一則訊息「既是 Super Chat 又是會員」時，`extra` 目前不會帶會員資訊，見 `superchat` 章節。
+- YouTube 同一則訊息「既是 Super Chat 又有會籍」時，`extra` 目前不會帶會籍資訊，見 `superchat` 章節。
 - Twitch `raid`／`cheer`／`resub` 沒有真實範例。
 - Twitch 完全匿名模式下 cheer/sub/resub/raid 是否正常接收，只驗證過協定邏輯（tmi.js 不因認證方式改變 CAP REQ 範圍），沒有在真正匿名連線下實測收到過這幾種事件。

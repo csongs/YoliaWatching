@@ -72,7 +72,7 @@
       title: 'YouTube',
       note: 'Super Chat / Super Sticker 依實際付款金額分色階(金額越高,訊息在聊天室置頂時間越久、顏色越顯眼);'
           + '這裡監聽的是公開網頁聊天室(youtube-chat-next,免 API Key),只能拿到金額字串與顏色,拿不到'
-          + '官方 API 才有的 amountMicros/tier 數字。會員(Membership)的一般留言只知道「是不是會員」,'
+          + '官方 API 才有的 amountMicros/tier 數字。會籍(Membership)的一般留言只知道「有沒有會籍」,'
           + '分不出這個人「新加入/連續/贈禮」是哪一種(欄位含義依 youtube-chat-next 3.1.0 型別定義,'
           + '2026-08-12 查)；但「贈送會籍」這個動作本身(不是事後判斷某人是不是被贈送的)已經另外'
           + '接上——贈送方觸發「贈送會籍(購買方)」、每個實際收到的人各自觸發「贈送會籍(領取方)」,'

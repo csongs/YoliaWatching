@@ -3,11 +3,11 @@
 // 100 次配額,逼得未開播時要 15 分鐘才查一次;見已刪除的 lib/youtubePollPolicy.js)。換套件後
 // YouTube 分頁不再需要填 API Key,只要 handle 或頻道 ID。
 //
-// 代價(2026-08-12 查證,youtube-chat-next 3.1.0 型別定義):官方 API 能把付費/會員事件細分成
+// 代價(2026-08-12 查證,youtube-chat-next 3.1.0 型別定義):官方 API 能把付費/會籍事件細分成
 // superChatEvent / superStickerEvent / newSponsorEvent / memberMilestoneChatEvent /
 // membershipGiftingEvent / giftMembershipReceivedEvent 六種,這個套件是爬公開網頁聊天室,ChatItem
 // 只給 superchat?:{amount,color,sticker?} 與 isMembership:boolean 兩個欄位,沒有 tier 數字也分不出
-// 一般會員留言是「新加入/連續」哪一種——這部分維持只有 chat(帶 extra.isMembership)、
+// 一般會籍留言是「新加入/連續」哪一種——這部分維持只有 chat(帶 extra.isMembership)、
 // superchat、supersticker 三種事件,不產生 membership_new/_milestone。
 // 2026-08-15:贈送會籍(membershipGiftingEvent/giftMembershipReceivedEvent 對應的兩個事件)例外
 // ——用真實抓包樣本核對過,YouTube 原始封包裡這兩個是獨立的 action 類型(不是 ChatItem 的欄位,
@@ -19,8 +19,8 @@ const { RAW_CAPTURE, rawCapture } = require('../lib/rawCapture');
 
 const NOT_LIVE_RETRY_MS = 30_000; // 套件的 start() 失敗或 loop 結束後不會自動重試,連接器自己排下一次嘗試
 
-// 2026-08-13:YouTube 原始回應裡,會員留言(liveChatMembershipItemRenderer)常帶著 headerSubtext
-// 欄位(例如「已加入會員 46 個月」這類文字),但 youtube-chat-next 自己的 parser(dist/parser.js
+// 2026-08-13:YouTube 原始回應裡,會籍留言(liveChatMembershipItemRenderer)常帶著 headerSubtext
+// 欄位(例如「已加入會籍 46 個月」這類文字),但 youtube-chat-next 自己的 parser(dist/parser.js
 // 的 parseActionToChatItem())遇到 messageRenderer 同時有 message 欄位(使用者自己打的留言)時
 // 只取 message,headerSubtext 就整個被丟掉,ChatItem 上完全看不到——這不是我們漏接,是套件在
 // parse 階段就把資料丟了。用 monkey-patch 補回來:parseChatData() 執行完之後,自己重新掃一次
@@ -40,7 +40,7 @@ const NOT_LIVE_RETRY_MS = 30_000; // 套件的 start() 失敗或 loop 結束後�
 //     比對樣板文字本身)。
 //   - 領取方:authorName 本身就是領取者、message.runs 是「received a gift membership by {贈送
 //     者}」,贈送者名字是最後一個 run。這兩個 renderer 直接掛在 addChatItemAction.item 底下,
-//     不像會員留言需要另外對 id——這裡直接把它們組成「假的」ChatItem 塞進 items 陣列,讓它們
+//     不像會籍留言需要另外對 id——這裡直接把它們組成「假的」ChatItem 塞進 items 陣列,讓它們
 //     跟其他事件走同一條 chat.on('chat', ...) → classifyItem() 路徑,不用另外接一條 pipeline。
 function extractGiftCount(runs) {
   const numericRun = (runs ?? []).find((r) => /^\d+$/.test((r.text ?? '').trim()));
@@ -211,15 +211,15 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
       };
     }
     if (item.isMembership) {
-      // 2026-08-13 用 CHAT_MONITOR_RAW_CAPTURE 實測 237 筆真實會員留言發現:author.badge.label
-      // 每一則會員訊息都有(不用等罕見的加入/里程碑系統通知),格式穩定只有「New member」/
+      // 2026-08-13 用 CHAT_MONITOR_RAW_CAPTURE 實測 237 筆真實會籍留言發現:author.badge.label
+      // 每一則會籍訊息都有(不用等罕見的加入/里程碑系統通知),格式穩定只有「New member」/
       // 「Member (N months)」兩種,比 membershipHeader(patchYoutubeParser() 補的
       // headerSubtext,同一批樣本一次都沒出現過,因為那個欄位只有系統通知才有)可靠得多,
       // 改成主要來源;membershipHeader 保留當補充,萬一哪天真的遇到系統通知可能有更完整的文字。
       const badgeLabel = item.author?.badge?.label ?? null;
       const months = parseMembershipMonths(badgeLabel);
       const header = item.membershipHeader ? String(item.membershipHeader).trim() : '';
-      // 2026-08-14 之前這裡會把「[會員 N 個月]」這種文字前綴直接塞進 message/messageParts,
+      // 2026-08-14 之前這裡會把「[會籍 N 個月]」這種文字前綴直接塞進 message/messageParts,
       // 使用者反應每則訊息都重複顯示月數太雜訊、不需要——改成 message 就是單純留言文字本身,
       // 跟一般聊天訊息一樣,月數/徽章資料只留在 extra 裡供之後需要的地方自己取用,不影響顯示。
       return {
@@ -248,7 +248,7 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
   function attachHandlers(chat) {
     chat.on('start', (liveId) => { debugLog('youtube', 'started', { liveId }); onStatus({ live: true, error: null }); });
     chat.on('chat', (item) => {
-      // CHAT_MONITOR_RAW_CAPTURE=1 才會寫,一般聊天(沒有 superchat 也不是會員)跳過,只存
+      // CHAT_MONITOR_RAW_CAPTURE=1 才會寫,一般聊天(沒有 superchat 也不是會籍)跳過,只存
       // youtube-chat-next 解析完的完整 ChatItem(比我們自己 classifyItem() 篩選過的欄位更完整,
       // 之後要查有沒有漏掉的欄位可以直接比對)。
       // 2026-08-15:superchat 拆成 superchat(文字)/supersticker(貼圖)兩個 tag,不要合併——
