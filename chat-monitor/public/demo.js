@@ -273,7 +273,12 @@
   function formatAmount(evt) {
     if (!evt.amount) return '';
     if (SUBSCRIPTION_MONTHS_TYPES.has(evt.event_type)) {
-      return `<span class="amount">已訂閱 ${escapeHtml(evt.amount)} 個月</span>`;
+      // 2026-08-15:Twitch 續訂當下也可能順便一次預先付好幾個月(msg-param-multimonth-duration,
+      // 跟 sub 的「預先訂閱 N 個月」是同一個 tag)——這是「這次順便多付了幾個月」,跟 amount
+      // 存的「累積訂閱總月數」是不同的數字，不能互相取代，兩個都要顯示才看得出完整狀況。
+      const extraMonths = evt.event_type === 'resub' ? getExtra(evt)?.multimonthDuration : null;
+      const suffix = extraMonths ? `（一次續訂 ${escapeHtml(String(extraMonths))} 個月）` : '';
+      return `<span class="amount">已訂閱 ${escapeHtml(evt.amount)} 個月${suffix}</span>`;
     }
     // 2026-08-15:Twitch 新訂閱一次預先買多個月(msg-param-multimonth-duration)時,amount 存的
     // 是「這次買了幾個月」,不是累積訂閱月數——語意跟上面 SUBSCRIPTION_MONTHS_TYPES 的「已訂閱」

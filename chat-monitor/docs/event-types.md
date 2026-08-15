@@ -177,25 +177,28 @@ UI 呈現：「新訂閱」標籤 + 橘色底；`amount` 有值時顯示「預�
 
 分類：`donation`。**這個事件曾經有 bug**：tmi.js 把 `msg-param-streak-months`（連續訂閱月數，使用者可關閉分享則為 0）當成事件的 `months` 參數傳出來，但畫面上該顯示的其實是 `msg-param-cumulative-months`（累積總月數）——已修正為直接讀完整 tags 裡的 `msg-param-cumulative-months`，`streakMonths` 只留在 `extra` 當參考。
 
-🔧 程式碼推導範例（2026-08-13 撰寫；目前 `raw-capture.jsonl` 尚未捕到真實 resub，欄位依 Twitch USERNOTICE 慣例 + 前述 bug 修正邏輯建構）：
+✅ 真實抓包範例（2026-08-15，`display-name: "赵远舟"`）：
 
 ```json
 {
-  "display-name": "SomeResubber",
-  "login": "someresubber",
+  "display-name": "赵远舟",
+  "login": "apple824",
   "msg-id": "resub",
-  "msg-param-cumulative-months": "5",
-  "msg-param-streak-months": "0",
-  "msg-param-should-share-streak": false,
+  "msg-param-cumulative-months": "2",
+  "msg-param-streak-months": "2",
+  "msg-param-multimonth-duration": "6",
+  "msg-param-multimonth-tenure": true,
+  "msg-param-should-share-streak": true,
   "msg-param-sub-plan": "1000",
-  "system-msg": "SomeResubber subscribed for 5 months!",
-  "user-id": "987654321"
+  "system-msg": "赵远舟 subscribed at Tier 1. They've subscribed for 2 months, currently on a 2 month streak!"
 }
 ```
 
-存進 `events` 表：`message` = 續訂留言（可為 `null`）；`amount` = `String(cumulativeMonths ?? streakMonths ?? '')`；`extra` = `{ plan, streakMonths }`。
+**2026-08-15 補上「續訂順便預先付多個月」**：跟 `sub` 的「預先訂閱多個月」是同一個 tag（`msg-param-multimonth-duration`）、同一種情況——這筆真實樣本裡 `cumulative-months` 是 `"2"`（累積訂閱總月數）、`multimonth-duration` 是 `"6"`（這次續訂順便一次付了 6 個月），是兩個不同的數字，原本完全沒讀後者。跟 `sub` 一樣的型別檢查：只有真的是數字字串才當月數，不適用時 tmi.js 解析後會是 `boolean`（這筆樣本裡 `msg-param-multimonth-tenure` 就是 `true`，不是數字）。
 
-UI 呈現：「續訂」標籤 + 橘色底 + **「已訂閱 5 個月」**（`formatAmount()` 對 `resub` 的特殊格式，不是 `+5`）。
+存進 `events` 表：`message` = 續訂留言（可為 `null`）；`amount` = `String(cumulativeMonths ?? streakMonths ?? '')`（累積總月數，這裡是 `"2"`）；`extra` = `{ plan, streakMonths, multimonthDuration }`（`multimonthDuration` 這裡是 `6`，抓不到時為 `null`）。
+
+UI 呈現：「續訂」標籤 + 橘色底 + **「已訂閱 2 個月（一次續訂 6 個月）」**（`formatAmount()` 對 `resub`/`subscribe` 的特殊格式；沒有 `multimonthDuration` 時只顯示「已訂閱 N 個月」，不加後面那段）。
 
 ### subgift — 贈送訂閱
 

@@ -119,13 +119,21 @@ function createTwitchConnector({ channel }, onEvent, onStatus) {
       // streak-months),得自己從 userstate(完整 tags)裡讀,不能信 streakMonths 這個參數
       // (user 實測回報顯示成「續訂 0 個月」,截圖對比 Twitch 原文正確數字是 2)。
       const cumulativeMonths = userstate?.['msg-param-cumulative-months'];
+      // 2026-08-15:續訂當下也可能順便一次預先付好幾個月(跟 sub 的 msg-param-multimonth-duration
+      // 是同一個 tag、同一種情況,真實抓包核對過——同一筆 resub 裡 cumulative-months="2"、
+      // multimonth-duration="6",代表這次續訂累積滿 2 個月,但一次付了 6 個月)。這裡累積月數
+      // (amount)已經有在讀,額外把預先月數放進 extra,不覆蓋 amount——兩個是不同的數字,不能
+      // 互相取代。跟 sub 一樣的型別檢查:只有真的是數字字串才當月數,tmi.js 解析後不適用時會是
+      // boolean。
+      const multimonthRaw = userstate?.['msg-param-multimonth-duration'];
+      const multimonthDuration = typeof multimonthRaw === 'string' && /^\d+$/.test(multimonthRaw) ? Number(multimonthRaw) : null;
       if (RAW_CAPTURE) rawCapture('twitch', 'resub', userstate);
       onEvent({
         platform: 'twitch', eventType: 'resub',
         dedupKey: userstate?.id || `resub:${username}:${cumulativeMonths ?? streakMonths}:${Date.now()}`,
         username, message: message || null, amount: String(cumulativeMonths ?? streakMonths ?? ''),
         receivedAt: new Date().toISOString(),
-        extra: { plan: userstate?.['msg-param-sub-plan'] ?? null, streakMonths: streakMonths ?? null },
+        extra: { plan: userstate?.['msg-param-sub-plan'] ?? null, streakMonths: streakMonths ?? null, multimonthDuration },
       });
     });
 

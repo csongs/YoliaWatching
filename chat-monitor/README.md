@@ -146,7 +146,7 @@ Twitch 是 IRC 指令/`msg-id`、SOOP 是協定數字代碼（`\t` 後面 4 碼�
 | Twitch | 頻道點數兌換（醒目留言，有文字） | `chat_highlight` | `PRIVMSG`（`custom-reward-id` tag） | ⚠️ 沒驗證過 | 跟一般 `PRIVMSG` 走同一路徑理論上沒問題，但沒有專門拿真實兌換訊息驗證過 |
 | Twitch | Bits 抖內 | `cheer` | `PRIVMSG`（`bits` tag） | ⚠️ 沒驗證過 | 沒有實際看過一筆真的 cheer 事件 |
 | Twitch | 新訂閱 | `sub` | `USERNOTICE`（`msg-id=sub`） | ✅ 驗證過 | 抓到真實封包（Prime/付費 Tier 1），2026-08-15 使用者對照 demo 頁跟 Twitch 原文抓到「預先訂閱多個月」漏掉月數的落差並修正（`msg-param-multimonth-duration`） |
-| Twitch | 續訂月數 | `resub` | `USERNOTICE`（`msg-id=resub`） | ⚠️ 沒驗證過 | `cumulative-months` 修法是查 `tmi.js` 原始碼推論，沒等到真實事件確認 |
+| Twitch | 續訂月數 | `resub` | `USERNOTICE`（`msg-id=resub`） | ✅ 驗證過 | 抓到真實封包，`cumulative-months` 欄位正確；2026-08-15 補上「續訂順便預先付多個月」（`msg-param-multimonth-duration`，跟 `sub` 同一個 tag/同一種落差） |
 | Twitch | 贈送訂閱 | `subgift`/`submysterygift` | `USERNOTICE`（`msg-id=subgift`/`submysterygift`） | ⚠️ 部分驗證 | 抓到真實連續贈送封包，沒在 demo 頁看過渲染結果 |
 | Twitch | Raid | `raid` | `USERNOTICE`（`msg-id=raid`，`tmi.js` 轉成 `raided` 事件） | ⚠️ 沒驗證過 | 沒有實際看過一筆真的 raid 事件 |
 | Twitch | 公告 | `announcement` | `USERNOTICE`（`msg-id=announcement`） | ⚠️ 部分驗證 | 抓到真實公告封包，證實是原生 `/announce`，沒在 demo 頁看過渲染結果 |
