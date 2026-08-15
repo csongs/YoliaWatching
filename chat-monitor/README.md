@@ -136,10 +136,10 @@ Twitch 是 IRC 指令/`msg-id`、SOOP 是協定數字代碼（`\t` 後面 4 碼�
 | YouTube | Super Chat（文字） | `superchat` | `liveChatPaidMessageRenderer` | ✅ 驗證過 | 真實樣本確認 `amount`/`color` 欄位；跟 `isMembership` 可能同時為真時目前只走 `superchat` 分支，會籍資訊會遺失（已知落差，見 `docs/event-types.md`） |
 | YouTube | Super Sticker（貼圖） | `supersticker` | `liveChatPaidMessageRenderer`（`sticker` 有值） | ⚠️ 沒驗證過 | 還沒抓到真實樣本；2026-08-15 之前跟 `superchat` 共用同一個 raw capture tag，加 `youtube:superchat` 進 skip 會連這個一起濾掉——已經拆成獨立的 `youtube:supersticker` tag，現在可以只 skip 文字版、繼續收貼圖版 |
 | YouTube | 會籍留言 | `chat`（`extra.isMembership`） | `liveChatMembershipItemRenderer` | ✅ 驗證過 | 129 則真實會籍留言，欄位正確 |
-| YouTube | 會籍月數 | `chat`（`extra.membershipMonths`） | `liveChatMembershipItemRenderer`（`authorBadges`） | ✅ 驗證過 | 237 筆真實驗證，含「New member」/「Member (N months)」/「Member (N year(s))」三種格式 |
-| YouTube | 新加入會籍判斷 | `chat`（`extra.membershipMonths === 0`） | `liveChatMembershipItemRenderer`（`authorBadges` 的「New member」） | ✅ 驗證過 | 不是獨立的系統通知事件，是這個人第一則帶會籍徽章的聊天訊息，`badge.label === "New member"` 時 `parseMembershipMonths()` 回傳 `0`；已經有做到，2026-08-15 澄清跟下面「里程碑通知文字」是兩回事 |
-| YouTube | 里程碑通知文字 | `chat`（`extra.membershipHeader`） | `liveChatMembershipItemRenderer`（`headerSubtext`） | ⚠️ 沒驗證過 | 累積 300+ 筆真實會籍留言（237+64，2026-08-15 再次確認），`headerSubtext` 全部是空的，一次都沒遇過真正的里程碑系統訊息 |
-| YouTube | 訂閱（一般訂閱，非贈送） | — | 無對應 renderer | 📦 套件不支援 | `youtube-chat-next` 資料源沒有這個資訊，換官方 API 才有可能；追蹤在 GitHub Issues |
+| YouTube | 會籍月數 | `chat`（`extra.membershipMonths`） | `liveChatMembershipItemRenderer`（`authorBadges`） | ✅ 驗證過 | 237 筆真實驗證，含「New member」/「Member (N months)」/「Member (N year(s))」三種格式；`0` 個月（`badge.label === "New member"`）就是新加入的判斷方式，不是獨立事件，是這個人第一則帶會籍徽章的聊天訊息 |
+| YouTube | 新加入會籍系統通知 | `chat`（`extra.membershipHeader`） | `liveChatMembershipItemRenderer`（`headerSubtext`） | ⚠️ 沒驗證過 | 「剛加入會籍」這件事本身沒有收到過獨立的系統通知——累積 300+ 筆真實會籍留言（237+64，2026-08-15 再次確認），`headerSubtext` 全部是空的；能抓到的只有「會籍月數」列講的「第一則帶徽章的聊天」，不是系統主動推播 |
+| YouTube | 里程碑系統通知 | `chat`（`extra.membershipHeader`） | `liveChatMembershipItemRenderer`（`headerSubtext`） | ⚠️ 沒驗證過 | 續訂到特定月數時 YouTube 理論上會給一次帶提示文字的系統通知機會，但同一批 300+ 筆真實樣本裡一次都沒遇過，`headerSubtext` 全部是空的，沒辦法確認格式長怎樣 |
+| YouTube | 頻道追蹤（免費按鈕，非會籍） | — | 無對應 renderer | 🚫 平台無此功能 | 這是 YouTube 免費的「訂閱」按鈕（概念上對應 Twitch 的 Follow，不是 Twitch 的付費 Subscribe——YT 的付費對應概念是「會籍」，見上面幾列），純粹個人動作，據目前所知不會派發任何 renderer 到直播聊天室（未查證來源，是根據 YouTube 直播聊天協定的一般認知，不是官方文件明確寫的） |
 | YouTube | 贈送會籍(購買方) | `membership_gift` | `liveChatSponsorshipsGiftPurchaseAnnouncementRenderer` | ✅ 驗證過 | 2026-08-15 真實封包驗證，`amount` = 份數，`extra.planName` = 會籍方案名稱（截圖對照真實畫面確認過文字意思）；不是 `ChatItem` 欄位，繞開套件另外處理原始 action，見 `connectors/youtube.js` 的 `patchYoutubeParser()` |
 | YouTube | 贈送會籍(領取方) | `membership_gift_received` | `liveChatSponsorshipsGiftRedemptionAnnouncementRenderer` | ✅ 驗證過 | 同上，只有一筆真實樣本，贈送者名字用「message.runs 最後一個 run」抓，還沒有多筆樣本驗證這個位置一定固定 |
 | YouTube | 聊天表情符號圖片渲染 | `chat`（`extra.messageParts`） | `liveChatTextMessageRenderer`（`message.runs`） | ✅ 驗證過 | 真實 `:face-blue-smiling:` 樣本驗證過 |

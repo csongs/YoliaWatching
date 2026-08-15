@@ -98,6 +98,26 @@ function patchYoutubeParser() {
         const engagementRenderer = item?.liveChatViewerEngagementMessageRenderer;
         if (RAW_CAPTURE && engagementRenderer) rawCapture('youtube', 'liveChatViewerEngagementMessageRenderer', action);
 
+        // 2026-08-15:「新會員加入」的慶祝橫幅(畫面最上面那條跑馬燈)其實走完全不同的 action
+        // 類型——addLiveChatTickerItemAction(不是 addChatItemAction),裡面有
+        // liveChatTickerSponsorItemRenderer(新會員/贈送)、liveChatTickerPaidStickerItemRenderer、
+        // liveChatTickerPaidMessageItemRenderer(這兩個是 Super Sticker/Chat 的跑馬燈版本,
+        // inline 版已經抓得到,這裡只是想確認 ticker 版欄位有沒有差異)三種——用 chat-downloader
+        // 的 youtube.py 查到這個分類,youtube-chat-next 的 rendererFromAction() 完全沒檢查過
+        // addLiveChatTickerItemAction,這整條 action 目前完全沒被看過。`.item` 這層巢狀結構是
+        // 照 addChatItemAction 的慣例推測的,還沒有真實樣本驗證過路徑對不對——先只抓原始封包,
+        // 不嘗試解析,這正是我們一直在找的「YT 有沒有加入瞬間通知」的候選位置。
+        const tickerItem = action?.addLiveChatTickerItemAction?.item;
+        const tickerRendererKeys = [
+          'liveChatTickerSponsorItemRenderer',
+          'liveChatTickerPaidStickerItemRenderer',
+          'liveChatTickerPaidMessageItemRenderer',
+        ];
+        if (RAW_CAPTURE && tickerItem) {
+          const tickerKey = tickerRendererKeys.find((k) => tickerItem[k]);
+          if (tickerKey) rawCapture('youtube', tickerKey, action);
+        }
+
         const header = purchaseRenderer?.header?.liveChatSponsorshipsHeaderRenderer;
         if (purchaseRenderer?.id && header?.authorName?.simpleText) {
           items.push({
