@@ -139,7 +139,7 @@ SOOP 另有「官方模式」（需要 SOOP 官方 API Key）完全未實作，�
 | Twitch | 一般聊天 | `chat` | ✅ 驗證過 | 否 | 多次收到真實訊息 |
 | Twitch | 頻道點數兌換（醒目留言，有文字） | `chat_highlight` | ⚠️ 沒驗證過 | 否 | 跟一般 `PRIVMSG` 走同一路徑理論上沒問題，但沒有專門拿真實兌換訊息驗證過 |
 | Twitch | Bits 抖內 | `cheer` | ⚠️ 沒驗證過 | 否 | 沒有實際看過一筆真的 cheer 事件 |
-| Twitch | 新訂閱 | `sub` | ⚠️ 部分驗證 | 否 | 抓到真實封包（Prime/付費 Tier 1），沒在 demo 頁看過渲染結果 |
+| Twitch | 新訂閱 | `sub` | ✅ 驗證過 | 否 | 抓到真實封包（Prime/付費 Tier 1），2026-08-15 使用者對照 demo 頁跟 Twitch 原文抓到「預先訂閱多個月」漏掉月數的落差並修正（`msg-param-multimonth-duration`） |
 | Twitch | 續訂月數 | `resub` | ⚠️ 沒驗證過 | 否 | `cumulative-months` 修法是查 `tmi.js` 原始碼推論，沒等到真實事件確認 |
 | Twitch | 贈送訂閱 | `subgift`/`submysterygift` | ⚠️ 部分驗證 | 否 | 抓到真實連續贈送封包，沒在 demo 頁看過渲染結果 |
 | Twitch | Raid | `raid` | ⚠️ 沒驗證過 | 否 | 沒有實際看過一筆真的 raid 事件 |
@@ -148,7 +148,7 @@ SOOP 另有「官方模式」（需要 SOOP 官方 API Key）完全未實作，�
 | Twitch | 使用者名稱顏色 | `chat`/`cheer`（`extra.color`） | ❌ 完全沒測過 | 否 | `tags.color` 是 IRC 原生欄位，邏輯上直接讀，沒在 demo 頁看過實際顏色 |
 | Twitch | 聊天表情符號圖片渲染 | `chat`/`cheer`（`extra.messageParts`） | ⚠️ 部分驗證 | 否 | CDN 網址規則驗證過，切割邏輯只用模擬資料測過 |
 | SOOP | 一般聊天 | `chat` | ✅ 驗證過 | 否 | 大量真實訊息 |
-| SOOP | 系統通知 | `notification` | ⚠️ 沒驗證過 | 否 | 沒有看過真實通知內容 |
+| SOOP | 系統通知 | `notification` | ✅ 驗證過 | 否 | 2026-08-15 抓到真實通知（BJ 自訂的贈禮項目說明），`res.notification` 是字串，欄位對應正確，demo 頁顯示正常 |
 | SOOP | 表情訊息 | `emoticon` | ⚠️ 部分驗證 | 否 | `emoticonId` 是 OGQ 雜湊 ID，換不出圖片網址；圖片渲染缺口追蹤在 GitHub Issues |
 | SOOP | 訂閱月數 | `subscribe` | ⚠️ 沒驗證過 | 否 | 可能只在續訂觸發，新訂閱疑似另一協定類型；追蹤在 GitHub Issues |
 | SOOP | 文字/語音抖內 | `text_donation` | ✅ 部分驗證 | 否 | 抓到真實連續送星球封包（27 顆同一人），沒在 demo 頁看過渲染結果 |

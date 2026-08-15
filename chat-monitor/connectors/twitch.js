@@ -93,13 +93,21 @@ function createTwitchConnector({ channel }, onEvent, onStatus) {
     client.on('message', (_ch, tags, message) => emitChat(tags, message));
 
     client.on('subscription', (_ch, username, _method, message, userstate) => {
+      // 2026-08-15:使用者截圖回報「新訂閱」畫面上看不出 Twitch 原文顯示的「x 3 個月」
+      // （一次預先訂閱多個月,不是續訂,tag 是 msg-param-multimonth-duration,跟 resub 的
+      // msg-param-cumulative-months 是不同概念)——原本完全沒讀這個欄位,amount 固定 null。
+      // 用真實抓包核對過:這個 tag 只有真的一次買多個月時才會是數字字串(例如 "3"),一般單月
+      // 新訂閱這個 tag 在 tmi.js 解析後會變成 boolean(true/false,不是數字字串)——只在確定是
+      // 合法數字字串時才當作月數,其餘一律當沒有,避免把 true/false 誤判成月數。
+      const multimonthRaw = userstate?.['msg-param-multimonth-duration'];
+      const multimonthDuration = typeof multimonthRaw === 'string' && /^\d+$/.test(multimonthRaw) ? Number(multimonthRaw) : null;
       if (RAW_CAPTURE) rawCapture('twitch', 'sub', userstate);
       onEvent({
         platform: 'twitch', eventType: 'sub',
         dedupKey: userstate?.id || `sub:${username}:${Date.now()}`,
-        username, message: message || null, amount: null,
+        username, message: message || null, amount: multimonthDuration != null ? String(multimonthDuration) : null,
         receivedAt: new Date().toISOString(),
-        extra: { plan: userstate?.['msg-param-sub-plan'] ?? null },
+        extra: { plan: userstate?.['msg-param-sub-plan'] ?? null, multimonthDuration },
       });
     });
 

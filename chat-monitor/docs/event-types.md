@@ -167,9 +167,11 @@ UI 呈現：「Bits 抖內」標籤 + 橘色底 + `+100`（橘色粗體，`forma
 
 另一筆真實範例（一般付費 Tier 1，非 Prime）：`msg-param-sub-plan: "1000"`，`system-msg: "醬醬1 subscribed at Tier 1."`。
 
-存進 `events` 表：`message` = USERNOTICE 附帶的留言（可為 `null`）；`amount` = `null`（新訂閱沒有月數概念）；`extra` = `{ plan: tags['msg-param-sub-plan'] }`（`"Prime"` 或 tier 數字字串 `"1000"`/`"2000"`/`"3000"`）。
+**2026-08-15 補上「預先訂閱多個月」**：使用者截圖回報 Twitch 原文顯示「已預先訂閱層級 1 x 3 個月」，但畫面上看不到這個月數——查證後這是 `msg-param-multimonth-duration` 這個 tag（一次預先買 N 個月，不是累積訂閱月數，跟 `resub` 的 `msg-param-cumulative-months` 是不同概念），原本完全沒讀取。真實抓包範例（`display-name: "學讓"`）：`msg-param-multimonth-duration: "3"`。**注意**：只有真的一次買多個月時這個 tag 才是數字字串，一般單月新訂閱時 tmi.js 解析後這個 tag 會變成 `boolean`（`true`/`false`，同一批樣本裡另外兩筆都是這樣），所以 [`connectors/twitch.js`](../connectors/twitch.js) 只在 `typeof === 'string' && /^\d+$/.test(...)` 成立時才當作月數，其餘一律當沒有。
 
-UI 呈現：「新訂閱」標籤 + 橘色底，因為 `amount` 是 `null` 所以不顯示金額數字。
+存進 `events` 表：`message` = USERNOTICE 附帶的留言（可為 `null`）；`amount` = `String(multimonthDuration)`（一次預先買多個月時）或 `null`（一般單月新訂閱，沒有月數概念）；`extra` = `{ plan: tags['msg-param-sub-plan'], multimonthDuration }`（`plan` 是 `"Prime"` 或 tier 數字字串 `"1000"`/`"2000"`/`"3000"`）。
+
+UI 呈現：「新訂閱」標籤 + 橘色底；`amount` 有值時顯示「預先訂閱 N 個月」（跟 `resub`/SOOP `subscribe` 的「已訂閱 N 個月」語意不同，用詞特意分開，見 [demo.js](../public/demo.js) 的 `formatAmount()`），一般單月新訂閱不顯示金額數字。
 
 ### resub — 續訂
 
@@ -624,13 +626,16 @@ UI 呈現：「贈送禮物(快播Plus/訂閱禮物券等)」標籤 + 橘色底�
 
 分類：`system`。SOOP 平台本身推送的系統通知文字（開台公告等，沒有對應到特定使用者）。
 
-🔧 程式碼推導範例：
+✅ 真實抓包範例（2026-08-15，BJ 自訂的贈禮項目說明，不是開台公告，但證實 `res.notification` 欄位對應正確）：
 
-```
-{ notification: "방송이 시작되었습니다" }
+```json
+{
+  "notification": "버추얼api 10개:눈덩이 ,30개:메뉴추천 , 70개:하트 ,170개:꽃에물주기 , 1021개:케이크난사\r\n",
+  "receivedTime": "2026-08-15T03:52:11.357Z"
+}
 ```
 
-存進 `events` 表：`username` = `null`（系統通知沒有發送者）；`message` = `res.notification`；`amount` = `null`；`extra` = `null`。
+存進 `events` 表：`username` = `null`（系統通知沒有發送者）；`message` = `res.notification`；`amount` = `null`；`extra` = `null`。demo 頁確認顯示正常。
 
 UI 呈現：「系統通知」標籤，灰色斜體行，沒有使用者名稱前綴（因為 `username` 是 `null`）。
 
@@ -669,7 +674,7 @@ UI 呈現：「系統通知」標籤，灰色斜體行，沒有使用者名稱�
 
 ## 已知的其他缺口
 
-- SOOP `subscribe`/`notification` 還沒抓到真實資料（`chat`/`emoticon`/`text_donation` 已經有真實樣本了，見上面對應章節），上面沒有 ✅ 標記的範例都是程式碼推導，欄位型別（尤其是 `amount` 是字串還是數字）有可能猜錯。
+- SOOP `subscribe` 還沒抓到真實資料（`notification` 已經在 2026-08-15 抓到真實樣本，見上面對應章節），上面沒有 ✅ 標記的範例都是程式碼推導，欄位型別（尤其是 `amount` 是字串還是數字）有可能猜錯。
 - SOOP `subscribe` 事件可能只在「續訂」時觸發，「新訂閱」可能是完全沒被監聽到的另一個協定類型（`0091`），見 `subscribe` 章節的說明——還沒確認。
 - SOOP 一般聊天訊息裡的 `/代碼/` 表情符號（2026-08-14 已接上圖片渲染，見 `chat` 章節）涵蓋「經典」全站共用目錄（123 筆）+ 主播專屬 signature emoticon 目錄（照頻道抓，測試頻道 44 筆）兩套；獨立的 `emoticon` 事件（OGQ 雜湊 ID）仍然完全沒有圖片渲染，見 `emoticon` 章節，是目前唯一還沒解掉的表情符號缺口。
 - YouTube `supersticker` 沒有真實範例，貼圖圖片本身也沒有渲染進 `messageParts`。

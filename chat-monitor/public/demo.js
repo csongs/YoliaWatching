@@ -275,6 +275,13 @@
     if (SUBSCRIPTION_MONTHS_TYPES.has(evt.event_type)) {
       return `<span class="amount">已訂閱 ${escapeHtml(evt.amount)} 個月</span>`;
     }
+    // 2026-08-15:Twitch 新訂閱一次預先買多個月(msg-param-multimonth-duration)時,amount 存的
+    // 是「這次買了幾個月」,不是累積訂閱月數——語意跟上面 SUBSCRIPTION_MONTHS_TYPES 的「已訂閱」
+    // 不一樣(那個是續訂/已訂閱多久的既成事實),這裡用「預先訂閱」跟 Twitch 原文「已預先訂閱
+    // 層級 1 x 3 個月」的用詞對齊,避免使用者對照原文覺得有落差。
+    if (evt.event_type === 'sub') {
+      return `<span class="amount">預先訂閱 ${escapeHtml(evt.amount)} 個月</span>`;
+    }
     return `<span class="amount">+${escapeHtml(evt.amount)}</span>`;
   }
 
