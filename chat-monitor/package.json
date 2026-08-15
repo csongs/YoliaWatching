@@ -1,6 +1,6 @@
 {
   "name": "yolia-chat-monitor",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "獨立測試工具:即時監看 Twitch / YouTube / SOOP 的聊天、抖內、特殊訊息事件並存進 SQLite",
   "main": "server.js",
