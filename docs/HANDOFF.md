@@ -4,7 +4,39 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-07-25 七，架構審查第五輪——收斂 DEFAULT_ANIMATIONS 三份副本）
+## 目前狀態（2026-08-16，拿掉 Firebase 雲端版，聊天連線改接 chat-monitor）
+
+- 起因：維護者提案「先去除 Firebase 部署，網頁跟桌寵都讀同一份資料」，經過一輪逐項確認
+  （process 模型、即時事件走 WS 還是 SQLite、設定存放、產品定位等 10 個決策點，逐一問過
+  維護者拍板）後動工。最終定案：**不是把兩個部署模式合併，是砍掉雲端版，聊天連線的職責
+  轉移給既有的 `chat-monitor/`**（原本是獨立測試工具，這次升格為正式聊天來源，但刻意維持
+  獨立 process，不合併進 Electron、不自動 spawn）。
+- **已完成**：
+  - 刪除 `web/`、`.github/workflows/deploy.yml`（Firebase 部署流程整個拿掉）。
+  - 新建 `yuupeek/src/chatMonitorClient.js`，取代 `yuupeek/src/chatListener.js`（已刪）：
+    桌寵不再自己接 Twitch IRC/YouTube API/SOOP，改當 chat-monitor 的
+    `ws://127.0.0.1:3100/ws` 唯讀 client，只處理 `event_type==='chat'`（斗內/訂閱/Raid
+    等事件這次刻意不接，是範圍決策不是漏接）。斷線每 3 秒靜默重試。
+  - `yuupeek/src/youtubePollPolicy.js` 一併刪除（連同它的測試）——已用不到：chat-monitor
+    的 YouTube connector 早就換成免 API Key 的 `youtube-chat-next` 爬蟲套件，quota 節流
+    邏輯整個不需要了。
+  - `main.js`／`obsServer.js`／`panel.html` 拿掉了 Twitch/YouTube/SOOP 平台設定 UI 與
+    對應 API（getConfig/saveConfig/getEnv/saveEnv/checkYouTubeLive 全刪）——這些設定
+    現在只在 chat-monitor 自己的頁面（`http://127.0.0.1:3100`）改。`panel.html` 的
+    Firebase 登入/DataAdapter 雙模式也整個拿掉，只剩桌面模式。
+  - `default.config.json` 移除 `twitch`/`youtube`/`soop` 欄位（桌寵不再管這塊）。
+  - `.gitignore` 清掉所有 `web/` 相關規則。
+  - CLAUDE.md、docs/ARCHITECTURE.md、docs/PLAYBOOK.md 三份全文改寫，反映新架構。
+- 驗證：`cd yuupeek && npm test` 9 suites / 134 tests 全綠（新增 `chatMonitorClient.test.js`，
+  刪除 `chatListener.test.js`/`youtubePollPolicy.test.js`/`syncManifest.test.js`）。
+  **手動驗證仍待維護者**：`cd chat-monitor && npm start` 後再 `cd yuupeek && npm start`，
+  panel「模組狀態」分頁應顯示聊天室已連線；OBS overlay 對真的聊天訊息應該還有反應（幽視值/
+  動畫）；chat-monitor 沒開時桌寵應該安靜不報錯，panel 燈號顯示未連線。
+- **明確排除在這次範圍外，之後若要做請先讀 PLAYBOOK §5 升級判準**：斗內/訂閱/Raid 等
+  chat-monitor 事件接進互動規則系統（需要新的規則格式，不是這次的自然延伸）；聊天監聽合併
+  進同一個 process（這次決定維持解耦）。
+
+## 前次狀態（2026-07-25 七，架構審查第五輪——收斂 DEFAULT_ANIMATIONS 三份副本）
 
 - 起因:同一次 session 第七次操作。前六輪都聚焦在 panel.html/main.js/obsServer.js/
   pack-market 子系統這個熱點,這輪改查 CLAUDE.md 自己文件裡明寫的「鐵律 5」——
@@ -348,27 +380,25 @@
 
 ## 地雷區（會咬人的細節）
 
-- web/public/index.html 的 `DEFAULT_ANIMATIONS` 與 yuupeek/main.js 的 `DEFAULT_ANIMATIONS`
-  是**手動鏡像**的兩份，改一邊必須改另一邊（index.html L56 有註解）。
-- overlay 是 `db.ref('config').on('value')` 訂閱**整個 config 節點**——任何塞進 config
-  的大資料（例如 base64 圖）都會在每次任何設定變更時整包重新下載。大資料要放 config 以外的節點。
-- YouTube 輪詢遇到 403/quota 會**永久停止**（index.html 約 L224）；重啟條件很窄：重整頁面，
-  或變更 youtube 的 enabled/channel/apiKey 三者之一（改其他設定欄位救不回來）。
-- **測試基線非全綠**：`chatListener.test.js` 整個 suite 載入失敗（測重構前舊 API），
-  其餘 4 suite（22 tests）全過（2026-07-07 實測）。這不是你弄壞的；見下方待辦。
+> 2026-08-16 更新：這節原本大量記著 Firebase 雲端版（web/public/index.html、RTDB
+> `config` 訂閱、YouTube quota 永久停止）的細節，那套架構已經整個拿掉，舊內容刪除
+> 避免誤導。現行的坑：
+
+- `chatMonitorClient.js` 只認 `event_type==='chat'`，其他 event_type（cheer/sub/raid/
+  superchat/…）目前完全被忽略——別誤判成「漏接 bug」，這是刻意的範圍決策（見 CLAUDE.md
+  鐵律 2）。
+- chat-monitor 沒開著時，桌寵是**安靜地**每 3 秒重試連線，不會報錯彈窗、也不會卡住其他
+  功能——排查「聊天沒反應」時第一步永遠是先確認 chat-monitor process 有沒有真的在跑。
 - `npm run test-ui`（port 3001 沙盒）console **必有**兩種紅字（WS 重連、pet-config 404），
-  是 test-server 功能缺口，不算驗證失敗；且沙盒讀不到 RTDB/animations.json 的自訂動畫。
-- chatProcessor.js 沒有專屬測試檔（chatListener.test.js 不是它的測試）。
+  是 test-server 功能缺口，不算驗證失敗；且沙盒讀不到 animations.json 的自訂動畫，也不接
+  chat-monitor（純測動畫本身）。
+- chat-monitor 是獨立 npm 專案，`cd yuupeek && npm test` 測不到它；它自己也沒有 jest 測試，
+  驗證方式是模擬事件 API（見 chat-monitor/README.md）。
 
 ## 待辦（工單）
 
-1. **重寫 `yuupeek/src/__tests__/chatListener.test.js`**：改測現行 API（`createChatListener`），
-   或先確認舊函數（applyCommand/buildGreetRe）是否該回到 chatListener.js。修好後把
-   CLAUDE.md 鐵律 4 與 PLAYBOOK DoD 第一條改回「必須全綠」。
-2. **新建 `yuupeek/src/__tests__/chatProcessor.test.js`**：至少涵蓋指令 cost 不足、關鍵詞 +1
-   疊加、未知 trigger 靜默忽略三個案例。
-3. 修三處過時文件（清單見 PLAYBOOK §7）：web/DEPLOY.md、yuupeek/README.md 互動範例、
-   根 README 的 test-ui 描述與「5 個 secret」。
+目前沒有明確待辦——上一輪（見上方「目前狀態」）的手動驗證項還沒有維護者回報結果，
+下一個 session 接手前先確認那幾項有沒有人測過。
 
 ## 給未來 session 的信（2026-07-07 制度建立 session 已完整收尾）
 

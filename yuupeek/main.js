@@ -31,7 +31,7 @@ if (app.isPackaged) {
 require('dotenv').config({ path: path.join(userDataDir, '.env') });
 
 const { createStateMachine } = require('./src/stateMachine');
-const { restartChatListener } = require('./src/chatListener');
+const { createChatMonitorClient } = require('./src/chatMonitorClient');
 const { createObsServer }     = require('./src/obsServer');
 const { createPackStore }     = require('./src/packStore');
 const { buildAnimationsUpdate, resolveActivePackIds, packIdsCompatFields, packKeyOf } = require('./src/packFormat');
@@ -96,34 +96,14 @@ let obsServer = null;
 if (config.modes?.obs) {
   obsServer = createObsServer(config, __dirname);
   obsServer.setPanelHandlers({
-    appDir: userDataDir,
     getStatus: () => ({
-      twitch: {
-        enabled:   config.twitch?.enabled ?? false,
-        connected: chatListener?.getStatus?.().twitch.connected ?? false,
-        channel:   config.twitch?.channel ?? '',
-      },
-      youtube: {
-        enabled: config.youtube?.enabled ?? false,
-        live:    chatListener?.getStatus?.().youtube.live ?? false,
-        error:   chatListener?.getStatus?.().youtube.error ?? null,
-        channel: config.youtube?.channel ?? '',
-      },
-      soop: {
-        enabled:   config.soop?.enabled ?? false,
-        connected: chatListener?.getStatus?.().soop.connected ?? false,
-        channel:   config.soop?.channel ?? '',
-        apiMode:   config.soop?.apiMode ?? 'community',
+      chatMonitor: {
+        connected: chatMonitor?.getStatus?.().connected ?? false,
       },
       obs: {
         enabled: true,
         port:    obsServer.port() ?? config.obs?.port ?? 3000,
       },
-    }),
-    getConfig: () => ({
-      twitch:  { enabled: config.twitch?.enabled  ?? false, channel: config.twitch?.channel  ?? '' },
-      youtube: { enabled: config.youtube?.enabled ?? false, channel: config.youtube?.channel ?? '' },
-      soop:    { enabled: config.soop?.enabled    ?? false, channel: config.soop?.channel    ?? '', apiMode: config.soop?.apiMode ?? 'community' },
     }),
     getDefaultPetConfig: () => ({
       interactions:       defaultConfig.interactions       ?? [],
@@ -154,7 +134,7 @@ if (config.modes?.obs) {
         sm.updateStates(thresholds);
         sm.state = sm.computeState();
         broadcastState();
-        chatListener?.updateHandlers(patch.interactions);
+        chatMonitor?.updateHandlers(patch.interactions);
       }
       if (patch.greetingAnimations !== undefined) {
         raw.greetingAnimations = patch.greetingAnimations;
@@ -172,38 +152,6 @@ if (config.modes?.obs) {
       fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
       obsServer?.broadcast({ reloadCommands: true });
     },
-    saveConfig: (patch) => {
-      const cfgPath = path.join(userDataDir, 'config.json');
-      const raw = readUserCfg(cfgPath);
-      if (patch.twitch) {
-        raw.twitch = raw.twitch ?? {};
-        config.twitch = config.twitch ?? {};
-        if (patch.twitch.enabled  !== undefined) { raw.twitch.enabled  = patch.twitch.enabled;  config.twitch.enabled  = patch.twitch.enabled; }
-        if (patch.twitch.channel  !== undefined) { raw.twitch.channel  = patch.twitch.channel;  config.twitch.channel  = patch.twitch.channel; }
-      }
-      if (patch.youtube) {
-        raw.youtube = raw.youtube ?? {};
-        config.youtube = config.youtube ?? {};
-        if (patch.youtube.enabled !== undefined) { raw.youtube.enabled = patch.youtube.enabled; config.youtube.enabled = patch.youtube.enabled; }
-        if (patch.youtube.channel !== undefined) { raw.youtube.channel = patch.youtube.channel; config.youtube.channel = patch.youtube.channel; }
-      }
-      if (patch.soop) {
-        raw.soop = raw.soop ?? {};
-        config.soop = config.soop ?? {};
-        if (patch.soop.enabled !== undefined) { raw.soop.enabled = patch.soop.enabled; config.soop.enabled = patch.soop.enabled; }
-        if (patch.soop.channel !== undefined) { raw.soop.channel = patch.soop.channel; config.soop.channel = patch.soop.channel; }
-        if (patch.soop.apiMode !== undefined) { raw.soop.apiMode = patch.soop.apiMode; config.soop.apiMode = patch.soop.apiMode; }
-      }
-      fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2), 'utf8');
-      // Hot-reload chat listener with updated config
-      chatListener = restartChatListener(chatListener, config, sm, broadcastState);
-    },
-    saveEnv: ({ TWITCH_OAUTH, YOUTUBE_API_KEY, SOOP_API_KEY } = {}) => {
-      if (TWITCH_OAUTH    !== undefined) process.env.TWITCH_OAUTH    = TWITCH_OAUTH;
-      if (YOUTUBE_API_KEY !== undefined) process.env.YOUTUBE_API_KEY = YOUTUBE_API_KEY;
-      if (SOOP_API_KEY    !== undefined) process.env.SOOP_API_KEY    = SOOP_API_KEY;
-      chatListener = restartChatListener(chatListener, config, sm, broadcastState);
-    },
     getPacks: () => packStore.getAll(),
     savePack: (pack) => {
       packStore.save(pack);
@@ -220,8 +168,6 @@ if (config.modes?.obs) {
       // 手動試播(layer4 設計 4b):animOnly 播一輪即回 baseState,不動幽視值
       obsServer?.broadcast({ value: sm.yolia_see, state: name, animOnly: true });
     },
-    // 「我開播了」:立即查一次 YouTube 直播(繞過 15 分鐘節流;配額爆掉時回 false)
-    checkYouTubeLive: () => chatListener?.checkYouTubeLiveNow?.() ?? false,
     setActivePackIds: (ids) => {
       // 新舊欄位(activePackIds/activePackId)一起寫:降版相容,舊版只認 activePackId
       const fields = packIdsCompatFields(ids);
@@ -285,8 +231,12 @@ if (config.modes?.obs) {
   });
 }
 
-// ── Chat listener ─────────────────────────────────────────────────────────────
-let chatListener = restartChatListener(null, config, sm, broadcastState);
+// ── Chat monitor client ──────────────────────────────────────────────────────
+// 聊天連線本身由獨立的 chat-monitor process 負責(Twitch/YouTube/SOOP),這裡只當它的
+// WebSocket 唯讀 client,所以不像舊版 chatListener 需要依 config 的 enabled 開關重啟——
+// 固定啟動一次,chat-monitor 沒開著就會靜默重試連線(見 chatMonitorClient.js)。
+const chatMonitor = createChatMonitorClient(config, sm, broadcastState);
+chatMonitor.start();
 
 
 app.whenReady().then(() => {

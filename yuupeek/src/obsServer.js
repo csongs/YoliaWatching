@@ -20,19 +20,6 @@ function readBody(req) {
   });
 }
 
-function parseEnvFile(content) {
-  const result = {};
-  for (const line of content.split('\n')) {
-    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-    if (m) result[m[1]] = m[2];
-  }
-  return result;
-}
-
-function formatEnvFile(data) {
-  return Object.entries(data).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
-}
-
 function createObsServer(config, rootDir) {
   const obsConfig = config.obs ?? config;
   const root = rootDir ?? path.join(__dirname, '..');
@@ -56,51 +43,6 @@ function createObsServer(config, rootDir) {
     if (req.url === '/panel/api/status') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(panelHandlers?.getStatus?.() ?? {}));
-      return;
-    }
-
-    if (req.url === '/panel/api/env' && req.method === 'GET') {
-      const envPath = path.join(panelHandlers?.appDir ?? root, '.env');
-      let data = {};
-      try { data = parseEnvFile(fs.readFileSync(envPath, 'utf8')); } catch {}
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        TWITCH_OAUTH:    data.TWITCH_OAUTH    ?? '',
-        YOUTUBE_API_KEY: data.YOUTUBE_API_KEY ?? '',
-        SOOP_API_KEY:    data.SOOP_API_KEY    ?? '',
-      }));
-      return;
-    }
-
-    if (req.url === '/panel/api/env' && req.method === 'POST') {
-      readBody(req).then(body => {
-        const envPath = path.join(panelHandlers?.appDir ?? root, '.env');
-        let existing = {};
-        try { existing = parseEnvFile(fs.readFileSync(envPath, 'utf8')); } catch {}
-        const { TWITCH_OAUTH, YOUTUBE_API_KEY, SOOP_API_KEY } = body;
-        if (TWITCH_OAUTH    !== undefined) existing.TWITCH_OAUTH    = TWITCH_OAUTH;
-        if (YOUTUBE_API_KEY !== undefined) existing.YOUTUBE_API_KEY = YOUTUBE_API_KEY;
-        if (SOOP_API_KEY    !== undefined) existing.SOOP_API_KEY    = SOOP_API_KEY;
-        fs.writeFileSync(envPath, formatEnvFile(existing), 'utf8');
-        panelHandlers?.saveEnv?.({ TWITCH_OAUTH, YOUTUBE_API_KEY, SOOP_API_KEY });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      }).catch(() => { res.writeHead(500); res.end(); });
-      return;
-    }
-
-    if (req.url === '/panel/api/config' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(panelHandlers?.getConfig?.() ?? {}));
-      return;
-    }
-
-    if (req.url === '/panel/api/config' && req.method === 'POST') {
-      readBody(req).then(body => {
-        panelHandlers?.saveConfig?.(body);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      }).catch(() => { res.writeHead(500); res.end(); });
       return;
     }
 
@@ -261,13 +203,6 @@ function createObsServer(config, rootDir) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       // activePackId 欄位保留=第一個(勾選制之前的單包介面,舊讀取端仍可用)
       res.end(JSON.stringify({ activePackIds: ids, activePackId: ids[0] ?? null }));
-      return;
-    }
-
-    if (req.url === '/panel/api/youtube/check' && req.method === 'POST') {
-      const triggered = panelHandlers?.checkYouTubeLive?.() ?? false;
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, triggered }));
       return;
     }
 

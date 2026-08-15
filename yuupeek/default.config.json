@@ -107,19 +107,6 @@
     "port": 3000,
     "scale": 1
   },
-  "twitch": {
-    "enabled": true,
-    "channel": "altheayolia"
-  },
-  "youtube": {
-    "enabled": false,
-    "channel": "@altheayolia"
-  },
-  "soop": {
-    "enabled": false,
-    "channel": "",
-    "apiMode": "community"
-  },
   "greetingAnimations": [
     {
       "frames": [

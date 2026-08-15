@@ -86,36 +86,15 @@
 </head>
 <body>
 
-<div id="login-overlay" style="display:none;position:fixed;inset:0;background:#0f1117;z-index:1000;align-items:center;justify-content:center">
-  <div class="card" style="width:320px">
-    <h3>🔒 管理員登入</h3>
-    <div class="form-group">
-      <label>Email</label>
-      <input type="text" id="login-email" autocomplete="username">
-    </div>
-    <div class="form-group">
-      <label>密碼</label>
-      <input type="password" id="login-password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <div id="login-error" style="color:#f87171;font-size:13px;margin-bottom:12px;display:none"></div>
-    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">登入</button>
-    <div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:#475569;font-size:12px">
-      <hr style="flex:1;border:none;border-top:1px solid #2d3748"><span>或</span><hr style="flex:1;border:none;border-top:1px solid #2d3748">
-    </div>
-    <button class="btn btn-secondary" style="width:100%" onclick="doGoogleLogin()">使用 Google 登入</button>
-  </div>
-</div>
-
 <div id="app-root">
 <div class="tabs">
   <div class="tab active" onclick="showTab('guide')">安裝說明</div>
-  <div class="tab local-only" onclick="showTab('status')">模組狀態</div>
+  <div class="tab" onclick="showTab('status')">模組狀態</div>
   <div class="tab" onclick="showTab('pet')">桌寵設定</div>
   <div class="tab" onclick="showTab('workshop')">角色工房</div>
   <div class="tab" onclick="showTab('market')">市集</div>
   <div class="tab" onclick="showTab('settings')">設定</div>
   <span style="margin-left:auto;display:flex;align-items:center;gap:12px;padding:0 16px;white-space:nowrap">
-    <span id="logout-btn" style="display:none;cursor:pointer;color:#94a3b8;font-size:12px" onclick="firebase.auth().signOut()">登出</span>
     <span style="color:#475569;font-size:11px;pointer-events:none">Ctrl + 滾輪 縮放</span>
     <span id="version-badge" style="color:#334155;font-size:11px;font-family:'Consolas',monospace;pointer-events:none"></span>
   </span>
@@ -124,39 +103,14 @@
 <!-- ── 安裝說明 ── -->
 <div id="guide" class="panel active">
 
-  <div class="guide-section local-only">
-    <h3>Twitch OAuth Token</h3>
-    <ol>
-      <li>前往 <a href="https://twitchtokengenerator.com" target="_blank">twitchtokengenerator.com</a></li>
-      <li>選擇 <strong>Bot Chat Token</strong></li>
-      <li>授權後複製 <strong>ACCESS TOKEN</strong></li>
-      <li>在「設定」頁將 token 填入 <code>TWITCH_OAUTH</code>，格式為 <code>oauth:你的token</code></li>
-    </ol>
-    <div class="note">
-      測試方式（不需要真的開播）：OBS Stream Key 最後加上 <code>?bandwidthtest=true</code>，或勾選「啟用頻寬測試模式」
-    </div>
-  </div>
-
   <div class="guide-section">
-    <h3>YouTube Data API</h3>
-    <ol>
-      <li>前往 <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a></li>
-      <li>建立專案 → 啟用 <strong>YouTube Data API v3</strong></li>
-      <li>建立憑證 → <strong>API 金鑰</strong></li>
-      <li>在「設定」頁填入 <code>YOUTUBE_API_KEY</code></li>
-    </ol>
-    <div class="note">每日 10,000 quota 限制，直播中約 500–2,000 quota／小時;
-      另外<strong>找直播的 search 每天只有獨立的 100 次</strong>,所以未開播時 15 分鐘才查一次——
-      剛開播請按「YouTube 設定」裡的「我開播了」立即偵測</div>
-    <div class="note" style="margin-top:12px;background:#1f2937;border-left-color:#38bdf8;color:#c7d2fe">
-      <strong>配額錯誤提示</strong>
-      <ol style="margin-top:8px">
-        <li>登入 Google Cloud Console，選擇包含 YouTube Data API 的專案。</li>
-        <li>點選左上角選單，前往 <strong>IAM 與管理 → 配額與系統限制</strong>，或從 <strong>API 和服務 → 儀表板</strong> 找到 <strong>YouTube Data API v3</strong>。</li>
-        <li>在配額頁面檢查每日與每分鐘使用量，若已達上限請等候隔日重置或申請提高配額。</li>
-      </ol>
-      <div style="margin-top:6px;color:#a5b4fc">若面板顯示「已超過 YouTube API 配額」，程式會停止重新連線，請先確認 quota 是否已恢復再重新啟動。</div>
-    </div>
+    <h3>聊天室連線（Twitch / YouTube / SOOP）</h3>
+    <p style="color:#94a3b8;line-height:1.8">
+      桌寵不再自己連聊天室——改由獨立的 <strong>chat-monitor</strong> 負責監聽三個平台並轉發過來。
+      頻道、API key 等設定都在 chat-monitor 自己的頁面（預設 <a href="http://127.0.0.1:3100" target="_blank">http://127.0.0.1:3100</a>）設定，
+      這裡的「模組狀態」分頁只顯示是否連得上它。
+    </p>
+    <div class="note">先啟動 chat-monitor（<code>node server.js</code>），再啟動桌寵，動畫才會跟著聊天室反應。</div>
   </div>
 
   <div class="guide-section">
@@ -183,16 +137,14 @@
     </div>
   </div>
 
-  <div class="guide-section local-only">
+  <div class="guide-section">
     <h3>config.json 設定</h3>
     <ul>
       <li><strong>modes</strong>：obs（OBS 伺服器）/ test（啟動時開啟測試頁）</li>
-      <li><strong>twitch.channel</strong>：你的 Twitch 頻道 ID</li>
-      <li><strong>youtube.channel</strong>：你的 YouTube 頻道 handle，例如 <code>@altheayolia</code></li>
-      <li><strong>commands</strong>：聊天室指令，可自訂 state 和 yolia_see 增減</li>
-      <li><strong>greetings</strong>：觸發揮手動畫的關鍵詞列表</li>
+      <li><strong>interactions</strong>：互動規則（門檻／關鍵詞／指令），也可在「桌寵設定」頁編輯</li>
+      <li><strong>greetingAnimations</strong>：觸發揮手動畫的變體與權重</li>
     </ul>
-    <div class="note">修改 config.json 後需重新啟動程式才會生效</div>
+    <div class="note">頻道/API key 等聊天室連線設定不在這裡，去 chat-monitor 的頁面設定。修改 config.json 後需重新啟動程式才會生效</div>
   </div>
 
 </div>
@@ -246,62 +198,12 @@
 <!-- ── 設定 ── -->
 <div id="settings" class="panel">
   <div class="card">
-    <h3>Twitch 設定</h3>
-    <div class="form-group">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="tw-enabled" onchange="savePlatformConfig('twitch')"> 啟用 Twitch 聊天監聽
-      </label>
-    </div>
-    <div class="form-group">
-      <label>頻道名稱</label>
-      <input type="text" id="tw-channel" placeholder="altheayolia" oninput="debouncedTwitchSave()">
-    </div>
+    <h3>聊天室監聽（chat-monitor）</h3>
+    <p style="color:#94a3b8;margin-bottom:14px">Twitch / YouTube / SOOP 的頻道與 API key 都在 chat-monitor 自己的頁面設定，這裡不重複做一份。</p>
+    <button class="btn btn-secondary btn-small" onclick="openExternal('http://127.0.0.1:3100')">開啟 chat-monitor 設定頁 ↗</button>
   </div>
 
   <div class="card">
-    <h3>YouTube 設定</h3>
-    <div class="form-group">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="yt-enabled" onchange="savePlatformConfig('youtube')"> 啟用 YouTube 聊天監聽
-      </label>
-    </div>
-    <div class="form-group">
-      <label>頻道 Handle</label>
-      <input type="text" id="yt-channel" placeholder="@altheayolia" oninput="debouncedYtSave()">
-    </div>
-    <div class="form-group">
-      <button class="btn btn-secondary btn-small" onclick="checkYtLive()">我開播了(立即偵測直播)</button>
-      <div style="color:#64748b;font-size:12px;margin-top:6px">
-        平時每 15 分鐘自動找一次直播(YouTube 的 search 每天只給 100 次,查太密會爆);
-        剛開播不想等就按這顆。
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>SOOP 設定</h3>
-    <div class="form-group">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="soop-enabled" onchange="savePlatformConfig('soop')"> 啟用 SOOP 聊天監聽
-      </label>
-    </div>
-    <div class="form-group">
-      <label>BJ ID</label>
-      <input type="text" id="soop-channel" placeholder="altheayolia" oninput="debouncedSoopSave()">
-    </div>
-    <div class="form-group">
-      <label>API 模式</label>
-      <select id="soop-api-mode" onchange="onSoopModeChange()">
-        <option value="community">社群版 B（預設）</option>
-        <option value="official">官方 API A（需要合作夥伴）</option>
-      </select>
-    </div>
-    <div id="soop-official-section" style="display:none;margin-top:8px">
-      <div class="note" style="margin-bottom:10px">官方 API 串接功能尚在開發中，敬請期待。申請合作夥伴：<a href="https://developers.sooplive.com" target="_blank">developers.sooplive.com ↗</a></div>
-    </div>
-  </div>
-
-  <div class="card local-only">
     <h3>設定檔位置</h3>
     <div class="row" style="flex-wrap:wrap;word-break:break-all">
       <code id="userdata-path" style="color:#94a3b8;font-size:12px">載入中…</code>
@@ -312,31 +214,6 @@
   </div>
 
   <div class="card">
-    <h3>環境變數 <span style="font-size:12px;color:#64748b;font-weight:400">（儲存於 .env，不進版本庫）</span></h3>
-    <div class="form-group">
-      <label>TWITCH_OAUTH</label>
-      <div class="input-row">
-        <input type="password" id="tw-oauth" placeholder="oauth:xxxxxxxxxxxxxxxxxxxxxxxx" oninput="debouncedEnvSave()">
-      </div>
-    </div>
-    <div class="form-group">
-      <label>YOUTUBE_API_KEY</label>
-      <div class="input-row">
-        <input type="password" id="yt-key" placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXX" oninput="debouncedEnvSave()">
-      </div>
-    </div>
-    <div class="form-group" id="soop-key-row" style="display:none">
-      <label>SOOP_API_KEY <span style="color:#64748b;font-weight:400">（官方模式 A 專用）</span></label>
-      <div class="input-row">
-        <input type="password" id="soop-key" placeholder="SOOP 官方 API Key" oninput="debouncedEnvSave()">
-      </div>
-    </div>
-    <div style="margin-top:4px">
-      <button class="btn btn-secondary" onclick="togglePasswords()">顯示／隱藏</button>
-    </div>
-  </div>
-
-  <div class="card local-only">
     <h3>版本資訊</h3>
     <div class="row">目前版本：<strong id="current-version">—</strong></div>
     <div id="update-result" style="margin-top:10px;min-height:20px"></div>
@@ -346,7 +223,7 @@
     </div>
   </div>
 
-  <div class="card local-only">
+  <div class="card">
     <h3>設定檔</h3>
     <p style="color:#94a3b8;margin-bottom:14px">以文字編輯器開啟 config.json 修改頻道、模式、指令等設定</p>
     <button class="btn btn-secondary" onclick="openConfig()">開啟 config.json</button>
@@ -357,43 +234,6 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  // ── Environment detection ─────────────────────────────────────────────────
-  const IS_WEB = !location.hostname.includes('localhost');
-
-  // Client-side allowlist mirrors database.rules.json's auth.token.email check.
-  // The real enforcement lives in the RTDB rules — this just gives an
-  // unauthorized signed-in user an immediate, friendly reason instead of
-  // silently failing writes.
-  const ALLOWED_EMAILS = ['__ADMIN_EMAIL__'];
-
-  if (IS_WEB) {
-    const s = document.createElement('style');
-    s.textContent = '.local-only{display:none!important}';
-    document.head.appendChild(s);
-    document.getElementById('guide-obs-url').textContent = location.origin + '/';
-    document.getElementById('app-root').style.display = 'none';
-  }
-
-  function doLogin() {
-    const email = document.getElementById('login-email').value.trim();
-    const password = document.getElementById('login-password').value;
-    const errEl = document.getElementById('login-error');
-    errEl.style.display = 'none';
-    firebase.auth().signInWithEmailAndPassword(email, password).catch(() => {
-      errEl.textContent = '登入失敗，請確認帳號密碼';
-      errEl.style.display = 'block';
-    });
-  }
-
-  function doGoogleLogin() {
-    const errEl = document.getElementById('login-error');
-    errEl.style.display = 'none';
-    firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch((e) => {
-      errEl.textContent = 'Google 登入失敗：' + (e.message || e.code || '');
-      errEl.style.display = 'block';
-    });
-  }
-
   // ── Script loader ─────────────────────────────────────────────────────────
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -425,12 +265,9 @@
     if (id === 'workshop') window.Workshop?.load?.();
     if (id === 'market') window.Market?.load?.();
     if (id === 'settings') {
-      loadEnv();
-      loadConfig();
       loadVersion();
       loadPaths();
-      // 更新檢查是桌面版發行流程的概念(比對 GitHub release);雲端版是 push main 即部署,無版本可比,卡片已 local-only 隱藏
-      if (!IS_WEB && !hasAutoCheckedUpdate) { hasAutoCheckedUpdate = true; checkUpdate(); }
+      if (!hasAutoCheckedUpdate) { hasAutoCheckedUpdate = true; checkUpdate(); }
     }
   }
 
@@ -439,22 +276,10 @@
     return `<span class="badge ${cls}">${label}</span>`;
   }
 
-  function moduleBadge(enabled, active, activeLabel, inactiveLabel) {
-    if (!enabled) return badge('off', '停用');
-    return active ? badge('ok', activeLabel) : badge('warn', inactiveLabel);
-  }
-
   function refreshStatus() {
-    if (IS_WEB) {
-      document.getElementById('status-cards').innerHTML = '<p style="color:#64748b">雲端版不提供即時狀態監控</p>';
-      return;
-    }
     Promise.all([api.getStatus(), api.getMetrics()])
       .then(([s, m]) => {
         const port = s.obs?.port ?? 3000;
-        const youtubeStatusBadge = s.youtube?.error
-          ? badge('warn', '配額已用完')
-          : moduleBadge(s.youtube?.enabled, s.youtube?.live, '直播中', '等待直播');
 
         const TYPE_LABEL = { Browser: 'Main', Renderer: 'Tab', 'GPU Process': 'GPU' };
         const metricsRows = (m.processes ?? []).map(p => {
@@ -478,21 +303,10 @@
 
         document.getElementById('status-cards').innerHTML = `
           <div class="card">
-            <h3>Twitch ${moduleBadge(s.twitch?.enabled, s.twitch?.connected, '已連線', '未連線')}</h3>
-            <div class="row">頻道：<strong>${s.twitch?.channel || '未設定'}</strong></div>
-          </div>
-
-          <div class="card">
-            <h3>YouTube ${youtubeStatusBadge}</h3>
-            <div class="row">頻道：<strong>${s.youtube?.channel || '未設定'}</strong></div>
-            ${s.youtube?.error ? `<div class="row" style="color:#f87171">錯誤：<strong>${s.youtube.error}</strong></div>` : ''}
-            ${s.youtube?.error ? `<div class="row" style="color:#94a3b8;font-size:12px">請參考「安裝說明」中的 quota 追蹤步驟</div>` : ''}
-          </div>
-
-          <div class="card">
-            <h3>SOOP ${moduleBadge(s.soop?.enabled, s.soop?.connected, '已連線', '未連線')}</h3>
-            <div class="row">頻道：<strong>${s.soop?.channel || '未設定'}</strong></div>
-            <div class="row">模式：<strong>${s.soop?.apiMode === 'official' ? '官方 API (A)' : '社群版 (B)'}</strong></div>
+            <h3>聊天室（chat-monitor）${s.chatMonitor?.connected ? badge('ok', '已連線') : badge('warn', '未連線')}</h3>
+            <div class="row">${s.chatMonitor?.connected
+              ? '已連上 chat-monitor,聊天室訊息會驅動角色反應'
+              : '連不上 chat-monitor——確認它有沒有開著(預設 http://127.0.0.1:3100)'}</div>
           </div>
 
           <div class="card">
@@ -521,74 +335,6 @@
   }, 3000);
 
   // ── Settings tab ───────────────────────────────────────────────────────────
-  function loadEnv() {
-    api.getEnv()
-      .then(data => {
-        document.getElementById('tw-oauth').value = data.TWITCH_OAUTH    ?? '';
-        document.getElementById('yt-key').value   = data.YOUTUBE_API_KEY ?? '';
-        document.getElementById('soop-key').value = data.SOOP_API_KEY    ?? '';
-      });
-  }
-
-  function saveEnv() {
-    api.saveEnv({
-      TWITCH_OAUTH:    document.getElementById('tw-oauth').value,
-      YOUTUBE_API_KEY: document.getElementById('yt-key').value,
-      SOOP_API_KEY:    document.getElementById('soop-key').value,
-    })
-      .then(() => showToast('已儲存'))
-      .catch(() => showToast('儲存失敗', true));
-  }
-
-  function loadConfig() {
-    api.getConfig()
-      .then(data => {
-        document.getElementById('tw-enabled').checked    = data.twitch?.enabled  ?? false;
-        document.getElementById('tw-channel').value      = data.twitch?.channel  ?? '';
-        document.getElementById('yt-enabled').checked    = data.youtube?.enabled ?? false;
-        document.getElementById('yt-channel').value      = data.youtube?.channel ?? '';
-        document.getElementById('soop-enabled').checked  = data.soop?.enabled    ?? false;
-        document.getElementById('soop-channel').value    = data.soop?.channel    ?? '';
-        document.getElementById('soop-api-mode').value   = data.soop?.apiMode    ?? 'community';
-        updateSoopOfficialVisibility();
-      });
-  }
-
-  function onSoopModeChange() {
-    updateSoopOfficialVisibility();
-    savePlatformConfig('soop');
-  }
-
-  function updateSoopOfficialVisibility() {
-    const isOfficial = document.getElementById('soop-api-mode').value === 'official';
-    document.getElementById('soop-official-section').style.display = isOfficial ? '' : 'none';
-    document.getElementById('soop-key-row').style.display = isOfficial ? '' : 'none';
-  }
-
-  function savePlatformConfig(platform) {
-    const body = {};
-    if (platform === 'twitch') {
-      body.twitch = {
-        enabled: document.getElementById('tw-enabled').checked,
-        channel: document.getElementById('tw-channel').value.trim(),
-      };
-    } else if (platform === 'youtube') {
-      body.youtube = {
-        enabled: document.getElementById('yt-enabled').checked,
-        channel: document.getElementById('yt-channel').value.trim(),
-      };
-    } else {
-      body.soop = {
-        enabled: document.getElementById('soop-enabled').checked,
-        channel: document.getElementById('soop-channel').value.trim(),
-        apiMode: document.getElementById('soop-api-mode').value,
-      };
-    }
-    api.saveConfig(body)
-      .then(() => showToast('已套用'))
-      .catch(() => showToast('儲存失敗', true));
-  }
-
   function loadPaths() {
     api.getPaths()
       .then(d => { document.getElementById('userdata-path').textContent = d.userDataDir || '—'; });
@@ -601,7 +347,7 @@
   function loadVersion() {
     api.getVersion()
       .then(d => {
-        const v = d.current === 'web' ? 'web' : 'v' + d.current;
+        const v = 'v' + d.current;
         document.getElementById('current-version').textContent = v;
         document.getElementById('version-badge').textContent = v;
       });
@@ -634,14 +380,6 @@
     api.openConfig();
   }
 
-  let passwordsVisible = false;
-  function togglePasswords() {
-    passwordsVisible = !passwordsVisible;
-    const t = passwordsVisible ? 'text' : 'password';
-    document.getElementById('tw-oauth').type = t;
-    document.getElementById('yt-key').type   = t;
-  }
-
   // ── Ctrl+scroll zoom ──────────────────────────────────────────────────────
   let panelZoom = parseFloat(localStorage.getItem('panelZoom') || '1');
   document.body.style.zoom = panelZoom;
@@ -659,22 +397,7 @@
     let t;
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   }
-  const debouncedPetSave    = debounce(savePetConfig, 800);
-  const debouncedTwitchSave = debounce(() => savePlatformConfig('twitch'), 800);
-  const debouncedYtSave     = debounce(() => savePlatformConfig('youtube'), 800);
-  const debouncedSoopSave   = debounce(() => savePlatformConfig('soop'), 800);
-  const debouncedEnvSave    = debounce(saveEnv, 1200);
-
-  // 「我開播了」:立即觸發一次 YouTube 直播偵測(平時 15 分鐘一次,省 search 配額)
-  async function checkYtLive() {
-    try {
-      const r = await api.checkYouTubeLive();
-      if (r?.triggered === false) showToast('無法觸發:YouTube 未啟用,或 API 配額已用盡(隔天重置)', true);
-      else showToast('已觸發直播偵測,已開播的話幾秒內會連上聊天室');
-    } catch (e) {
-      showToast('觸發失敗:' + (e.message ?? e), true);
-    }
-  }
+  const debouncedPetSave = debounce(savePetConfig, 800);
 
   // ── Pet config tab ────────────────────────────────────────────────────────
   let STATE_OPTIONS = ['idle', 'peek', 'cheer', 'cry', 'eat', 'jump', 'run_left', 'run_right', 'wave'];
@@ -854,139 +577,31 @@
 
   // ── Init ───────────────────────────────────────────────────────────────────
   async function initApp() {
-    if (IS_WEB) {
-      await loadScript('/firebase-config.js');
-      await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
-      await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js');
-      await loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js');
-      await loadScript('/packFormat.js');
-      await loadScript('/workshop.js');
-      await loadScript('/market.js');
-      firebase.initializeApp(FIREBASE_CONFIG);
-      const db = firebase.database();
-
-      api = {
-        getConfig: () => db.ref('config').once('value').then(s => {
-          const c = s.val() ?? {};
-          return { twitch: c.twitch ?? {}, youtube: c.youtube ?? {}, soop: c.soop ?? {} };
-        }),
-        saveConfig: (body) => {
-          const updates = {};
-          if (body.twitch?.enabled  !== undefined) updates['twitch/enabled']  = body.twitch.enabled;
-          if (body.twitch?.channel  !== undefined) updates['twitch/channel']  = body.twitch.channel;
-          if (body.youtube?.enabled !== undefined) updates['youtube/enabled'] = body.youtube.enabled;
-          if (body.youtube?.channel !== undefined) updates['youtube/channel'] = body.youtube.channel;
-          if (body.soop?.enabled    !== undefined) updates['soop/enabled']    = body.soop.enabled;
-          if (body.soop?.channel    !== undefined) updates['soop/channel']    = body.soop.channel;
-          if (body.soop?.apiMode    !== undefined) updates['soop/apiMode']    = body.soop.apiMode;
-          return db.ref('config').update(updates).then(() => ({ ok: true }));
-        },
-        getPetConfig: () => db.ref('config').once('value').then(s => {
-          const c = s.val() ?? {};
-          return { interactions: c.interactions ?? [], greetingAnimations: c.greetingAnimations ?? [], scale: c.obs?.scale ?? 2 };
-        }),
-        savePetConfig: (body) => {
-          const updates = {};
-          if (body.interactions !== undefined) updates['interactions'] = body.interactions;
-          if (body.scale        !== undefined) updates['obs/scale']    = body.scale;
-          return db.ref('config').update(updates).then(() => ({ ok: true }));
-        },
-        getAnimations: () => db.ref('config').once('value').then(s => {
-          const c = s.val() ?? {};
-          const animations = { ...(c.animations ?? {}) };
-          const ids = PackFormat.resolveActivePackIds(c);
-          if (!ids.length) return { animations };
-          return Promise.all(ids.map(id => db.ref('packs/' + PackFormat.packKeyOf(id)).once('value')))
-            .then(snaps => {
-              const merged = PackFormat.mergeActivePacks(snaps.map(ps => ps.val())).animations ?? {};
-              return { animations: Object.assign(animations, merged) };
-            });
-        }),
-        getPacks:        () => db.ref('packs').once('value').then(s => s.val() ?? {}),
-        savePack:        (pack) => db.ref('packs/' + PackFormat.packKeyOf(pack.id)).set(pack).then(() => ({ ok: true })),
-        deletePack:      (key) => db.ref('packs/' + key).remove().then(() => ({ ok: true })),
-        getActivePackIds: () => db.ref('config').once('value').then(s => PackFormat.resolveActivePackIds(s.val() ?? {})),
-        playAnimation:   (name) => db.ref('events/manualPlay')
-                                     .set({ animation: name, nonce: Date.now() + '_' + Math.random().toString(36).slice(2) })
-                                     .then(() => ({ ok: true })),
-        // 「我開播了」:寫 nonce 事件,overlay 收到後立刻查一次直播(繞過 15 分鐘節流)
-        checkYouTubeLive: () => db.ref('events/checkLive')
-                                  .set({ nonce: Date.now() + '_' + Math.random().toString(36).slice(2) })
-                                  .then(() => ({ ok: true, triggered: true })),
-        // activePackId 舊欄位同步寫第一個:已部署的舊 overlay 只認單包,至少還能套到一個
-        setActivePackIds: (ids) => db.ref('config').update(PackFormat.packIdsCompatFields(ids)).then(() => ({ ok: true })),
-        getEnv: () => db.ref('config').once('value').then(s => {
-          const c = s.val() ?? {};
-          return { TWITCH_OAUTH: c.twitchOauth ?? '', YOUTUBE_API_KEY: c.youtubeApiKey ?? '', SOOP_API_KEY: c.soopApiKey ?? '' };
-        }),
-        saveEnv: (body) => {
-          const updates = {};
-          if (body.TWITCH_OAUTH    !== undefined) updates['twitchOauth']   = body.TWITCH_OAUTH;
-          if (body.YOUTUBE_API_KEY !== undefined) updates['youtubeApiKey'] = body.YOUTUBE_API_KEY;
-          if (body.SOOP_API_KEY    !== undefined) updates['soopApiKey']    = body.SOOP_API_KEY;
-          return db.ref('config').update(updates).then(() => ({ ok: true }));
-        },
-        getVersion:         () => Promise.resolve({ current: 'web' }),
-        checkUpdate:        () => fetch('https://api.github.com/repos/csongs/YoliaWatching/releases/latest', { headers: { 'User-Agent': 'YoliaWatching' } })
-                                    .then(r => r.json())
-                                    .then(d => ({ current: 'web', latest: (d.tag_name ?? '').replace(/^v/, ''), hasUpdate: false, url: d.html_url ?? '' })),
-        openUrl:            (url) => { window.open(url, '_blank'); return Promise.resolve({ ok: true }); },
-        getStatus:          () => Promise.resolve({}),
-        getMetrics:         () => Promise.resolve({ processes: [] }),
-        getPaths:           () => Promise.resolve({ userDataDir: '（雲端版不適用）' }),
-        openUserData:       () => Promise.resolve({ ok: true }),
-        openConfig:         () => Promise.resolve({ ok: true }),
-        getDefaultPetConfig: () => Promise.resolve({ interactions: [], greetingAnimations: [], scale: 2 }),
-      };
-
-      firebase.auth().onAuthStateChanged((user) => {
-        if (user && !ALLOWED_EMAILS.includes((user.email || '').toLowerCase())) {
-          firebase.auth().signOut();
-          document.getElementById('login-overlay').style.display = 'flex';
-          document.getElementById('app-root').style.display      = 'none';
-          const errEl = document.getElementById('login-error');
-          errEl.textContent = '此帳號沒有權限進入控制面板';
-          errEl.style.display = 'block';
-          return;
-        }
-        document.getElementById('login-overlay').style.display = user ? 'none' : 'flex';
-        document.getElementById('app-root').style.display      = user ? '' : 'none';
-        document.getElementById('logout-btn').style.display    = user ? '' : 'none';
-        if (user && !apiReady) { apiReady = true; loadVersion(); }
-      });
-      return;
-    } else {
-      const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
-      api = {
-        getConfig:           () => fetch('/panel/api/config').then(r => r.json()),
-        saveConfig:          (b) => post('/panel/api/config', b),
-        getPetConfig:        () => fetch('/panel/api/pet-config').then(r => r.json()),
-        savePetConfig:       (b) => post('/panel/api/pet-config', b),
-        getAnimations:       () => fetch('/panel/api/animations').then(r => r.json()),
-        getEnv:              () => fetch('/panel/api/env').then(r => r.json()),
-        saveEnv:             (b) => post('/panel/api/env', b),
-        getVersion:          () => fetch('/panel/api/version').then(r => r.json()),
-        checkUpdate:         () => fetch('/panel/api/check-update').then(r => r.json()),
-        openUrl:             (url) => post('/panel/api/open-url', { url }),
-        getStatus:           () => fetch('/panel/api/status').then(r => r.json()),
-        getMetrics:          () => fetch('/panel/api/metrics').then(r => r.json()),
-        getPaths:            () => fetch('/panel/api/paths').then(r => r.json()),
-        openUserData:        () => post('/panel/api/open-userdata', {}),
-        openConfig:          () => post('/panel/api/open-config', {}),
-        getDefaultPetConfig: () => fetch('/panel/api/default-pet-config').then(r => r.json()),
-        getPacks:        () => fetch('/panel/api/packs').then(r => r.json()),
-        savePack:        (pack) => post('/panel/api/packs', pack),
-        deletePack:      (key) => post('/panel/api/packs/delete', { key }),
-        getActivePackIds: () => fetch('/panel/api/active-pack').then(r => r.json()).then(d => PackFormat.resolveActivePackIds(d)),
-        setActivePackIds: (ids) => post('/panel/api/active-pack', { activePackIds: ids }),
-        playAnimation:   (name) => post('/panel/api/play', { animation: name }),
-        checkYouTubeLive: () => post('/panel/api/youtube/check', {}),
-      };
-      // 角色工房/市集共用模組(ADR-004):obsServer 靜態服務直接供應源頭檔
-      await loadScript('/src/packFormat.js');
-      await loadScript('/renderer/workshop.js');
-      await loadScript('/renderer/market.js');
-    }
+    const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+    api = {
+      getPetConfig:        () => fetch('/panel/api/pet-config').then(r => r.json()),
+      savePetConfig:       (b) => post('/panel/api/pet-config', b),
+      getAnimations:       () => fetch('/panel/api/animations').then(r => r.json()),
+      getVersion:          () => fetch('/panel/api/version').then(r => r.json()),
+      checkUpdate:         () => fetch('/panel/api/check-update').then(r => r.json()),
+      openUrl:             (url) => post('/panel/api/open-url', { url }),
+      getStatus:           () => fetch('/panel/api/status').then(r => r.json()),
+      getMetrics:          () => fetch('/panel/api/metrics').then(r => r.json()),
+      getPaths:            () => fetch('/panel/api/paths').then(r => r.json()),
+      openUserData:        () => post('/panel/api/open-userdata', {}),
+      openConfig:          () => post('/panel/api/open-config', {}),
+      getDefaultPetConfig: () => fetch('/panel/api/default-pet-config').then(r => r.json()),
+      getPacks:        () => fetch('/panel/api/packs').then(r => r.json()),
+      savePack:        (pack) => post('/panel/api/packs', pack),
+      deletePack:      (key) => post('/panel/api/packs/delete', { key }),
+      getActivePackIds: () => fetch('/panel/api/active-pack').then(r => r.json()).then(d => PackFormat.resolveActivePackIds(d)),
+      setActivePackIds: (ids) => post('/panel/api/active-pack', { activePackIds: ids }),
+      playAnimation:   (name) => post('/panel/api/play', { animation: name }),
+    };
+    // 角色工房/市集共用模組(ADR-004):obsServer 靜態服務直接供應源頭檔
+    await loadScript('/src/packFormat.js');
+    await loadScript('/renderer/workshop.js');
+    await loadScript('/renderer/market.js');
 
     apiReady = true;
     loadVersion();

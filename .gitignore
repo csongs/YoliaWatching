@@ -5,27 +5,9 @@ out/
 .env
 .claude/
 
-# Firebase CLI cache
-web/.firebase/
-
 # 桌面版本機資料（dev 模式 userDataDir=yuupeek/，會落在 repo 內）
 yuupeek/packs.json
 yuupeek/animations.json
-
-# 隱私設定（含 API key）
-web/public/firebase-config.js
-web/config-export.json
-
-# sync.js 自動產生（原始碼在 yuupeek/）
-web/public/character.js
-web/public/chatProcessor.js
-web/public/panel.html
-web/public/assets/
-web/public/packFormat.js
-web/public/workshop.js
-web/public/market.js
-web/public/youtubePollPolicy.js
-web/public/defaultAnimations.js
 
 # AI session 工作檔（進度 ledger、任務簡報）
 .superpowers/
