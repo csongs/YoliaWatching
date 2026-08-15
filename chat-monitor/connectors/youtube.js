@@ -222,12 +222,19 @@ function createYoutubeConnector({ channel }, onEvent, onStatus) {
       // 2026-08-14 之前這裡會把「[會籍 N 個月]」這種文字前綴直接塞進 message/messageParts,
       // 使用者反應每則訊息都重複顯示月數太雜訊、不需要——改成 message 就是單純留言文字本身,
       // 跟一般聊天訊息一樣,月數/徽章資料只留在 extra 裡供之後需要的地方自己取用,不影響顯示。
+      // 2026-08-15:順便存徽章圖示網址(author.badge.thumbnail.url)——之前只存文字標籤
+      // (membershipBadge),圖示完全沒讀取。這個頻道目前只看過「New member」/
+      // 「Member (N months)」/「Member (N year(s))」三種文字,從沒出現過像 Twitch 那種明確的
+      // Tier 1/2/3 字樣;如果這個頻道其實有分付費階級,YouTube 應該是靠徽章圖案本身的美術設計
+      // 區分,不是文字——圖示網址存起來,demo 頁顯示出來後,以後比對不同人的圖示網址有沒有差異,
+      // 才有機會確認這個頻道到底有沒有多階級,目前還沒查證。
+      const badgeIcon = item.author?.badge?.thumbnail?.url ?? null;
       return {
         ...base,
         eventType: 'chat',
         message: text,
         amount: null,
-        extra: { isMembership: true, membershipMonths: months, membershipBadge: badgeLabel, membershipHeader: header || null, messageParts },
+        extra: { isMembership: true, membershipMonths: months, membershipBadge: badgeLabel, membershipBadgeIcon: badgeIcon, membershipHeader: header || null, messageParts },
       };
     }
     return { ...base, eventType: 'chat', message: text, amount: null, extra: messageParts ? { messageParts } : null };
