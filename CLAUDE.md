@@ -25,9 +25,12 @@ Firebase 雲端版（原 `web/`）已於同次收斂移除，這是內部工具�
 1. **格式只加不改**：動畫格式 `{ folder, frames, ms, loop }` 的既有欄位，其語意與型別不可
    變更。只能「新增可選欄位」，且舊版讀到新資料必須仍能運作（規則細節與範例見 PLAYBOOK
    §格式演進）。
-2. **這次收斂範圍只到「一般聊天文字」**：chat-monitor 廣播的事件裡，桌寵只接
-   `event_type === 'chat'`；斗內/訂閱/Raid 等其他事件目前刻意不處理（見 ARCHITECTURE.md
-   決策記錄）。要擴大範圍前先確認這是刻意放寬，不是漏接。
+2. **互動規則是事件類型導向**：規則格式 `{ id, eventTypes[], matchMode?, match?, minEnergy?,
+   energyDelta?, speech?, action? }`（2026-08-16 收斂，取代舊的 keyword/command 二分）。
+   `eventTypes` 對齊 chat-monitor 的 `event_type`/`category` 詞彙（見
+   `yuupeek/src/chatMonitorEventTypes.js`），可混粗略分類與細項、可複選；不填 `match` 代表
+   該類事件一發生就算觸發。門檻（threshold）規則面板目前不開放編輯，但資料與判斷邏輯都還在
+   （`computeState`），改動時不要誤刪。
 3. **測試必須全綠**：`cd yuupeek && npm test`（2026-08-16 收斂後基線全綠；
    出現任何紅字＝改動不合格，回報中原文貼出錯誤）。
 4. **預設動畫單一源頭在 `yuupeek/src/defaultAnimations.js`**：`main.js` 直接引用；
@@ -52,6 +55,6 @@ cd yuupeek && npm run test-ui    # 角色/動畫沙盒頁 test.html（http://loc
 ## 已知技術債（改到附近時處理，不要順手大改）
 
 - `detector.js` 未接線（藍圖功能，檔頭有註記，勿當活程式碼改）。
-- 斗內/訂閱/Raid 等 chat-monitor 事件尚未接進互動規則系統（見鐵律 2）——這是刻意留給以後
-  單獨做的功能缺口，不是 bug。
+- OBS overlay 的 yolia_see 數字/進度條目前隱藏（`display:none`），機制本身照跑，只是不顯示——
+  見 `obs-overlay.html` 的 `#hud` 區塊註解。
 - 其餘小項見 docs/HANDOFF.md「剩餘已知後續」。

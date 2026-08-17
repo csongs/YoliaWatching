@@ -76,10 +76,14 @@ db.insertEvent(evt)  → SQLite events 表(chat-monitor/db.js，dedup_key 防重
         ▼
 broadcast({ type:'event', data: evt })  → ws://127.0.0.1:3100/ws（chat-monitor/server.js）
         │
-        ▼ (yuupeek/src/chatMonitorClient.js 訂閱這條 WS，evt.event_type !== 'chat' 一律忽略——
-        │  這次收斂範圍只到一般聊天文字，斗內/訂閱/Raid 等事件桌寵目前完全不處理，見 CLAUDE.md 鐵律 2)
+        ▼ (yuupeek/src/chatMonitorClient.js 訂閱這條 WS，每個事件都轉發給規則引擎——
+        │  2026-08-16 二次收斂前只轉發 event_type==='chat'，現在由 interactions 的
+        │  eventTypes 欄位決定要不要理會，見下方)
         ▼
-ChatProcessor.processMessage(text, username, ...)  → { yolia_see, state, animOnly, speech, costDenied, resetState }
+ChatProcessor.processEvent(evt, handlers, yolia_see, thresholds)
+        → 找第一條 eventTypes 對到 evt.eventType/evt.category 的規則(陣列順序=優先權)
+        → 沒有規則命中回 null(呼叫端不做任何事);命中則回
+          { yolia_see, state, animOnly, speech, costDenied, resetState }
         ▼
 ChatProcessor.planMessageEffects(r, yolia_see)   → { immediate, delayed }
         ▼
@@ -88,11 +92,23 @@ main.js 的 broadcastState()  → obsServer 的本機 WS → obs-overlay.html
 char.applyUpdate(...)              → canvas 動畫 + HUD + 對話泡泡
 ```
 
-- 訊息處理邏輯（[chatProcessor.js](../yuupeek/src/chatProcessor.js)）：
-  先判指令（句首詞完全匹配，走 cost/幽視值增減/動畫/回應規則）；**非指令訊息一律先 +1 幽視值**
-  （含關鍵詞命中者——關鍵詞再疊加自己的 yolia_see 增減）。門檻（threshold）由 `computeState()`
-  把幽視值映射到狀態。這段邏輯完全沒變，只是訊息來源從「桌寵自己接 IRC/API」換成「chat-monitor
-  轉發」。
+- 互動規則格式（[chatProcessor.js](../yuupeek/src/chatProcessor.js)，2026-08-16 收斂為事件
+  類型導向）：`{ id, eventTypes[], matchMode?, match?, minEnergy?, energyDelta?, speech?, action? }`。
+  - `eventTypes`：對齊 chat-monitor 的 `event_type`/`category` 詞彙（見
+    `yuupeek/src/chatMonitorEventTypes.js`），可混粗略分類（`chat`/`donation`/`system`）與細項
+    （`cheer`/`superchat`/`raid`…），可複選；命中 `event_type` 或 `category` 任一個就算。
+  - `match`：只有規則要比對聊天文字時才填；不填代表「這個事件類型一發生就算觸發」，適合
+    捐款/Raid 這類沒有文字內容好比對的事件。`matchMode` 決定比對方式：`contains`（句子任何
+    地方，取代舊的「關鍵詞」）｜`prefix`（句首完全對應，取代舊的「指令」）。
+  - `minEnergy`：觸發門檻（取代舊的 `cost`）；`energyDelta`：觸發後幽視值加減（取代舊的
+    `yolia_see`），不填＝不影響幽視值。
+  - **「一般聊天訊息 +1 幽視值」不再是引擎內建行為**，改成一條資料驅動的 catch-all 規則
+    （`eventTypes:["chat"]`，不填 `match`，`energyDelta:1`，見 `default.config.json` 的
+    `c_base`）——規則清單順序＝優先權，特定規則放前面、catch-all 放最後。
+  - 門檻（threshold）規則的資料形狀沒變（`{trigger:"threshold", min, state}`），由
+    `computeState()` 把幽視值映射到常駐狀態；`buildEventHandlers()` 會把這類規則濾掉，
+    呼叫端另外用 `filter(i => i.trigger === 'threshold')` 抽出來餵給 `computeState`。目前
+    面板不開放編輯這類規則，但資料與邏輯都還在背景跑。
 - chat-monitor 斷線/沒開：`chatMonitorClient.js` 每 3 秒重試連線，不報錯彈窗；panel「模組狀態」
   分頁有一個連線燈號（見 §9）。**不補開機前錯過的訊息**——這跟舊版 Twitch/YouTube 斷線重連
   本來就不回放歷史的行為一致，不是退步。
@@ -122,7 +138,9 @@ char.applyUpdate(...)              → canvas 動畫 + HUD + 對話泡泡
 ```
 config.json（%APPDATA%\YoliaWatching\，dev 模式在 yuupeek/）
 ├─ modes: { obs, test }
-├─ interactions: [ { id, trigger:"threshold"|"keyword"|"command", ... } ]   （互動規則，panel「桌寵設定」可編輯）
+├─ interactions: [ 事件規則 { id, eventTypes[], matchMode?, match?, minEnergy?, energyDelta?,
+│                              speech?, action? }
+│                  或門檻規則 { id, trigger:"threshold", min, state }（面板不開放編輯，見 §4）]
 ├─ obs: { port, scale }
 ├─ greetingAnimations: [ {frames[], ms, weight} ]
 ├─ activePackId / activePackIds: 角色包啟用清單（ADR-004，packFormat.mergeActivePacks 合併）
@@ -154,8 +172,9 @@ packs.json（同目錄）— 完整角色包內容（packStore.js 讀寫）
 
 三個 connector 的輸出統一收斂成 SQLite `events` 表的一列（欄位定義與各平台 `event_type`
 分類見 [chat-monitor/docs/event-types.md](../chat-monitor/docs/event-types.md)），
-再透過 WebSocket 廣播給 yuupeek（§4）。**這次收斂只用得到 `event_type === 'chat'`**——
-斗內/訂閱/Raid 等分類資訊 chat-monitor 都抓了，只是桌寵這端目前選擇不理它們。
+再透過 WebSocket 廣播給 yuupeek（§4）。桌寵這端要不要理會某個 `event_type`（含斗內/訂閱/
+Raid）完全由使用者在面板設定的互動規則 `eventTypes` 決定（2026-08-16 二次收斂，見 §4）——
+chat-monitor 不做任何篩選，全部轉發。
 
 ## 8. 素材管線
 
@@ -188,7 +207,7 @@ packs.json（同目錄）— 完整角色包內容（packStore.js 讀寫）
 - 測試：`cd yuupeek && npm test`（jest@30 + jsdom）。9 個測試檔在 `yuupeek/src/__tests__/`：
   `character`、`chatMonitorClient`（2026-08-16 新增，取代 `chatListener`）、`chatProcessor`、
   `defaultAnimations`、`detector`、`obsServer`、`packFormat`、`packStore`、`stateMachine`。
-  【事實，2026-08-16 實測】基線**全綠**（9 suites / 134 tests）。main.js 因 `require('electron')`
+  【事實，2026-08-16 實測】基線**全綠**（9 suites / 143 tests）。main.js 因 `require('electron')`
   無法在 jest 下跑，沒有對應測試檔（拆出去的 packStore.js 例外）。
 - chat-monitor 沒有 jest 測試（獨立 npm 專案，跟 yuupeek 的測試基線分開；它自己的品質保證
   方式是模擬事件 API，見 chat-monitor/README.md）。
@@ -209,7 +228,9 @@ packs.json（同目錄）— 完整角色包內容（packStore.js 讀寫）
 | SOOP 官方 API 模式 | `apiMode:"official"` 尚未實作（`chat-monitor/connectors/soop.js`） | 親自複核 |
 | greetingAnimations | 有 runtime 支援、無 panel 編輯 UI（改 `%APPDATA%\YoliaWatching\config.json`——**不要**改安裝目錄的 default.config.json，那是隨程式更新的預設檔） | 親自複核＋審查修正 |
 | panel 無法編輯動畫 | panel 的 DataAdapter 只有 `getAnimations`（唯讀，供下拉選單）。寫入路徑存在但 panel UI 沒接：`obsServer.js`（POST /panel/api/animations）＋ `main.js` 的 `saveAnimations` | 親自複核＋審查修正 |
-| 斗內/訂閱/Raid 等事件未接進互動規則 | 刻意的範圍縮小，不是遺漏——見 CLAUDE.md 鐵律 2、§7 | 2026-08-16 決策記錄 |
+| 斗內/訂閱/Raid 等事件未接進互動規則 | **已解決**（2026-08-16 二次收斂）：互動規則改事件類型導向，`eventTypes` 可以指到任何 chat-monitor 的 event_type/category，不再限定 `chat` | 2026-08-16 決策記錄 |
+| 互動規則格式（keyword/command 二分） | **已改版**：統一成 `{eventTypes[], matchMode?, match?, minEnergy?, energyDelta?, speech?, action?}`，`normalizeInteraction()` 會把舊格式資料自動轉新格式，不用手動遷移既有 config.json | 親自複核 |
+| OBS overlay 的幽視值進度條 | 目前 `display:none` 隱藏，機制照跑，只是不顯示——見 `obs-overlay.html` `#hud` 區塊註解 | 2026-08-16 決策記錄 |
 
 ## 12. 給修改者的快速對照
 
@@ -219,7 +240,8 @@ packs.json（同目錄）— 完整角色包內容（packStore.js 讀寫）
 | 角色動作/渲染 | `yuupeek/renderer/character.js` | 跑 `npm test` |
 | 面板 UI | `yuupeek/renderer/panel.html` | 平台頻道/API key 設定已不在這裡，別加回去（去 chat-monitor） |
 | 聊天連線本身（Twitch/YouTube/SOOP） | `chat-monitor/connectors/*.js` | 這是獨立 npm 專案，改完要在 `chat-monitor/` 下自己 `npm start` 測，不會被 yuupeek 的 `npm test` 覆蓋到 |
-| 桌寵怎麼收 chat-monitor 的事件 | `yuupeek/src/chatMonitorClient.js` | 目前只處理 `event_type==='chat'`，擴大範圍前先讀 CLAUDE.md 鐵律 2 |
+| 桌寵怎麼收 chat-monitor 的事件 | `yuupeek/src/chatMonitorClient.js` | 全部事件都轉發給規則引擎，要不要理會由 interactions 的 `eventTypes` 決定 |
+| 事件類型/分類詞彙表 | `yuupeek/src/chatMonitorEventTypes.js` | 這是 chat-monitor `public/labels.js` 的小抄本，chat-monitor 改分類要記得回來對一次 |
 | 預設動畫幀序 | `yuupeek/src/defaultAnimations.js` | 單一源頭，改這裡即可 |
 | 預設互動 | `yuupeek/default.config.json` | 桌面版預設 |
 | 部署流程 | electron-builder（`yuupeek/package.json` 的 `build`/`release` script） | 沒有雲端部署了 |

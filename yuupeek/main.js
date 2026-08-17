@@ -85,7 +85,9 @@ const sm = createStateMachine(config);
 function broadcastState(payload) {
   const data = payload ?? { value: sm.yolia_see, state: sm.state };
   if (obsServer) {
-    if (!data.animOnly) obsServer.setWelcomeData(data);
+    // welcomeData 是給「新連線」的快照(overlay 開啟/重整時吃這份)——speech 不該存進去,
+    // 不然舊訊息的對話泡泡會在下次開啟/重整頁面時被當成新訊息重播一次。
+    if (!data.animOnly) obsServer.setWelcomeData({ ...data, speech: null });
     obsServer.broadcast(data);
   }
 }

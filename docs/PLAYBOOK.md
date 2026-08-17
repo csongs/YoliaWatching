@@ -92,8 +92,8 @@
 5. 品味題（UI 視覺風格、文案語氣、角色個性、定價）：AI 的判斷不可靠。
    給 2–3 個具體選項＋各自效果描述；若流程無法等待回覆，選「最容易撤銷」的選項，
    並在 HANDOFF.md 記「此處是暫定，等維護者確認」。
-6. 擴大聊天事件的處理範圍（目前只接 `event_type==='chat'`，見 CLAUDE.md 鐵律 2）——
-   要不要接斗內/訂閱/Raid 進互動規則系統是產品範圍決策，不是技術細節，先問。
+6. 互動規則的 `eventTypes` 詞彙表本身要不要擴充（`chatMonitorEventTypes.js` 加新分類/
+   新細項）——這要跟 chat-monitor 的 `labels.js` 對齊，兩邊分類定義不一致比漏接更難查，先問。
 
 倒過來說：不在上列的（加測試、修 bug、加 optional 欄位、文件更新、重構不改行為）→
 直接做完並回報，不要停下來問。
@@ -143,5 +143,6 @@
 1. 邏輯在 `chat-monitor/connectors/*.js`；欄位對照表在 `chat-monitor/docs/event-types.md`。
 2. 這是獨立 npm 專案，`yuupeek && npm test` 測不到，改完自己在 `chat-monitor/` 下
    `npm start` 驗，或用模擬事件 API（§2）。
-3. 若新增/改了 `event_type`，桌寵這端目前只認 `chat`，其他類型不會有任何反應——這是預期
-   行為，不是漏接（CLAUDE.md 鐵律 2）。
+3. 若新增/改了 `event_type` 或 `category`，記得同步更新 `yuupeek/src/chatMonitorEventTypes.js`
+   （chat-monitor `public/labels.js` 的小抄本）——沒同步的話，面板互動規則的「觸發事件」
+   多選看不到新選項，也選不到（不會報錯，只是選單裡沒有）。

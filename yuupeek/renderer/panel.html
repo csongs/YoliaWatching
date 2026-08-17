@@ -141,7 +141,7 @@
     <h3>config.json 設定</h3>
     <ul>
       <li><strong>modes</strong>：obs（OBS 伺服器）/ test（啟動時開啟測試頁）</li>
-      <li><strong>interactions</strong>：互動規則（門檻／關鍵詞／指令），也可在「桌寵設定」頁編輯</li>
+      <li><strong>interactions</strong>：互動規則（關鍵詞／指令，也可在「桌寵設定」頁編輯；門檻類規則目前面板不開放編輯，見下方說明）</li>
       <li><strong>greetingAnimations</strong>：觸發揮手動畫的變體與權重</li>
     </ul>
     <div class="note">頻道/API key 等聊天室連線設定不在這裡，去 chat-monitor 的頁面設定。修改 config.json 後需重新啟動程式才會生效</div>
@@ -170,7 +170,7 @@
 
   <div class="card">
     <h3>互動設定</h3>
-    <p style="color:#64748b;font-size:12px;margin-bottom:14px">設定所有觸發條件與對應動作。<code style="font-size:11px">門檻</code> 讓觀眾需要累積幽視值才能兌換指令，不足時角色會說明。</p>
+    <p style="color:#64748b;font-size:12px;margin-bottom:14px">觀眾打出「關鍵詞」（句子任何地方出現就算）或「指令」（訊息開頭要打對）→ 播放對應動畫，「回應」欄位選填，填了就會在對話泡泡顯示。一組觸發文字可以逗號分隔多個，都對應同一個動作。</p>
     <div id="interactions-list"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn btn-secondary btn-small" onclick="addInteractionRow();debouncedPetSave()">+ 新增互動</button>
@@ -401,20 +401,48 @@
 
   // ── Pet config tab ────────────────────────────────────────────────────────
   let STATE_OPTIONS = ['idle', 'peek', 'cheer', 'cry', 'eat', 'jump', 'run_left', 'run_right', 'wave'];
+  // 門檻(threshold)規則這次簡化先不開放編輯(2026-08-16,怕使用者覺得複雜),但既有資料不刪——
+  // 幽視值累積與門檻狀態機在背後照舊跑,只是沒有畫面可以改。load 時從清單裡摘出來存這裡,
+  // save 時原封不動接回去,不會因為使用者存了別的欄位就把門檻規則洗掉。
+  let hiddenThresholds = [];
 
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function generateId(trigger) {
-    const p = trigger === 'threshold' ? 't' : trigger === 'keyword' ? 'k' : 'c';
+  function generateId() {
     const r = Array.from({length: 4}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
-    return `${p}_${r}`;
+    return `r_${r}`;
   }
 
-  function stateSelect(selected, opts) {
+  // 動作下拉多一個「（不指定）」選項(空字串值)——規則可以只影響幽視值/不切動畫
+  // (例如背景累積用的那條 catch-all 規則,見 default.config.json 的 c_base)。
+  function actionSelect(selected, opts) {
     const list = opts ?? STATE_OPTIONS;
-    return `<select>${list.map(s => `<option value="${s}"${s === selected ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+    const none = `<option value=""${!selected ? ' selected' : ''}>（不指定）</option>`;
+    const items = list.map(s => `<option value="${s}"${s === selected ? ' selected' : ''}>${s}</option>`).join('');
+    return `<select class="int-action">${none}${items}</select>`;
+  }
+
+  // 觸發事件多選(2026-08-16,對齊 chat-monitor 的 event_type/category 詞彙,見
+  // chatMonitorEventTypes.js):可以混粗略分類(chat/donation/system)跟細項(cheer/
+  // superchat/raid...20 幾項),ctrl/cmd+click 複選。細項預設收起來(只留 3 個粗略分類可選)
+  // ——維護者反應「平台很多要按好多」,大多數規則其實只需要粗略分類;已經選了細項的規則
+  // (例如從資料載入時就是 eventTypes:["cheer"])則自動展開,不然選了什麼都看不到。
+  function eventTypesSelect(selected) {
+    const sel = new Set(selected?.length ? selected : ['chat']);
+    const categoryValues = new Set(Object.keys(ChatMonitorEventTypes.CATEGORY_LABELS));
+    const expanded = [...sel].some((v) => !categoryValues.has(v));
+    const categoryOpts = Object.entries(ChatMonitorEventTypes.CATEGORY_LABELS)
+      .map(([v, label]) => `<option value="${v}"${sel.has(v) ? ' selected' : ''}>${esc(label)}</option>`).join('');
+    const typeOpts = ChatMonitorEventTypes.EVENT_TYPES
+      .map(t => `<option value="${t.value}"${sel.has(t.value) ? ' selected' : ''}>${esc(t.label)}</option>`).join('');
+    return `
+      <select class="int-eventtypes" multiple size="${expanded ? 8 : 3}" style="min-width:240px">
+        <optgroup label="粗略分類（涵蓋所有平台）">${categoryOpts}</optgroup>
+        <optgroup label="細項（特定平台/類型）" class="int-eventtypes-fine"${expanded ? '' : ' style="display:none"'}>${typeOpts}</optgroup>
+      </select>
+      <div><a href="javascript:void(0)" class="int-toggle-fine" style="font-size:11px;color:#60a5fa">${expanded ? '隱藏細項' : '顯示細項（依平台/類型）'}</a></div>`;
   }
 
   function loadPetConfig() {
@@ -426,98 +454,96 @@
         const names = [...new Set(Object.keys(animData.animations ?? animData))];
         if (names.length) STATE_OPTIONS = [...new Set([...STATE_OPTIONS, ...names])];
         document.getElementById('pet-scale').value = String(data.scale ?? 2);
+        hiddenThresholds = (data.interactions ?? []).filter(i => i.trigger === 'threshold');
         const list = document.getElementById('interactions-list');
         list.innerHTML = '';
-        (data.interactions ?? []).forEach(i => addInteractionRow(i));
+        (data.interactions ?? []).filter(i => i.trigger !== 'threshold').forEach(i => addInteractionRow(i));
       })
       .catch(() => showToast('載入設定失敗', true));
   }
 
   function addInteractionRow(interaction = {}) {
-    const trigger   = interaction.trigger ?? 'threshold';
     const ANIM_OPTS = [...new Set(STATE_OPTIONS)];
     const row = document.createElement('div');
     row.className = 'interaction-row';
     row.style.cssText = 'background:#0d111a;border:1px solid #2d3748;border-radius:8px;padding:12px;margin-bottom:10px';
-    row.dataset.id = interaction.id ?? generateId(trigger);
+    row.dataset.id = interaction.id ?? generateId();
 
-    function buildFields(t, src) {
-      if (t === 'threshold') {
-        return `
-          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            幽視值 ≥ <input type="text" inputmode="numeric" class="int-min" value="${esc(src.min ?? 0)}" style="width:60px">
-          </label>
-          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            對應狀態 ${stateSelect(src.state ?? 'idle')}
-          </label>`;
-      }
-      if (t === 'keyword') {
-        const matchRaw = Array.isArray(src.match) ? src.match.join(',') : (src.match ?? '');
-        return `
-          <div style="display:flex;gap:10px;align-items:center">
-            <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
-              關鍵詞（逗號） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="安安,早安" style="flex:1">
-            </label>
-            <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-              動畫 ${stateSelect(src.animation ?? 'wave', ANIM_OPTS)}
-            </label>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center">
-            <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-              幽視值± <input type="text" inputmode="numeric" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
-            </label>
-            <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
-              回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user} 安安~" style="flex:1">
-            </label>
-          </div>`;
-      }
-      // command
-      const costVal  = src.cost != null ? src.cost : '';
-      const matchRaw = Array.isArray(src.match) ? src.match.join(',') : (src.match ?? '');
+    // 2026-08-16 收斂:規則改成「觸發事件(可複選) → 比對文字(選填) → 幽視值門檻/增減(選填)
+    // → 動作(選填) → 對話泡泡(選填)」,取代舊的關鍵詞/指令二選一格式。詳細設計理由見
+    // 該次對話與 docs/ARCHITECTURE.md。
+    function buildFields(src) {
+      const matchRaw  = Array.isArray(src.match) ? src.match.join(',') : (src.match ?? '');
+      const matchMode = src.matchMode ?? 'contains';
       return `
-        <div style="display:flex;gap:10px;align-items:center">
-          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
-            指令（逗號） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="!加油,！加油" style="flex:1">
-          </label>
+        <div>
+          <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">觸發事件（可複選）</label>
+          ${eventTypesSelect(src.eventTypes)}
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            動畫 ${stateSelect(src.animation ?? 'idle', ANIM_OPTS)}
+            比對方式 <select class="int-matchmode">
+              <option value="contains"${matchMode === 'contains' ? ' selected' : ''}>關鍵詞（句子任何地方）</option>
+              <option value="prefix"${matchMode === 'prefix' ? ' selected' : ''}>指令（句首）</option>
+            </select>
+          </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
+            觸發文字（逗號分隔多組，選填） <input type="text" class="int-match" value="${esc(matchRaw)}" placeholder="安安,早安（留空＝該類事件一律觸發）" style="flex:1">
           </label>
         </div>
-        <div style="display:flex;gap:10px;align-items:center">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            幽視值± <input type="text" inputmode="numeric" class="int-yolia" value="${esc(src.yolia_see ?? 0)}" style="width:60px">
+            觸發門檻（選填） <input type="text" inputmode="numeric" class="int-minenergy" value="${esc(src.minEnergy ?? '')}" placeholder="—" style="width:60px">
           </label>
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
-            需消耗幽視值 <input type="text" inputmode="numeric" class="int-cost" value="${esc(costVal)}" placeholder="—" style="width:60px">
+            幽視值±（選填） <input type="text" inputmode="numeric" class="int-energydelta" value="${esc(src.energyDelta ?? '')}" placeholder="—" style="width:60px">
           </label>
+          <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px">
+            動作 ${actionSelect(src.action ?? '', ANIM_OPTS)}
+            <button type="button" class="btn btn-secondary btn-small int-preview">▶ 試播</button>
+          </label>
+        </div>
+        <div>
           <label style="color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:6px;flex:1">
-            回應 <input type="text" class="int-response" value="${esc(src.response ?? '')}" placeholder="{user}: !加油" style="flex:1">
+            對話泡泡（選填） <input type="text" class="int-speech" value="${esc(src.speech ?? '')}" placeholder="{user} 安安~" style="flex:1">
           </label>
         </div>`;
     }
 
     row.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <select class="int-trigger">
-          <option value="threshold"${trigger === 'threshold' ? ' selected' : ''}>門檻</option>
-          <option value="keyword"${trigger === 'keyword' ? ' selected' : ''}>關鍵詞</option>
-          <option value="command"${trigger === 'command' ? ' selected' : ''}>指令</option>
-        </select>
+        <span style="color:#64748b;font-size:12px">互動規則</span>
         <button class="btn btn-secondary btn-small int-delete" style="margin-left:auto">刪除</button>
       </div>
-      <div class="int-fields" style="display:flex;flex-direction:column;gap:8px">${buildFields(trigger, interaction)}</div>
+      <div class="int-fields" style="display:flex;flex-direction:column;gap:8px">${buildFields(interaction)}</div>
     `;
 
     function wireFields() {
-      row.querySelector('.int-fields').querySelectorAll('input,select').forEach(el => el.addEventListener('input', debouncedPetSave));
-    }
+      const fields = row.querySelector('.int-fields');
+      fields.querySelectorAll('input').forEach(el => el.addEventListener('input', debouncedPetSave));
+      fields.querySelectorAll('select').forEach(el => el.addEventListener('change', debouncedPetSave));
 
-    row.querySelector('.int-trigger').addEventListener('change', () => {
-      const t = row.querySelector('.int-trigger').value;
-      row.querySelector('.int-fields').innerHTML = buildFields(t, {});
-      wireFields();
-      debouncedPetSave();
-    });
+      // 細項收合/展開(不影響存檔,純畫面狀態)
+      const toggle    = fields.querySelector('.int-toggle-fine');
+      const fineGroup = fields.querySelector('.int-eventtypes-fine');
+      const eventsSel = fields.querySelector('.int-eventtypes');
+      toggle?.addEventListener('click', () => {
+        const showing = fineGroup.style.display !== 'none';
+        fineGroup.style.display = showing ? 'none' : '';
+        eventsSel.size = showing ? 3 : 8;
+        toggle.textContent = showing ? '顯示細項（依平台/類型）' : '隱藏細項';
+      });
+
+      // 試播:直接呼叫既有的 api.playAnimation(跟角色工房「試播」按鈕同一支 API),
+      // 在正在跑的 overlay 上播一次選到的動作,不用另外做縮圖預覽。
+      fields.querySelector('.int-preview')?.addEventListener('click', () => {
+        const name = fields.querySelector('.int-action')?.value;
+        if (!name) { showToast('先選一個動作再試播', true); return; }
+        api.playAnimation(name)
+          .then(() => showToast('已試播 ' + name))
+          .catch((e) => showToast('試播失敗:' + (e.message ?? e), true));
+      });
+    }
     row.querySelector('.int-delete').addEventListener('click', () => { row.remove(); debouncedPetSave(); });
     wireFields();
 
@@ -525,42 +551,46 @@
   }
 
   function readInteractionRow(row) {
-    const trigger = row.querySelector('.int-trigger').value;
-    const id      = row.dataset.id || generateId(trigger);
-    if (trigger === 'threshold') {
-      return {
-        id,
-        trigger: 'threshold',
-        min:   parseInt(row.querySelector('.int-min')?.value)    || 0,
-        state: row.querySelector('.int-fields select')?.value   ?? 'idle',
-      };
-    }
-    const costRaw = row.querySelector('.int-cost')?.value;
-    const obj = {
-      id,
-      trigger,
-      animation: row.querySelector('.int-fields select')?.value ?? (trigger === 'keyword' ? 'wave' : 'idle'),
-      yolia_see: parseFloat(row.querySelector('.int-yolia')?.value) || 0,
-      response:  row.querySelector('.int-response')?.value ?? '',
-    };
+    const id = row.dataset.id || generateId();
+    // [...new Set(...)]:防呆用,萬一詞彙表(chatMonitorEventTypes.js)未來又不小心讓粗略
+    // 分類跟細項共用同一個 value,存檔時至少不會把重複值也存進去(2026-08-16 實測踩過一次)。
+    const eventTypes = [...new Set([...row.querySelectorAll('.int-eventtypes option:checked')].map(o => o.value))];
+    const obj = { id, eventTypes: eventTypes.length ? eventTypes : ['chat'] };
+
+    const matchMode = row.querySelector('.int-matchmode')?.value;
+    if (matchMode) obj.matchMode = matchMode;
+
     const parts = (row.querySelector('.int-match')?.value ?? '').split(',').map(s => s.trim()).filter(Boolean);
-    obj.match = parts.length === 1 ? parts[0] : parts;
-    if (costRaw !== undefined && costRaw !== '') obj.cost = parseFloat(costRaw) || 0;
+    if (parts.length) obj.match = parts.length === 1 ? parts[0] : parts;
+
+    const minEnergyRaw = row.querySelector('.int-minenergy')?.value;
+    if (minEnergyRaw !== undefined && minEnergyRaw !== '') obj.minEnergy = parseFloat(minEnergyRaw) || 0;
+
+    const energyDeltaRaw = row.querySelector('.int-energydelta')?.value;
+    if (energyDeltaRaw !== undefined && energyDeltaRaw !== '') obj.energyDelta = parseFloat(energyDeltaRaw) || 0;
+
+    const action = row.querySelector('.int-action')?.value;
+    if (action) obj.action = action;
+
+    const speech = row.querySelector('.int-speech')?.value;
+    if (speech) obj.speech = speech;
+
     return obj;
   }
 
   async function resetPetConfig() {
     if (!confirm('確定要還原所有互動設定為預設值嗎？')) return;
     const data = await api.getDefaultPetConfig();
+    hiddenThresholds = (data.interactions ?? []).filter(i => i.trigger === 'threshold');
     document.getElementById('interactions-list').innerHTML = '';
-    for (const i of data.interactions ?? []) addInteractionRow(i);
+    for (const i of (data.interactions ?? []).filter(i => i.trigger !== 'threshold')) addInteractionRow(i);
     const scaleEl = document.getElementById('pet-scale');
     if (scaleEl && data.scale != null) scaleEl.value = data.scale;
     savePetConfig();
   }
 
   function savePetConfig() {
-    const interactions = [...document.querySelectorAll('.interaction-row')].map(readInteractionRow);
+    const interactions = [...hiddenThresholds, ...[...document.querySelectorAll('.interaction-row')].map(readInteractionRow)];
     api.savePetConfig({ interactions, scale: parseFloat(document.getElementById('pet-scale').value) })
       .then(() => showToast('已套用'))
       .catch(() => showToast('套用失敗', true));
@@ -602,6 +632,8 @@
     await loadScript('/src/packFormat.js');
     await loadScript('/renderer/workshop.js');
     await loadScript('/renderer/market.js');
+    // 互動規則的「觸發事件」多選用,對齊 chat-monitor 的 event_type/category 詞彙
+    await loadScript('/src/chatMonitorEventTypes.js');
 
     apiReady = true;
     loadVersion();

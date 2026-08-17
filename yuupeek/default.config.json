@@ -24,87 +24,100 @@
     },
     {
       "id": "k_7dwk",
-      "trigger": "keyword",
-      "animation": "wave",
-      "yolia_see": 0,
-      "response": "{user} 安安~",
+      "eventTypes": [
+        "chat"
+      ],
+      "matchMode": "contains",
       "match": [
         "安安",
         "午安",
         "早安",
         "晚安"
-      ]
+      ],
+      "action": "wave",
+      "speech": "{user} 安安~"
     },
     {
       "id": "c_nzr2",
-      "trigger": "command",
-      "animation": "cheer",
-      "yolia_see": 10,
-      "response": "",
+      "eventTypes": [
+        "chat"
+      ],
+      "matchMode": "contains",
       "match": [
         "!加油",
         "！加油"
-      ]
+      ],
+      "action": "cheer"
     },
     {
       "id": "c_vasc",
-      "trigger": "command",
-      "animation": "cry",
-      "yolia_see": -15,
-      "response": "",
+      "eventTypes": [
+        "chat"
+      ],
+      "matchMode": "contains",
       "match": [
         "!哭",
         "！哭"
-      ]
+      ],
+      "action": "cry"
     },
     {
       "id": "c_l4qs",
-      "trigger": "command",
-      "animation": "eat",
-      "yolia_see": 0,
-      "response": "",
+      "eventTypes": [
+        "chat"
+      ],
+      "matchMode": "contains",
       "match": [
         "!香菜",
         "！香菜"
       ],
-      "cost": 10
+      "action": "eat"
     },
     {
       "id": "c_cf54",
-      "trigger": "command",
-      "animation": "jump",
-      "yolia_see": 0,
-      "response": "",
+      "eventTypes": [
+        "chat"
+      ],
+      "matchMode": "contains",
       "match": [
         "!跳",
         "！跳"
-      ]
+      ],
+      "action": "jump"
     },
     {
       "id": "c_fkdp",
-      "trigger": "command",
-      "animation": "run_right",
-      "yolia_see": 0,
-      "response": "",
+      "eventTypes": [
+        "chat"
+      ],
+      "matchMode": "contains",
       "match": [
         "!右",
         "！右"
-      ]
+      ],
+      "action": "run_right"
     },
     {
       "id": "c_mw2h",
-      "trigger": "command",
-      "animation": "watch_excited",
-      "yolia_see": 0,
-      "response": "",
+      "eventTypes": [
+        "chat"
+      ],
+      "matchMode": "contains",
       "match": [
-        "!幽視",
-        "！幽視"
-      ]
+        "!左",
+        "！左"
+      ],
+      "action": "run_left"
+    },
+    {
+      "id": "c_base",
+      "eventTypes": [
+        "chat"
+      ],
+      "energyDelta": 1
     }
   ],
   "obs": {
-    "port": 3000,
     "scale": 1
   },
   "greetingAnimations": [

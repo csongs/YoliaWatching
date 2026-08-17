@@ -4,7 +4,58 @@
 > 下一個 session 開場：先讀 CLAUDE.md，再讀本檔的「目前狀態」。
 > 維護規則：完成一項就把狀態改成 ✅ 並補一句結果；新發現的坑寫進「地雷區」。
 
-## 目前狀態（2026-08-16，拿掉 Firebase 雲端版，聊天連線改接 chat-monitor）
+## 目前狀態（2026-08-16 二，互動規則改事件類型導向 + 面板簡化）
+
+- 起因：同一天的後續工作。維護者先要求簡化面板「桌寵設定」的互動編輯表單（怕太複雜），
+  接著提出想把「觸發條件/狀態/對話泡泡/動作」四塊抽象化、格式化，最後定案：觸發條件要能
+  選粗略分類或細項、可複選，且要跟 chat-monitor 的 `event_type`/`category` 詞彙對齊——
+  等於順帶解決了上一輪 HANDOFF 記的「明確排除在範圍外」那項（斗內/訂閱/Raid 現在可以配了）。
+- **已完成**：
+  - 互動規則格式改版：`{eventTypes[], matchMode?, match?, minEnergy?, energyDelta?, speech?,
+    action?}`，取代舊的 `trigger:"keyword"/"command"` 二分。`chatProcessor.js` 新增
+    `normalizeInteraction()`（舊格式自動轉新格式，讀取端正規化，既有 config.json 不用手動遷移）、
+    `buildEventHandlers()`、`processEvent()`（吃事件物件而不是純文字，找第一條命中的規則，
+    沒命中回 `null`）。`computeState()`/`planMessageEffects()` 沒變。
+  - 新建 `yuupeek/src/chatMonitorEventTypes.js`：chat-monitor `public/labels.js` 的
+    event_type→category 小抄本（兩個是各自獨立的 npm 專案，沒有共用模組機制，只能各留一份，
+    chat-monitor 改分類要記得回來對）。
+  - `chatMonitorClient.js` 拿掉 `event_type!=='chat'` 的過濾器，改成每個事件都交給
+    `processEvent` 判斷——這是**刻意的範圍擴大**（PLAYBOOK §5 升級判準過的決策，維護者
+    在對話中明確拍板「做完」）。
+  - **一般聊天 +1 幽視值不再是引擎內建行為**，改成一條資料驅動的 catch-all 規則
+    （`default.config.json` 的 `c_base`：`eventTypes:["chat"]`、不填 `match`、`energyDelta:1`，
+    排在規則清單最後當 fallback）——對齊維護者「客製化針對什麼事件才能增加/減少」的要求。
+  - `default.config.json` 既有指令全部轉新格式；`!香菜` 原本的 `cost:10` 拿掉了（這次簡化
+    決定不保留消耗機制，改成無條件可用，已跟維護者確認過）。
+  - 面板「桌寵設定」互動編輯表單重寫：拿掉「門檻」選項（既有門檻規則資料不刪，存在
+    `hiddenThresholds` closure 變數裡，save 時原樣接回去，只是不給編輯）；新表單＝觸發事件
+    多選（`<select multiple>`，粗略分類＋細項混著選）＋比對方式（關鍵詞/指令）＋觸發文字＋
+    觸發門檻＋幽視值±＋動作（可留白＝不指定）＋對話泡泡。
+  - OBS overlay 的 yolia_see 數字/進度條隱藏（`display:none`），對話泡泡不受影響；
+    `character.js` 完全沒動，之後要拿回來顯示只要刪那兩行 style。
+  - 面板互動表單追加：觸發事件多選預設收合成只剩 3 個粗略分類（維護者反應「平台很多要按
+    好多」），細項要點連結才展開；「動作」欄位旁加「▶ 試播」按鈕（呼叫既有的
+    `api.playAnimation`，跟角色工房「試播」同一支 API），取代原本想做的縮圖預覽。
+  - **修好一個真的 bug**：`main.js` 的 `broadcastState()` 把整包 `data`（含 `speech`）存進
+    `welcomeData`，導致任何新連線(overlay 開啟/重整)都會重播上一次的對話泡泡文字，即使
+    那則訊息是好幾分鐘前的——維護者實測發現「一打開頁面、什麼都沒發生就看到泡泡」。
+    修法：`setWelcomeData` 存進去的快照明確把 `speech` 蓋成 `null`，即時 `broadcast(data)`
+    不受影響照樣正常顯示。這不是這次改動造成的，是既有邏輯的舊坑，這次順手修掉。
+  - **上面那個修完後，維護者截圖回報還是有個黑色藥丸形狀浮在角色頭上**——查出來不是對話
+    泡泡本身（`#speech-bubble` 是白色，且已經修好不會亂顯示），是**`#hud` 外層容器自己的
+    深色背景/圓角/padding**：隱藏 yolia_see 數字/進度條那兩個子元素時，只對它們個別加了
+    `display:none`，沒把包住它們的 `#hud` 外框樣式一起拿掉，導致裡面空空如也時還是畫出一個
+    有背景色的空圓角方塊。修法：`#hud` 拿掉背景/圓角/padding/border/backdrop-filter，變成
+    純定位容器；`#speech-bubble` 本來就有自己完整的白色泡泡樣式，不受影響。
+- 驗證：`cd yuupeek && npm test` 9 suites / 143 tests 全綠（`chatProcessor.test.js`/
+  `chatMonitorClient.test.js` 大改，新增涵蓋 normalizeInteraction/事件比對/catch-all 規則/
+  無規則命中回 null 等案例）。**手動驗證仍待維護者**：面板互動編輯表單實際操作一輪
+  （新增/刪除規則、多選觸發事件、存檔後重新整理資料還在）；用 chat-monitor 的模擬事件 API
+  送一筆 `cheer`/`superchat` 事件，確認有設對應規則時桌寵真的會反應。
+- **文件同步**：CLAUDE.md 鐵律 2 改寫（不再是「只接 chat」，改成描述新規則格式）；
+  ARCHITECTURE.md §4/§6/§7/§11/§12、PLAYBOOK.md §5/§8 一併更新。
+
+## 前次狀態（2026-08-16，拿掉 Firebase 雲端版，聊天連線改接 chat-monitor）
 
 - 起因：維護者提案「先去除 Firebase 部署，網頁跟桌寵都讀同一份資料」，經過一輪逐項確認
   （process 模型、即時事件走 WS 還是 SQLite、設定存放、產品定位等 10 個決策點，逐一問過
@@ -384,9 +435,10 @@
 > `config` 訂閱、YouTube quota 永久停止）的細節，那套架構已經整個拿掉，舊內容刪除
 > 避免誤導。現行的坑：
 
-- `chatMonitorClient.js` 只認 `event_type==='chat'`，其他 event_type（cheer/sub/raid/
-  superchat/…）目前完全被忽略——別誤判成「漏接 bug」，這是刻意的範圍決策（見 CLAUDE.md
-  鐵律 2）。
+- `chatMonitorClient.js` 現在**每種 event_type 都會轉發**給規則引擎（2026-08-16 二次收斂，
+  拿掉了原本的 `event_type!=='chat'` 過濾器）——一個事件會不會讓桌寵反應，完全看有沒有
+  規則的 `eventTypes` 配到它，不是引擎層面的限制了。查「某個事件沒反應」先看有沒有對應規則，
+  不要往 chatMonitorClient.js 本身找。
 - chat-monitor 沒開著時，桌寵是**安靜地**每 3 秒重試連線，不會報錯彈窗、也不會卡住其他
   功能——排查「聊天沒反應」時第一步永遠是先確認 chat-monitor process 有沒有真的在跑。
 - `npm run test-ui`（port 3001 沙盒）console **必有**兩種紅字（WS 重連、pet-config 404），

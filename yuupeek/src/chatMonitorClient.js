@@ -1,29 +1,41 @@
 // 聊天來源改接 chat-monitor(獨立 process,見 chat-monitor/README.md)——這裡不再自己連
 // Twitch IRC / YouTube API / SOOP,只當 chat-monitor 的 ws://.../ws 的唯讀 client。
-// 取代原本的 chatListener.js(2026-08-16 收斂,決策記錄見該次對話:即時事件走 WS,
-// 不碰 chat-monitor 的 SQLite;這次只接 event_type==='chat',斗內/訂閱/Raid 等事件先不管)。
+// 取代原本的 chatListener.js(2026-08-16 收斂:即時事件走 WS,不碰 chat-monitor 的
+// SQLite)。互動規則改成事件類型導向(同次收斂,見 chatProcessor.js)——這裡把每個
+// event_type 都轉發給規則引擎,規則本身有沒有配到、要不要理會斗內/訂閱/Raid 等事件,
+// 交給使用者在面板設定的 eventTypes 決定,這層不再自己過濾。
 const WebSocket = require('ws');
-const { buildHandlers, processMessage: processMsg, planMessageEffects } = require('./chatProcessor');
+const { buildEventHandlers, processEvent, planMessageEffects } = require('./chatProcessor');
+const { categoryFor } = require('./chatMonitorEventTypes');
 
 const RECONNECT_MS = 3000;
 
 function createChatMonitorClient(config, sm, broadcast, opts = {}) {
   const url = opts.url ?? `ws://127.0.0.1:${process.env.CHAT_MONITOR_PORT || 3100}/ws`;
   let thresholds = (config.interactions ?? []).filter(i => i.trigger === 'threshold');
-  let handlers   = buildHandlers(config.interactions ?? []);
+  let handlers   = buildEventHandlers(config.interactions ?? []);
   let ws = null;
   let connected = false;
   let stopped = true;
   let reconnectTimer = null;
 
-  function processMessage(text, username, source) {
-    const r = processMsg(text, username, handlers, sm.yolia_see, thresholds);
+  function handleEvent(raw) {
+    if (!raw) return;
+    const evt = {
+      eventType: raw.event_type,
+      category:  categoryFor(raw.event_type),
+      message:   raw.message,
+      username:  raw.username,
+    };
+    const r = processEvent(evt, handlers, sm.yolia_see, thresholds);
+    if (!r) return; // 沒有規則配到這個事件,什麼都不做
+
     sm.yolia_see = r.yolia_see;
     sm.state     = r.state;
-    if (!r.costDenied) console.log(`[${source}] → yolia_see:${sm.yolia_see} state:${sm.state}`);
+    if (!r.costDenied) console.log(`[${raw.platform ?? 'chat-monitor'}] ${raw.event_type} → yolia_see:${sm.yolia_see} state:${sm.state}`);
 
-    // 「何時套用什麼」的決策收在 chatProcessor.planMessageEffects(雲端 overlay 共用同一份時期
-    // 留下的模式);這裡只負責把 patch 餵給 broadcast,以及桌面版特有的 sm.state 持久化。
+    // 「何時套用什麼」的決策收在 chatProcessor.planMessageEffects;這裡只負責把 patch
+    // 餵給 broadcast,以及桌面版特有的 sm.state 持久化。
     const { immediate, delayed } = planMessageEffects(r, sm.yolia_see);
     broadcast(immediate);
     if (delayed) {
@@ -32,14 +44,6 @@ function createChatMonitorClient(config, sm, broadcast, opts = {}) {
         broadcast(delayed.patch);
       }, delayed.delayMs);
     }
-  }
-
-  // 這次收斂範圍只到「一般聊天文字」——斗內/訂閱/Raid 等 event_type 目前直接忽略,
-  // 不驅動任何動畫/幽視值變化(現有 interactions 的 threshold/keyword/command 三種規則
-  // 本來就只設計給聊天文字用,事件類需要新的規則格式,留給以後單獨做)。
-  function handleEvent(evt) {
-    if (!evt || evt.event_type !== 'chat') return;
-    processMessage(evt.message ?? '', evt.username ?? '', evt.platform ?? 'chat-monitor');
   }
 
   function scheduleReconnect() {
@@ -85,7 +89,7 @@ function createChatMonitorClient(config, sm, broadcast, opts = {}) {
     },
     updateHandlers(interactions) {
       thresholds = (interactions ?? []).filter(i => i.trigger === 'threshold');
-      handlers   = buildHandlers(interactions ?? []);
+      handlers   = buildEventHandlers(interactions ?? []);
     },
     getStatus() {
       return { connected };

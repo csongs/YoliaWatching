@@ -14,12 +14,12 @@
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      background: rgba(0,0,0,0.78);
-      border-radius: 16px;
-      padding: 8px 16px 10px;
-      border: 1px solid rgba(255,255,255,0.12);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      /* 2026-08-16:這裡原本自己有深色背景/圓角/padding,是設計來包住「yolia_see 數字+進度條」
+         這個資訊面板的視覺框。那兩個元素現在隱藏了(見下方),但這層外框沒跟著拿掉的話,
+         即使裡面完全沒有可見內容,深色背景+padding還是會畫出一個空的圓角小方塊——
+         實測會看到一顆莫名其妙的黑色藥丸形狀(維護者截圖回報)。#speech-bubble 自己本來就有
+         獨立的白色泡泡樣式(下面 #speech-bubble 區塊),不受這裡影響;#hud 拿掉外框樣式後
+         純粹是定位容器,沒有東西要顯示時就真的什麼都不會畫。 */
     }
     #hud > span  { color: #fff; font-size: 14px; font-family: monospace; white-space: nowrap; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: bold; }
     #bar-track   { width: 90px; height: 7px; background: rgba(255,255,255,.2); border-radius: 4px; overflow: hidden; }
@@ -41,8 +41,11 @@
 <body>
   <div id="hud">
     <div id="speech-bubble"></div>
-    <span>yolia_see <span id="yolia-see-val">0</span>%</span>
-    <div id="bar-track"><div id="bar-fill"></div></div>
+    <!-- 幽視值數字/進度條先隱藏(2026-08-16)——機制在背後照舊跑,只是先不顯示在畫面上;
+         元素還留著(display:none)是因為 character.js 照舊會寫入這兩個 DOM,拿掉元素本身
+         要跟著改 character.js,風險大於目前這個「先隱藏」的需求。 -->
+    <span style="display:none">yolia_see <span id="yolia-see-val">0</span>%</span>
+    <div id="bar-track" style="display:none"><div id="bar-fill"></div></div>
   </div>
   <div id="character"><canvas id="char-canvas"></canvas></div>
 
