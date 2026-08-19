@@ -173,7 +173,7 @@ function createTwitchConnector({ channel }, onEvent, onStatus) {
         dedupKey: tags?.id || `usernotice:${msgid}:${username}:${Date.now()}`,
         username, message: msg || null, amount: null,
         receivedAt: new Date().toISOString(),
-        extra: { msgId: msgid, color: tags?.['msg-param-color'] ?? null },
+        extra: { msgId: msgid, color: tags?.['msg-param-color'] ?? null, messageParts: buildEmoteMessageParts(msg || '', tags?.emotes) },
       });
     });
 

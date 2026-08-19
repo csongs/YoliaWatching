@@ -286,7 +286,7 @@ UI 呈現：「帶觀眾過來(Raid)」標籤，灰色斜體行（`system` 分�
 }
 ```
 
-存進 `events` 表：`message` = 公告內文；`amount` = `null`；`extra` = `{ msgId: 'announcement', color: tags['msg-param-color'] }`（`color` 是 Twitch 公告的顯示色，例如 `"ORANGE"`/`"PRIMARY"`/`"BLUE"` 等，demo 頁目前沒有用這個欄位上色，只存起來）。
+存進 `events` 表：`message` = 公告內文；`amount` = `null`；`extra` = `{ msgId: 'announcement', color: tags['msg-param-color'], messageParts }`（`color` 是 Twitch 公告的顯示色，例如 `"ORANGE"`/`"PRIMARY"`/`"BLUE"` 等，demo 頁目前沒有用這個欄位上色，只存起來；`messageParts` 跟一般聊天訊息一樣，是 `buildEmoteMessageParts()` 切出來的文字/表情圖片交錯陣列，公告內文帶表情符號時才會轉成圖片顯示——2026-08-20 補上，之前這裡漏呼叫，公告和其他系統通知的表情符號只會顯示成純文字代碼）。
 
 UI 呈現：「公告(/announce)」標籤，灰色斜體行。
 
@@ -308,7 +308,7 @@ UI 呈現：「公告(/announce)」標籤，灰色斜體行。
 }
 ```
 
-存進 `events` 表：`message` = USERNOTICE 附帶訊息（可為 `null`）；`amount` = `null`；`extra` = `{ msgId: 'viewermilestone', color: null }`（`msgId` 保留原始值，方便之後想針對特定子類型另外處理時回頭查）。
+存進 `events` 表：`message` = USERNOTICE 附帶訊息（可為 `null`）；`amount` = `null`；`extra` = `{ msgId: 'viewermilestone', color: null, messageParts }`（`msgId` 保留原始值，方便之後想針對特定子類型另外處理時回頭查；`messageParts` 見上面 announcement 那則的說明，2026-08-20 補上）。
 
 UI 呈現：「其他系統通知(未分類)」標籤，灰色斜體行。
 
